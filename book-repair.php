@@ -188,13 +188,13 @@
                     <p class="text-xs text-cyan-400 font-semibold tracking-widest uppercase mb-4">Machine Details</p>
                     <div class="grid sm:grid-cols-2 gap-5">
                         <div>
-                            <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="brand">Brand <span class="text-red-400">*</span></label>
-                            <input type="text" id="brand" name="brand" placeholder="e.g. Epilog, Thunder Laser, xTool" required
+                            <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="machine_brand">Brand <span class="text-red-400">*</span></label>
+                            <input type="text" id="machine_brand" name="machine_brand" placeholder="e.g. Epilog, Thunder Laser, xTool" required
                                 class="input-base">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="model">Model <span class="text-red-400">*</span></label>
-                            <input type="text" id="model" name="model" placeholder="e.g. Fusion Pro 48, Nova 35" required
+                            <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="machine_model">Model <span class="text-red-400">*</span></label>
+                            <input type="text" id="machine_model" name="machine_model" placeholder="e.g. Fusion Pro 48, Nova 35" required
                                 class="input-base">
                         </div>
                         <div>
@@ -369,8 +369,8 @@
                 name:     form.name.value.trim(),
                 phone:    form.phone.value.trim(),
                 email:    form.email.value.trim(),
-                brand:    form.brand.value.trim(),
-                model:    form.model.value.trim(),
+                machine_brand: form.machine_brand.value.trim(),
+                machine_model: form.machine_model.value.trim(),
                 watts:    form.watts.value.trim() || null,
                 age:      form.age.value.trim() || null,
                 street:   form.street.value.trim(),
