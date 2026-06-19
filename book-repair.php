@@ -137,14 +137,26 @@
     <section class="pb-24 lg:pb-32 bg-zinc-950">
         <div class="max-w-3xl mx-auto px-6 lg:px-8">
 
-            <!-- Success message (hidden by default) -->
-            <div id="msg-success" class="hidden mb-6 flex items-start gap-3 bg-emerald-950/60 border border-emerald-500/30 rounded-xl px-5 py-4">
-                <svg class="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-                <div>
-                    <p class="font-semibold text-emerald-400 text-sm">Booking received!</p>
-                    <p class="text-emerald-300/70 text-sm mt-0.5">We'll be in touch within 2 hours to confirm your appointment.</p>
+            <!-- Success message (hidden by default, populated dynamically from API response) -->
+            <div id="msg-success" class="hidden mb-6 bg-emerald-950/60 border border-emerald-500/30 rounded-xl px-5 py-5">
+                <div class="flex items-start gap-3 mb-4">
+                    <svg class="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <div>
+                        <p class="font-semibold text-emerald-400 text-sm">Thank you — your booking has been received!</p>
+                        <p class="text-emerald-300/70 text-sm mt-0.5">We've got your request and will reach out shortly to confirm the details.</p>
+                    </div>
+                </div>
+                <div class="border-t border-emerald-500/20 pt-4 space-y-3">
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-zinc-400">Priority:</span>
+                        <span id="success-priority" class="px-2 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"></span>
+                    </div>
+                    <div class="text-sm">
+                        <p class="text-zinc-400 mb-2">Suggested visit dates:</p>
+                        <ul id="success-dates" class="space-y-1.5"></ul>
+                    </div>
                 </div>
             </div>
 
@@ -346,6 +358,17 @@
         btn.addEventListener('click', () => menu.classList.toggle('hidden'));
         menu.querySelectorAll('a').forEach(link => link.addEventListener('click', () => menu.classList.add('hidden')));
 
+        // Format a YYYY-MM-DD date string as "June 24th, 2026"
+        function formatDate(dateStr) {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            const date = new Date(year, month - 1, day);
+            const monthName = date.toLocaleString('en-US', { month: 'long' });
+            const suffix = day === 1 || day === 21 || day === 31 ? 'st'
+                         : day === 2 || day === 22 ? 'nd'
+                         : day === 3 || day === 23 ? 'rd' : 'th';
+            return `${monthName} ${day}${suffix}, ${year}`;
+        }
+
         // Form submission
         const form = document.getElementById('repair-form');
         const submitBtn = document.getElementById('submit-btn');
@@ -412,6 +435,30 @@
                     grecaptcha.reset();
                     // Re-check the default radio after reset
                     document.getElementById('priority-standard').checked = true;
+
+                    // Populate success card from API response
+                    const priorityEl = document.getElementById('success-priority');
+                    const datesEl = document.getElementById('success-dates');
+
+                    const priority = json.priority || 'standard';
+                    priorityEl.textContent = priority.charAt(0).toUpperCase() + priority.slice(1);
+
+                    datesEl.innerHTML = '';
+                    const dates = Array.isArray(json.suggested_dates) ? json.suggested_dates : [];
+                    if (dates.length > 0) {
+                        dates.forEach(d => {
+                            const li = document.createElement('li');
+                            li.className = 'flex items-center gap-2 text-emerald-300 font-medium';
+                            li.innerHTML = `<svg class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg><span>${formatDate(d)}</span>`;
+                            datesEl.appendChild(li);
+                        });
+                    } else {
+                        const li = document.createElement('li');
+                        li.className = 'text-emerald-300/70';
+                        li.textContent = "We'll be in touch shortly to arrange a date.";
+                        datesEl.appendChild(li);
+                    }
+
                     msgSuccess.classList.remove('hidden');
                     msgSuccess.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } else {
