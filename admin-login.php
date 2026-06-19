@@ -1,4 +1,5 @@
 <?php
+require_once 'functions.php';
 // -----------------------------------------------------------------------
 // Server-side proxy: credentials are forwarded to the backend via cURL.
 // The real backend URL is never sent to the browser.
@@ -53,8 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Login | Ghost Laser</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/x-icon" href="<?= asset('favicon.ico') ?>">
+    <link rel="shortcut icon" type="image/x-icon" href="<?= asset('favicon.ico') ?>">
     <meta name="description" content="Ghost Laser admin login.">
     <script src="https://cdn.tailwindcss.com?v=1.2"></script>
     <script>
