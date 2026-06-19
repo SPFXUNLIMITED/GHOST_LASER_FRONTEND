@@ -144,8 +144,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                     </svg>
                     <div>
-                        <p class="font-semibold text-emerald-400 text-sm">Thank you — your booking has been received!</p>
-                        <p class="text-emerald-300/70 text-sm mt-0.5">We've got your request and will reach out shortly to confirm the details.</p>
+                        <p id="success-heading" class="font-semibold text-emerald-400 text-sm">Thank you! Your repair request has been received.</p>
+                        <p id="success-subtext" class="text-emerald-300/70 text-sm mt-0.5">We've got your request and will be in touch shortly to confirm the details.</p>
                     </div>
                 </div>
                 <div class="border-t border-emerald-500/20 pt-4 space-y-3">
@@ -154,7 +154,7 @@
                         <span id="success-priority" class="px-2 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"></span>
                     </div>
                     <div class="text-sm">
-                        <p class="text-zinc-400 mb-2">Suggested visit dates:</p>
+                        <p id="success-dates-label" class="text-zinc-400 mb-2">Here are your suggested service dates:</p>
                         <ul id="success-dates" class="space-y-1.5"></ul>
                     </div>
                 </div>
@@ -439,9 +439,36 @@
                     // Populate success card from API response
                     const priorityEl = document.getElementById('success-priority');
                     const datesEl = document.getElementById('success-dates');
+                    const headingEl = document.getElementById('success-heading');
+                    const subtextEl = document.getElementById('success-subtext');
+                    const datesLabelEl = document.getElementById('success-dates-label');
 
                     const priority = json.priority || 'standard';
-                    priorityEl.textContent = priority.charAt(0).toUpperCase() + priority.slice(1);
+                    const priorityLabel = priority.charAt(0).toUpperCase() + priority.slice(1);
+                    priorityEl.textContent = priorityLabel;
+
+                    // Style priority badge by level
+                    priorityEl.className = 'px-2 py-0.5 rounded text-xs font-semibold border';
+                    if (priority === 'emergency') {
+                        priorityEl.classList.add('bg-red-500/20', 'text-red-300', 'border-red-500/30');
+                    } else if (priority === 'vip') {
+                        priorityEl.classList.add('bg-cyan-500/20', 'text-cyan-300', 'border-cyan-500/30');
+                    } else {
+                        priorityEl.classList.add('bg-zinc-500/20', 'text-zinc-300', 'border-zinc-500/30');
+                    }
+
+                    // Update heading and subtext to reflect priority
+                    headingEl.textContent = 'Thank you! Your repair request has been received.';
+                    if (priority === 'emergency') {
+                        subtextEl.textContent = 'Your Emergency request has been flagged for urgent attention — our team will contact you as soon as possible.';
+                    } else if (priority === 'vip') {
+                        subtextEl.textContent = 'Your VIP request is being prioritised — we\'ll be in touch shortly to confirm the details.';
+                    } else {
+                        subtextEl.textContent = 'We\'ve received your request and will be in touch shortly to confirm the details.';
+                    }
+
+                    // Update dates label to reference the priority
+                    datesLabelEl.textContent = `Based on your ${priorityLabel} priority, here are your suggested service dates:`;
 
                     datesEl.innerHTML = '';
                     const dates = Array.isArray(json.suggested_dates) ? json.suggested_dates : [];
