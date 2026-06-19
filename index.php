@@ -71,7 +71,7 @@
                     <a href="#process" class="text-sm text-zinc-400 hover:text-white transition-colors">Process</a>
                     <a href="#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a>
                 </nav>
-                <a href="#contact" class="hidden md:inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors btn-glow">
+                <a href="book-repair.php" class="hidden md:inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors btn-glow">
                     Book a Repair
                 </a>
                 <!-- Mobile menu button -->
@@ -89,7 +89,7 @@
                 <a href="#why-us" class="text-sm text-zinc-400 hover:text-white transition-colors">Why Us</a>
                 <a href="#process" class="text-sm text-zinc-400 hover:text-white transition-colors">Process</a>
                 <a href="#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a>
-                <a href="#contact" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors w-full">
+                <a href="book-repair.php" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors w-full">
                     Book a Repair
                 </a>
             </div>
@@ -122,7 +122,7 @@
                 </p>
 
                 <div class="flex flex-col sm:flex-row gap-4">
-                    <a href="#contact" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-base px-7 py-3.5 rounded-md transition-all btn-glow">
+                    <a href="book-repair.php" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-base px-7 py-3.5 rounded-md transition-all btn-glow">
                         Book a Repair
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
