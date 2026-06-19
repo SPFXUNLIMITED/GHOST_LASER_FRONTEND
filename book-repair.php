@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/config.php'; ?>
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 <head>
@@ -69,6 +70,7 @@
         .priority-radio label:hover { border-color: rgb(113,113,122); }
         .priority-dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; flex-shrink: 0; }
     </style>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
 <body class="bg-zinc-950 text-white font-sans antialiased">
 
@@ -293,6 +295,11 @@
                     </div>
                 </div>
 
+                <!-- reCAPTCHA -->
+                <div class="flex justify-center">
+                    <div class="g-recaptcha" data-sitekey="<?= htmlspecialchars(RECAPTCHA_SITE_KEY) ?>"></div>
+                </div>
+
                 <!-- Submit -->
                 <button type="submit" id="submit-btn"
                     class="w-full bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-sm py-3.5 rounded-lg transition-all btn-glow flex items-center justify-center gap-2">
@@ -356,6 +363,15 @@
                 return;
             }
 
+            // Validate reCAPTCHA
+            const recaptchaResponse = grecaptcha.getResponse();
+            if (!recaptchaResponse) {
+                msgErrorText.textContent = 'Please complete the reCAPTCHA verification.';
+                msgError.classList.remove('hidden');
+                msgError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                return;
+            }
+
             // Hide previous messages
             msgSuccess.classList.add('hidden');
             msgError.classList.add('hidden');
@@ -379,6 +395,7 @@
                 zip:      form.zip.value.trim(),
                 problem:  form.problem.value.trim(),
                 priority: form.priority.value,
+                recaptcha_token: recaptchaResponse,
             };
 
             try {
@@ -392,6 +409,7 @@
 
                 if (res.ok) {
                     form.reset();
+                    grecaptcha.reset();
                     // Re-check the default radio after reset
                     document.getElementById('priority-standard').checked = true;
                     msgSuccess.classList.remove('hidden');
@@ -400,11 +418,13 @@
                     msgErrorText.textContent = json.message || 'Please check your details and try again.';
                     msgError.classList.remove('hidden');
                     msgError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    grecaptcha.reset();
                 }
             } catch {
                 msgErrorText.textContent = 'Network error — please check your connection and try again.';
                 msgError.classList.remove('hidden');
                 msgError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                grecaptcha.reset();
             } finally {
                 submitBtn.disabled = false;
                 submitLabel.textContent = 'Book My Repair →';
