@@ -382,7 +382,7 @@
             };
 
             try {
-                const res = await fetch('/api/book-repair.php', {
+                const res = await fetch('/project/api/book-repair-api.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data),
