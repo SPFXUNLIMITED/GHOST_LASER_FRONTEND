@@ -1,3 +1,52 @@
+<?php
+// -----------------------------------------------------------------------
+// Server-side proxy: credentials are forwarded to the backend via cURL.
+// The real backend URL is never sent to the browser.
+// -----------------------------------------------------------------------
+
+$error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $username = trim($_POST['username'] ?? '');
+    $password = $_POST['password'] ?? '';
+
+    if ($username === '' || $password === '') {
+        $error = 'Please enter your username and password.';
+    } else {
+        $payload = json_encode(['username' => $username, 'password' => $password]);
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => 'https://ghostlaser.com/project/login.php',
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $payload,
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_FOLLOWLOCATION => false,
+        ]);
+
+        $body       = curl_exec($ch);
+        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError  = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlError) {
+            $error = 'Unable to reach the server. Please try again.';
+        } else {
+            $json = json_decode($body, true);
+            if ($httpStatus >= 200 && $httpStatus < 300 && ($json['success'] ?? true) !== false) {
+                header('Location: /project/');
+                exit;
+            } else {
+                $error = $json['message'] ?? $json['error'] ?? 'Invalid credentials. Please try again.';
+                // Sanitise for HTML output
+                $error = htmlspecialchars($error, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            }
+        }
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 <head>
@@ -28,7 +77,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap&v=1.2" rel="stylesheet">
     <style>
-        .glow-cyan { text-shadow: 0 0 30px rgba(6,182,212,0.6), 0 0 60px rgba(6,182,212,0.3); }
         .btn-glow { box-shadow: 0 0 20px rgba(6,182,212,0.4); }
         .btn-glow:hover { box-shadow: 0 0 30px rgba(6,182,212,0.7); }
         .card-glow { box-shadow: 0 0 0 1px rgba(6,182,212,0.15), 0 0 60px rgba(6,182,212,0.06); }
@@ -97,15 +145,17 @@
                     <p class="text-sm text-zinc-500 mt-1">Ghost Laser management portal</p>
                 </div>
 
+                <?php if ($error !== ''): ?>
                 <!-- Error banner -->
-                <div id="error-banner" class="hidden mb-5 flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-lg">
+                <div class="mb-5 flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-lg">
                     <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                     </svg>
-                    <span id="error-text">Invalid credentials. Please try again.</span>
+                    <span><?= $error ?></span>
                 </div>
+                <?php endif; ?>
 
-                <form id="login-form" novalidate>
+                <form method="POST" action="admin-login.php">
                     <div class="flex flex-col gap-5">
                         <!-- Username -->
                         <div>
@@ -116,6 +166,7 @@
                                 type="text"
                                 autocomplete="username"
                                 placeholder="Enter your username"
+                                value="<?= htmlspecialchars($_POST['username'] ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>"
                                 class="input-base"
                                 required
                             >
@@ -138,7 +189,7 @@
                                 <button type="button" id="toggle-password"
                                     class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
                                     aria-label="Toggle password visibility">
-                                    <svg id="eye-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -150,14 +201,9 @@
 
                         <!-- Submit -->
                         <button
-                            id="submit-btn"
                             type="submit"
-                            class="w-full inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed text-zinc-950 font-semibold text-sm px-4 py-2.5 rounded-md transition-all btn-glow mt-1">
-                            <span id="btn-label">Sign In</span>
-                            <svg id="btn-spinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                            </svg>
+                            class="w-full inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2.5 rounded-md transition-all btn-glow mt-1">
+                            Sign In
                         </button>
                     </div>
                 </form>
@@ -173,67 +219,6 @@
             const isPassword = passwordInput.type === 'password';
             passwordInput.type = isPassword ? 'text' : 'password';
             toggleBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
-        });
-
-        // Login form submission
-        const form = document.getElementById('login-form');
-        const submitBtn = document.getElementById('submit-btn');
-        const btnLabel = document.getElementById('btn-label');
-        const btnSpinner = document.getElementById('btn-spinner');
-        const errorBanner = document.getElementById('error-banner');
-        const errorText = document.getElementById('error-text');
-
-        function showError(msg) {
-            errorText.textContent = msg || 'Invalid credentials. Please try again.';
-            errorBanner.classList.remove('hidden');
-            errorBanner.classList.add('flex');
-        }
-
-        function hideError() {
-            errorBanner.classList.add('hidden');
-            errorBanner.classList.remove('flex');
-        }
-
-        function setLoading(loading) {
-            submitBtn.disabled = loading;
-            btnLabel.textContent = loading ? 'Signing in…' : 'Sign In';
-            btnSpinner.classList.toggle('hidden', !loading);
-        }
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            hideError();
-
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
-
-            if (!username || !password) {
-                showError('Please enter your username and password.');
-                return;
-            }
-
-            setLoading(true);
-
-            try {
-                const res = await fetch('/project/api/login.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password }),
-                    credentials: 'same-origin',
-                });
-
-                const json = await res.json().catch(() => ({}));
-
-                if (res.ok && (json.success !== false)) {
-                    window.location.href = '/project/';
-                } else {
-                    showError(json.message || json.error || 'Invalid credentials. Please try again.');
-                }
-            } catch (err) {
-                showError('Unable to reach the server. Please try again.');
-            } finally {
-                setLoading(false);
-            }
         });
     </script>
 </body>
