@@ -138,24 +138,26 @@
         <div class="max-w-3xl mx-auto px-6 lg:px-8">
 
             <!-- Success message (hidden by default, populated dynamically from API response) -->
-            <div id="msg-success" class="hidden mb-6 bg-emerald-950/60 border border-emerald-500/30 rounded-xl px-5 py-5">
-                <div class="flex items-start gap-3 mb-4">
-                    <svg class="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div id="msg-success" class="hidden mb-8 rounded-2xl border border-emerald-500/30 bg-emerald-950/60 px-5 py-5 shadow-lg shadow-emerald-950/20 sm:px-6">
+                <div class="flex items-start gap-3.5">
+                    <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-400/10">
+                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                     </svg>
+                    </span>
                     <div>
-                        <p id="success-heading" class="font-semibold text-emerald-400 text-sm">Thank you! Your repair request has been received.</p>
-                        <p id="success-subtext" class="text-emerald-300/70 text-sm mt-0.5">We've got your request and will be in touch shortly to confirm the details.</p>
+                        <p id="success-heading" class="text-sm font-semibold text-emerald-300">Thank you! Your repair request has been received.</p>
+                        <p id="success-subtext" class="mt-1 text-sm leading-6 text-emerald-100/75">We've got your request and will be in touch shortly to confirm the details.</p>
                     </div>
                 </div>
-                <div class="border-t border-emerald-500/20 pt-4 space-y-3">
-                    <div class="flex items-center gap-2 text-sm">
-                        <span class="text-zinc-400">Priority:</span>
-                        <span id="success-priority" class="px-2 py-0.5 rounded text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"></span>
+                <div class="mt-5 space-y-4 border-t border-emerald-500/20 pt-4">
+                    <div class="flex flex-wrap items-center gap-2.5 text-sm">
+                        <span class="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100/55">Priority</span>
+                        <span id="success-priority" class="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-3 py-1 text-xs font-semibold tracking-wide text-cyan-200"></span>
                     </div>
                     <div class="text-sm">
-                        <p id="success-dates-label" class="text-zinc-400 mb-2">Here are your suggested service dates:</p>
-                        <ul id="success-dates" class="space-y-1.5"></ul>
+                        <p id="success-dates-label" class="mb-2 text-sm leading-6 text-emerald-100/70">Here are your suggested service dates:</p>
+                        <ul id="success-dates" class="space-y-2"></ul>
                     </div>
                 </div>
             </div>
@@ -444,18 +446,27 @@
                     const datesLabelEl = document.getElementById('success-dates-label');
 
                     const priority = json.priority || 'standard';
-                    const priorityLabel = priority.charAt(0).toUpperCase() + priority.slice(1);
+                    const priorityConfig = {
+                        standard: {
+                            label: 'Standard',
+                            badgeClasses: ['bg-zinc-500/15', 'text-zinc-200', 'border-zinc-400/30']
+                        },
+                        vip: {
+                            label: 'VIP',
+                            badgeClasses: ['bg-cyan-500/15', 'text-cyan-200', 'border-cyan-400/30']
+                        },
+                        emergency: {
+                            label: 'Emergency',
+                            badgeClasses: ['bg-red-500/15', 'text-red-200', 'border-red-400/30']
+                        }
+                    };
+                    const activePriority = priorityConfig[priority] || priorityConfig.standard;
+                    const priorityLabel = activePriority.label;
                     priorityEl.textContent = priorityLabel;
 
                     // Style priority badge by level
-                    priorityEl.className = 'px-2 py-0.5 rounded text-xs font-semibold border';
-                    if (priority === 'emergency') {
-                        priorityEl.classList.add('bg-red-500/20', 'text-red-300', 'border-red-500/30');
-                    } else if (priority === 'vip') {
-                        priorityEl.classList.add('bg-cyan-500/20', 'text-cyan-300', 'border-cyan-500/30');
-                    } else {
-                        priorityEl.classList.add('bg-zinc-500/20', 'text-zinc-300', 'border-zinc-500/30');
-                    }
+                    priorityEl.className = 'inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-wide';
+                    priorityEl.classList.add(...activePriority.badgeClasses);
 
                     // Update heading and subtext to reflect priority
                     headingEl.textContent = 'Thank you! Your repair request has been received.';
@@ -475,13 +486,13 @@
                     if (dates.length > 0) {
                         dates.forEach(d => {
                             const li = document.createElement('li');
-                            li.className = 'flex items-center gap-2 text-emerald-300 font-medium';
+                            li.className = 'flex items-center gap-2.5 rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-3 py-2 text-emerald-100';
                             li.innerHTML = `<svg class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg><span>${formatDate(d)}</span>`;
                             datesEl.appendChild(li);
                         });
                     } else {
                         const li = document.createElement('li');
-                        li.className = 'text-emerald-300/70';
+                        li.className = 'rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-3 py-2 text-emerald-100/75';
                         li.textContent = "We'll be in touch shortly to arrange a date.";
                         datesEl.appendChild(li);
                     }
