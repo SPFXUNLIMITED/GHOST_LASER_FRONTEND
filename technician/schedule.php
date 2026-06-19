@@ -1,86 +1,366 @@
 <?php
-$serviceRequests = [
-    [
-        'customer_name' => 'Avery Collins',
-        'city' => 'Austin',
-        'state' => 'TX',
-        'priority' => 'Emergency',
-        'suggested_dates' => ['June 20, 2026', 'June 21, 2026'],
-        'status' => 'Awaiting Technician Assignment',
-    ],
-    [
-        'customer_name' => 'Mason Patel',
-        'city' => 'Phoenix',
-        'state' => 'AZ',
-        'priority' => 'VIP',
-        'suggested_dates' => ['June 22, 2026'],
-        'status' => 'Confirmed',
-    ],
-    [
-        'customer_name' => 'Olivia Nguyen',
-        'city' => 'Denver',
-        'state' => 'CO',
-        'priority' => 'Standard',
-        'suggested_dates' => ['June 24, 2026', 'June 25, 2026'],
-        'status' => 'Pending Customer Approval',
-    ],
-    [
-        'customer_name' => 'Jordan Martinez',
-        'city' => 'Tampa',
-        'state' => 'FL',
-        'priority' => 'VIP',
-        'suggested_dates' => ['June 23, 2026'],
-        'status' => 'Parts Check In Progress',
-    ],
-    [
-        'customer_name' => 'Harper Brooks',
-        'city' => 'Nashville',
-        'state' => 'TN',
-        'priority' => 'Emergency',
-        'suggested_dates' => ['June 20, 2026'],
-        'status' => 'Dispatch Ready',
-    ],
-    [
-        'customer_name' => 'Noah Bennett',
-        'city' => 'Raleigh',
-        'state' => 'NC',
-        'priority' => 'Standard',
-        'suggested_dates' => ['June 26, 2026', 'June 27, 2026'],
-        'status' => 'Scheduling Review',
-    ],
-];
+
+declare(strict_types=1);
+
+function envValue(array $keys, ?string $default = null): ?string
+{
+    foreach ($keys as $key) {
+        $value = getenv($key);
+        if ($value !== false && $value !== '') {
+            return $value;
+        }
+    }
+
+    return $default;
+}
+
+function quoteIdentifier(string $identifier): string
+{
+    if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $identifier)) {
+        throw new InvalidArgumentException('Invalid SQL identifier.');
+    }
+
+    return '`' . $identifier . '`';
+}
+
+function pickFirstExisting(array $candidates, array $available): ?string
+{
+    foreach ($candidates as $candidate) {
+        if (in_array($candidate, $available, true)) {
+            return $candidate;
+        }
+    }
+
+    return null;
+}
+
+function createDatabaseConnection(): PDO
+{
+    $databaseUrl = envValue(['DATABASE_URL', 'MYSQL_URL']);
+
+    if ($databaseUrl !== null) {
+        $parts = parse_url($databaseUrl);
+        if ($parts === false || !isset($parts['scheme']) || strtolower($parts['scheme']) !== 'mysql') {
+            throw new RuntimeException('DATABASE_URL must use the mysql scheme.');
+        }
+
+        $host = $parts['host'] ?? '127.0.0.1';
+        $port = (int) ($parts['port'] ?? 3306);
+        $database = isset($parts['path']) ? ltrim($parts['path'], '/') : '';
+        $user = $parts['user'] ?? '';
+        $password = $parts['pass'] ?? '';
+        parse_str($parts['query'] ?? '', $query);
+        $charset = $query['charset'] ?? 'utf8mb4';
+    } else {
+        $host = envValue(['DB_HOST', 'DATABASE_HOST', 'MYSQL_HOST'], '127.0.0.1');
+        $port = (int) envValue(['DB_PORT', 'DATABASE_PORT', 'MYSQL_PORT'], '3306');
+        $database = envValue(['DB_NAME', 'DB_DATABASE', 'DATABASE_NAME', 'MYSQL_DATABASE']);
+        $user = envValue(['DB_USER', 'DB_USERNAME', 'DATABASE_USER', 'MYSQL_USER'], 'root') ?? 'root';
+        $password = envValue(['DB_PASS', 'DB_PASSWORD', 'DATABASE_PASSWORD', 'MYSQL_PASSWORD'], '') ?? '';
+        $charset = envValue(['DB_CHARSET', 'DATABASE_CHARSET', 'MYSQL_CHARSET'], 'utf8mb4') ?? 'utf8mb4';
+    }
+
+    if ($database === null || $database === '') {
+        throw new RuntimeException('Database name is not configured for the technician schedule page.');
+    }
+
+    $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=%s', $host, $port, $database, $charset);
+
+    return new PDO($dsn, $user, $password, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+}
+
+function fetchColumns(PDO $pdo, string $table): array
+{
+    $statement = $pdo->prepare('SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?');
+    $statement->execute([$table]);
+
+    return $statement->fetchAll(PDO::FETCH_COLUMN) ?: [];
+}
+
+function buildCustomerNameExpression(array $customerColumns, array $serviceRequestColumns): string
+{
+    if (in_array('name', $customerColumns, true)) {
+        return 'c.' . quoteIdentifier('name');
+    }
+
+    if (in_array('full_name', $customerColumns, true)) {
+        return 'c.' . quoteIdentifier('full_name');
+    }
+
+    $firstNameColumn = pickFirstExisting(['first_name', 'firstname'], $customerColumns);
+    $lastNameColumn = pickFirstExisting(['last_name', 'lastname'], $customerColumns);
+
+    if ($firstNameColumn !== null && $lastNameColumn !== null) {
+        return sprintf(
+            'NULLIF(TRIM(CONCAT_WS(" ", c.%s, c.%s)), "")',
+            quoteIdentifier($firstNameColumn),
+            quoteIdentifier($lastNameColumn)
+        );
+    }
+
+    if ($firstNameColumn !== null) {
+        return 'c.' . quoteIdentifier($firstNameColumn);
+    }
+
+    if ($lastNameColumn !== null) {
+        return 'c.' . quoteIdentifier($lastNameColumn);
+    }
+
+    $serviceNameColumn = pickFirstExisting(['customer_name', 'name'], $serviceRequestColumns);
+    if ($serviceNameColumn !== null) {
+        return 'sr.' . quoteIdentifier($serviceNameColumn);
+    }
+
+    throw new RuntimeException('Unable to locate a customer name column in the database schema.');
+}
+
+function buildColumnExpression(array $candidates, array $preferredColumns, string $preferredAlias, array $fallbackColumns = [], ?string $fallbackAlias = null): ?string
+{
+    $preferredColumn = pickFirstExisting($candidates, $preferredColumns);
+    if ($preferredColumn !== null) {
+        return $preferredAlias . '.' . quoteIdentifier($preferredColumn);
+    }
+
+    if ($fallbackAlias !== null) {
+        $fallbackColumn = pickFirstExisting($candidates, $fallbackColumns);
+        if ($fallbackColumn !== null) {
+            return $fallbackAlias . '.' . quoteIdentifier($fallbackColumn);
+        }
+    }
+
+    return null;
+}
+
+function parseSuggestedDates(mixed $rawValue): array
+{
+    if ($rawValue === null) {
+        return [];
+    }
+
+    if (is_array($rawValue)) {
+        $values = $rawValue;
+    } else {
+        $rawString = trim((string) $rawValue);
+        if ($rawString === '') {
+            return [];
+        }
+
+        $decoded = json_decode($rawString, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            if (is_array($decoded)) {
+                $values = $decoded;
+            } elseif (is_string($decoded) && trim($decoded) !== '') {
+                $values = [$decoded];
+            } else {
+                $values = [$rawString];
+            }
+        } else {
+            $values = preg_split('/\s*(?:,|\||;)\s*/', $rawString) ?: [];
+        }
+    }
+
+    $formatted = [];
+    foreach ($values as $value) {
+        $label = formatDateLabel((string) $value);
+        if ($label !== null) {
+            $formatted[$label] = $label;
+        }
+    }
+
+    return array_values($formatted);
+}
+
+function formatDateLabel(string $value): ?string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return null;
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return $value;
+    }
+
+    return date('F j, Y', $timestamp);
+}
+
+function earliestDateTimestamp(array $dates): ?int
+{
+    $timestamps = [];
+    foreach ($dates as $date) {
+        $timestamp = strtotime($date);
+        if ($timestamp !== false) {
+            $timestamps[] = strtotime(date('Y-m-d', $timestamp));
+        }
+    }
+
+    if ($timestamps === []) {
+        return null;
+    }
+
+    return min($timestamps);
+}
+
+function normalizePriority(string|null $priority): string
+{
+    $normalized = strtolower(trim((string) $priority));
+
+    return match ($normalized) {
+        'emergency' => 'Emergency',
+        'vip' => 'VIP',
+        default => 'Standard',
+    };
+}
+
+function priorityRank(string $priority): int
+{
+    return match (normalizePriority($priority)) {
+        'Emergency' => 0,
+        'VIP' => 1,
+        default => 2,
+    };
+}
 
 $priorityStyles = [
     'Emergency' => [
         'badge' => 'border-red-400/30 bg-red-500/15 text-red-200',
         'dot' => 'bg-red-400',
-        'accent' => 'text-red-300',
     ],
     'VIP' => [
         'badge' => 'border-orange-400/30 bg-orange-500/15 text-orange-200',
         'dot' => 'bg-orange-400',
-        'accent' => 'text-orange-300',
     ],
     'Standard' => [
         'badge' => 'border-blue-400/30 bg-blue-500/15 text-blue-200',
         'dot' => 'bg-blue-400',
-        'accent' => 'text-blue-300',
     ],
 ];
 
 $statusStyles = [
-    'Awaiting Technician Assignment' => 'border-amber-400/25 bg-amber-500/10 text-amber-200',
-    'Confirmed' => 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200',
-    'Pending Customer Approval' => 'border-violet-400/25 bg-violet-500/10 text-violet-200',
-    'Parts Check In Progress' => 'border-cyan-400/25 bg-cyan-500/10 text-cyan-200',
-    'Dispatch Ready' => 'border-green-400/25 bg-green-500/10 text-green-200',
-    'Scheduling Review' => 'border-zinc-400/25 bg-zinc-500/10 text-zinc-200',
+    'confirmed' => 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200',
+    'pending customer approval' => 'border-violet-400/25 bg-violet-500/10 text-violet-200',
+    'parts check in progress' => 'border-cyan-400/25 bg-cyan-500/10 text-cyan-200',
+    'dispatch ready' => 'border-green-400/25 bg-green-500/10 text-green-200',
+    'awaiting technician assignment' => 'border-amber-400/25 bg-amber-500/10 text-amber-200',
+    'scheduling review' => 'border-zinc-400/25 bg-zinc-500/10 text-zinc-200',
+    'scheduled' => 'border-cyan-400/25 bg-cyan-500/10 text-cyan-200',
+    'in progress' => 'border-orange-400/25 bg-orange-500/10 text-orange-200',
 ];
 
+$serviceRequests = [];
+$errorMessage = null;
+
+try {
+    $pdo = createDatabaseConnection();
+    $serviceRequestColumns = fetchColumns($pdo, 'service_requests');
+    $customerColumns = fetchColumns($pdo, 'customers');
+
+    if ($serviceRequestColumns === [] || $customerColumns === []) {
+        throw new RuntimeException('Required service request tables were not found in the configured database.');
+    }
+
+    $serviceRequestCustomerKey = pickFirstExisting(['customer_id', 'customers_id', 'client_id'], $serviceRequestColumns);
+    $customerPrimaryKey = pickFirstExisting(['id', 'customer_id', 'client_id'], $customerColumns);
+
+    if ($serviceRequestCustomerKey === null || $customerPrimaryKey === null) {
+        throw new RuntimeException('Unable to determine how service_requests joins to customers.');
+    }
+
+    $customerNameExpression = buildCustomerNameExpression($customerColumns, $serviceRequestColumns);
+    $cityExpression = buildColumnExpression(
+        ['city', 'service_city', 'service_address_city'],
+        $serviceRequestColumns,
+        'sr',
+        $customerColumns,
+        'c'
+    );
+    $stateExpression = buildColumnExpression(
+        ['state', 'service_state', 'service_address_state'],
+        $serviceRequestColumns,
+        'sr',
+        $customerColumns,
+        'c'
+    );
+    $priorityExpression = buildColumnExpression(['priority_level', 'priority'], $serviceRequestColumns, 'sr');
+    $statusExpression = buildColumnExpression(['status', 'request_status'], $serviceRequestColumns, 'sr');
+    $suggestedDatesExpression = buildColumnExpression(
+        ['suggested_dates', 'suggested_service_dates', 'suggested_service_date', 'suggested_date', 'service_date', 'scheduled_date'],
+        $serviceRequestColumns,
+        'sr'
+    );
+
+    if ($cityExpression === null || $stateExpression === null || $priorityExpression === null || $suggestedDatesExpression === null) {
+        throw new RuntimeException('The database schema is missing one or more required schedule fields.');
+    }
+
+    $select = [
+        $customerNameExpression . ' AS customer_name',
+        $cityExpression . ' AS city',
+        $stateExpression . ' AS state',
+        $priorityExpression . ' AS priority_level',
+        $suggestedDatesExpression . ' AS suggested_dates_raw',
+        ($statusExpression ?? 'NULL') . ' AS status',
+    ];
+
+    if (in_array('id', $serviceRequestColumns, true)) {
+        $select[] = 'sr.`id` AS service_request_id';
+    }
+
+    $sql = sprintf(
+        'SELECT %s FROM %s sr INNER JOIN %s c ON sr.%s = c.%s',
+        implode(', ', $select),
+        quoteIdentifier('service_requests'),
+        quoteIdentifier('customers'),
+        quoteIdentifier($serviceRequestCustomerKey),
+        quoteIdentifier($customerPrimaryKey)
+    );
+
+    if ($statusExpression !== null) {
+        $sql .= ' WHERE LOWER(TRIM(' . $statusExpression . ')) NOT IN ("cancelled", "canceled", "completed", "closed")';
+    }
+
+    $statement = $pdo->query($sql);
+    $rows = $statement->fetchAll();
+
+    $today = strtotime(date('Y-m-d'));
+
+    foreach ($rows as $row) {
+        $dates = parseSuggestedDates($row['suggested_dates_raw'] ?? null);
+        $earliestDate = earliestDateTimestamp($dates);
+
+        if ($earliestDate !== null && $earliestDate < $today) {
+            continue;
+        }
+
+        $serviceRequests[] = [
+            'customer_name' => trim((string) ($row['customer_name'] ?? '')) !== '' ? (string) $row['customer_name'] : 'Unknown Customer',
+            'city' => trim((string) ($row['city'] ?? '')),
+            'state' => strtoupper(trim((string) ($row['state'] ?? ''))),
+            'priority_level' => normalizePriority((string) ($row['priority_level'] ?? '')),
+            'suggested_dates' => $dates,
+            'status' => trim((string) ($row['status'] ?? '')) !== '' ? (string) $row['status'] : 'Pending Review',
+            'sort_priority' => priorityRank((string) ($row['priority_level'] ?? '')),
+            'sort_date' => $earliestDate ?? PHP_INT_MAX,
+        ];
+    }
+
+    usort($serviceRequests, static function (array $left, array $right): int {
+        return [$left['sort_priority'], $left['sort_date'], $left['customer_name']]
+            <=> [$right['sort_priority'], $right['sort_date'], $right['customer_name']];
+    });
+} catch (Throwable $throwable) {
+    $errorMessage = $throwable->getMessage();
+}
+
 $totalRequests = count($serviceRequests);
-$emergencyCount = count(array_filter($serviceRequests, static fn ($request) => $request['priority'] === 'Emergency'));
-$vipCount = count(array_filter($serviceRequests, static fn ($request) => $request['priority'] === 'VIP'));
-$standardCount = count(array_filter($serviceRequests, static fn ($request) => $request['priority'] === 'Standard'));
+$emergencyCount = count(array_filter($serviceRequests, static fn (array $request): bool => $request['priority_level'] === 'Emergency'));
+$vipCount = count(array_filter($serviceRequests, static fn (array $request): bool => $request['priority_level'] === 'VIP'));
+$standardCount = count(array_filter($serviceRequests, static fn (array $request): bool => $request['priority_level'] === 'Standard'));
 ?>
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
@@ -174,7 +454,7 @@ $standardCount = count(array_filter($serviceRequests, static fn ($request) => $r
                             Upcoming <span class="text-cyan-400 glow-cyan">Service Requests</span>
                         </h1>
                         <p class="text-zinc-400 text-lg leading-relaxed max-w-2xl">
-                            A clear scheduling view for all upcoming customer requests, with priority cues and suggested dates ready for dispatch planning.
+                            Live schedule data from the repair queue, sorted by priority first and then by the next suggested service date.
                         </p>
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full lg:max-w-3xl">
@@ -201,6 +481,13 @@ $standardCount = count(array_filter($serviceRequests, static fn ($request) => $r
 
         <section>
             <div class="max-w-7xl mx-auto px-6 lg:px-8">
+                <?php if ($errorMessage !== null): ?>
+                    <div class="mb-8 rounded-2xl border border-red-500/30 bg-red-950/50 px-5 py-4 text-sm text-red-100">
+                        <p class="font-semibold text-red-300">Unable to load live schedule data.</p>
+                        <p class="mt-1 text-red-200/80"><?= htmlspecialchars($errorMessage) ?></p>
+                    </div>
+                <?php endif; ?>
+
                 <div class="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 glow-box">
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-zinc-800">
@@ -214,40 +501,59 @@ $standardCount = count(array_filter($serviceRequests, static fn ($request) => $r
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-zinc-800/80">
-                                <?php foreach ($serviceRequests as $request): ?>
-                                    <?php
-                                    $priorityStyle = $priorityStyles[$request['priority']] ?? $priorityStyles['Standard'];
-                                    $statusStyle = $statusStyles[$request['status']] ?? 'border-zinc-400/25 bg-zinc-500/10 text-zinc-200';
-                                    ?>
-                                    <tr class="align-top transition-colors hover:bg-zinc-900/80">
-                                        <td class="px-6 py-5">
-                                            <p class="text-sm font-semibold text-white"><?= htmlspecialchars($request['customer_name']) ?></p>
-                                        </td>
-                                        <td class="px-6 py-5">
-                                            <p class="text-sm text-zinc-300"><?= htmlspecialchars($request['city']) ?>, <?= htmlspecialchars($request['state']) ?></p>
-                                        </td>
-                                        <td class="px-6 py-5">
-                                            <span class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide <?= htmlspecialchars($priorityStyle['badge']) ?>">
-                                                <span class="h-2 w-2 rounded-full <?= htmlspecialchars($priorityStyle['dot']) ?>"></span>
-                                                <?= htmlspecialchars($request['priority']) ?>
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-5">
-                                            <div class="flex flex-wrap gap-2">
-                                                <?php foreach ($request['suggested_dates'] as $date): ?>
-                                                    <span class="inline-flex items-center rounded-full border border-cyan-500/20 bg-cyan-500/5 px-3 py-1 text-xs font-medium text-cyan-100">
-                                                        <?= htmlspecialchars($date) ?>
-                                                    </span>
-                                                <?php endforeach; ?>
-                                            </div>
-                                        </td>
-                                        <td class="px-6 py-5">
-                                            <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-wide <?= htmlspecialchars($statusStyle) ?>">
-                                                <?= htmlspecialchars($request['status']) ?>
-                                            </span>
+                                <?php if ($serviceRequests === []): ?>
+                                    <tr>
+                                        <td colspan="5" class="px-6 py-12 text-center">
+                                            <p class="text-sm font-semibold text-white">No upcoming service requests found.</p>
+                                            <p class="mt-2 text-sm text-zinc-400">Once real requests with upcoming suggested dates are available, they will appear here automatically.</p>
                                         </td>
                                     </tr>
-                                <?php endforeach; ?>
+                                <?php else: ?>
+                                    <?php foreach ($serviceRequests as $request): ?>
+                                        <?php
+                                        $priorityStyle = $priorityStyles[$request['priority_level']] ?? $priorityStyles['Standard'];
+                                        $statusKey = strtolower(trim($request['status']));
+                                        $statusStyle = $statusStyles[$statusKey] ?? 'border-zinc-400/25 bg-zinc-500/10 text-zinc-200';
+                                        ?>
+                                        <tr class="align-top transition-colors hover:bg-zinc-900/80">
+                                            <td class="px-6 py-5">
+                                                <p class="text-sm font-semibold text-white"><?= htmlspecialchars($request['customer_name']) ?></p>
+                                            </td>
+                                            <td class="px-6 py-5">
+                                                <p class="text-sm text-zinc-300">
+                                                    <?= htmlspecialchars($request['city'] !== '' ? $request['city'] : 'Unknown City') ?>,
+                                                    <?= htmlspecialchars($request['state'] !== '' ? $request['state'] : 'N/A') ?>
+                                                </p>
+                                            </td>
+                                            <td class="px-6 py-5">
+                                                <span class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide <?= $priorityStyle['badge'] ?>">
+                                                    <span class="h-2 w-2 rounded-full <?= $priorityStyle['dot'] ?>"></span>
+                                                    <?= htmlspecialchars($request['priority_level']) ?>
+                                                </span>
+                                            </td>
+                                            <td class="px-6 py-5">
+                                                <div class="flex flex-wrap gap-2">
+                                                    <?php if ($request['suggested_dates'] === []): ?>
+                                                        <span class="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-800/70 px-3 py-1 text-xs font-medium text-zinc-300">
+                                                            Awaiting scheduling
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <?php foreach ($request['suggested_dates'] as $date): ?>
+                                                            <span class="inline-flex items-center rounded-full border border-cyan-500/20 bg-cyan-500/5 px-3 py-1 text-xs font-medium text-cyan-100">
+                                                                <?= htmlspecialchars($date) ?>
+                                                            </span>
+                                                        <?php endforeach; ?>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                            <td class="px-6 py-5">
+                                                <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-wide <?= $statusStyle ?>">
+                                                    <?= htmlspecialchars($request['status']) ?>
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
