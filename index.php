@@ -1,12 +1,13 @@
+<?php require_once __DIR__ . '/functions.php'; ?>
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ghost Laser | Expert Laser Machine Repair</title>
-	<link rel="icon" type="image/x-icon" href="/favicon.ico?v=3">
-	<link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=3">
-	<link rel="apple-touch-icon" href="/favicon.ico?v=3">
+	<link rel="icon" type="image/x-icon" href="<?= asset('favicon.ico') ?>">
+	<link rel="shortcut icon" type="image/x-icon" href="<?= asset('favicon.ico') ?>">
+	<link rel="apple-touch-icon" href="<?= asset('favicon.ico') ?>">
     <meta name="description" content="Ghost Laser — precision laser cutting machine repair, calibration, and maintenance. Fast turnaround, trusted by professionals.">
     <script src="https://cdn.tailwindcss.com?v=1.2"></script>
     <script>
