@@ -14,26 +14,6 @@ function envValue(array $keys, ?string $default = null): ?string
     return $default;
 }
 
-function quoteIdentifier(string $identifier): string
-{
-    if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $identifier)) {
-        throw new InvalidArgumentException('Invalid SQL identifier.');
-    }
-
-    return '`' . $identifier . '`';
-}
-
-function pickFirstExisting(array $candidates, array $available): ?string
-{
-    foreach ($candidates as $candidate) {
-        if (in_array($candidate, $available, true)) {
-            return $candidate;
-        }
-    }
-
-    return null;
-}
-
 function createDatabaseConnection(): PDO
 {
     $databaseUrl = envValue(['DATABASE_URL', 'MYSQL_URL']);
@@ -73,67 +53,6 @@ function createDatabaseConnection(): PDO
     ]);
 }
 
-function fetchColumns(PDO $pdo, string $table): array
-{
-    $statement = $pdo->prepare('SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?');
-    $statement->execute([$table]);
-
-    return $statement->fetchAll(PDO::FETCH_COLUMN) ?: [];
-}
-
-function buildCustomerNameExpression(array $customerColumns, array $serviceRequestColumns): string
-{
-    if (in_array('name', $customerColumns, true)) {
-        return 'c.' . quoteIdentifier('name');
-    }
-
-    if (in_array('full_name', $customerColumns, true)) {
-        return 'c.' . quoteIdentifier('full_name');
-    }
-
-    $firstNameColumn = pickFirstExisting(['first_name', 'firstname'], $customerColumns);
-    $lastNameColumn = pickFirstExisting(['last_name', 'lastname'], $customerColumns);
-
-    if ($firstNameColumn !== null && $lastNameColumn !== null) {
-        return sprintf(
-            'NULLIF(TRIM(CONCAT_WS(" ", c.%s, c.%s)), "")',
-            quoteIdentifier($firstNameColumn),
-            quoteIdentifier($lastNameColumn)
-        );
-    }
-
-    if ($firstNameColumn !== null) {
-        return 'c.' . quoteIdentifier($firstNameColumn);
-    }
-
-    if ($lastNameColumn !== null) {
-        return 'c.' . quoteIdentifier($lastNameColumn);
-    }
-
-    $serviceNameColumn = pickFirstExisting(['customer_name', 'name'], $serviceRequestColumns);
-    if ($serviceNameColumn !== null) {
-        return 'sr.' . quoteIdentifier($serviceNameColumn);
-    }
-
-    throw new RuntimeException('Unable to locate a customer name column in the database schema.');
-}
-
-function buildColumnExpression(array $candidates, array $preferredColumns, string $preferredAlias, array $fallbackColumns = [], ?string $fallbackAlias = null): ?string
-{
-    $preferredColumn = pickFirstExisting($candidates, $preferredColumns);
-    if ($preferredColumn !== null) {
-        return $preferredAlias . '.' . quoteIdentifier($preferredColumn);
-    }
-
-    if ($fallbackAlias !== null) {
-        $fallbackColumn = pickFirstExisting($candidates, $fallbackColumns);
-        if ($fallbackColumn !== null) {
-            return $fallbackAlias . '.' . quoteIdentifier($fallbackColumn);
-        }
-    }
-
-    return null;
-}
 
 function parseSuggestedDates(mixed $rawValue): array
 {
@@ -257,72 +176,26 @@ $errorMessage = null;
 
 try {
     $pdo = createDatabaseConnection();
-    $serviceRequestColumns = fetchColumns($pdo, 'service_requests');
-    $customerColumns = fetchColumns($pdo, 'customers');
 
-    if ($serviceRequestColumns === [] || $customerColumns === []) {
-        throw new RuntimeException('Required service request tables were not found in the configured database.');
-    }
-
-    $serviceRequestCustomerKey = pickFirstExisting(['customer_id', 'customers_id', 'client_id'], $serviceRequestColumns);
-    $customerPrimaryKey = pickFirstExisting(['id', 'customer_id', 'client_id'], $customerColumns);
-
-    if ($serviceRequestCustomerKey === null || $customerPrimaryKey === null) {
-        throw new RuntimeException('Unable to determine how service_requests joins to customers.');
-    }
-
-    $customerNameExpression = buildCustomerNameExpression($customerColumns, $serviceRequestColumns);
-    $cityExpression = buildColumnExpression(
-        ['city', 'service_city', 'service_address_city'],
-        $serviceRequestColumns,
-        'sr',
-        $customerColumns,
-        'c'
-    );
-    $stateExpression = buildColumnExpression(
-        ['state', 'service_state', 'service_address_state'],
-        $serviceRequestColumns,
-        'sr',
-        $customerColumns,
-        'c'
-    );
-    $priorityExpression = buildColumnExpression(['priority_level', 'priority'], $serviceRequestColumns, 'sr');
-    $statusExpression = buildColumnExpression(['status', 'request_status'], $serviceRequestColumns, 'sr');
-    $suggestedDatesExpression = buildColumnExpression(
-        ['suggested_dates', 'suggested_service_dates', 'suggested_service_date', 'suggested_date', 'service_date', 'scheduled_date'],
-        $serviceRequestColumns,
-        'sr'
-    );
-
-    if ($cityExpression === null || $stateExpression === null || $priorityExpression === null || $suggestedDatesExpression === null) {
-        throw new RuntimeException('The database schema is missing one or more required schedule fields.');
-    }
-
-    $select = [
-        $customerNameExpression . ' AS customer_name',
-        $cityExpression . ' AS city',
-        $stateExpression . ' AS state',
-        $priorityExpression . ' AS priority_level',
-        $suggestedDatesExpression . ' AS suggested_dates_raw',
-        ($statusExpression ?? 'NULL') . ' AS status',
-    ];
-
-    if (in_array('id', $serviceRequestColumns, true)) {
-        $select[] = 'sr.`id` AS service_request_id';
-    }
-
-    $sql = sprintf(
-        'SELECT %s FROM %s sr INNER JOIN %s c ON sr.%s = c.%s',
-        implode(', ', $select),
-        quoteIdentifier('service_requests'),
-        quoteIdentifier('customers'),
-        quoteIdentifier($serviceRequestCustomerKey),
-        quoteIdentifier($customerPrimaryKey)
-    );
-
-    if ($statusExpression !== null) {
-        $sql .= ' WHERE LOWER(TRIM(' . $statusExpression . ')) NOT IN ("cancelled", "canceled", "completed", "closed")';
-    }
+    $sql = 'SELECT
+        c.first_name,
+        c.last_name,
+        c.city,
+        c.state,
+        sr.priority_level,
+        sr.suggested_dates,
+        sr.request_status,
+        sr.id
+    FROM service_requests sr
+    JOIN customers c ON sr.customer_id = c.id
+    WHERE sr.request_status NOT IN (\'completed\', \'cancelled\')
+    ORDER BY
+        CASE sr.priority_level
+            WHEN \'emergency\' THEN 1
+            WHEN \'vip\' THEN 2
+            ELSE 3
+        END,
+        sr.suggested_dates ASC';
 
     $statement = $pdo->query($sql);
     $rows = $statement->fetchAll();
@@ -330,20 +203,24 @@ try {
     $today = strtotime(date('Y-m-d'));
 
     foreach ($rows as $row) {
-        $dates = parseSuggestedDates($row['suggested_dates_raw'] ?? null);
+        $dates = parseSuggestedDates($row['suggested_dates'] ?? null);
         $earliestDate = earliestDateTimestamp($dates);
 
         if ($earliestDate !== null && $earliestDate < $today) {
             continue;
         }
 
+        $firstName = trim((string) ($row['first_name'] ?? ''));
+        $lastName = trim((string) ($row['last_name'] ?? ''));
+        $customerName = trim($firstName . ' ' . $lastName);
+
         $serviceRequests[] = [
-            'customer_name' => trim((string) ($row['customer_name'] ?? '')) !== '' ? (string) $row['customer_name'] : 'Unknown Customer',
+            'customer_name' => $customerName !== '' ? $customerName : 'Unknown Customer',
             'city' => trim((string) ($row['city'] ?? '')),
             'state' => strtoupper(trim((string) ($row['state'] ?? ''))),
             'priority_level' => normalizePriority((string) ($row['priority_level'] ?? '')),
             'suggested_dates' => $dates,
-            'status' => trim((string) ($row['status'] ?? '')) !== '' ? (string) $row['status'] : 'Pending Review',
+            'status' => trim((string) ($row['request_status'] ?? '')) !== '' ? (string) $row['request_status'] : 'Pending Review',
             'sort_priority' => priorityRank((string) ($row['priority_level'] ?? '')),
             'sort_date' => $earliestDate ?? PHP_INT_MAX,
         ];
