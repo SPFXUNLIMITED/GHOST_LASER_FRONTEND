@@ -3,7 +3,7 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 session_start();
-if (empty($_SESSION )) {
+if (empty($_SESSION['admin_id'])) {
     header('Location: ../admin-login.php');
     exit;
 }
@@ -12,6 +12,7 @@ require_once '../project/db.php';
 
 $jobs = $pdo->query("
     SELECT 
+        sr.id,
         c.first_name, 
         c.last_name, 
         c.city,
@@ -57,21 +58,27 @@ $jobs = $pdo->query("
                 <tbody class="divide-y divide-zinc-700">
                     <?php foreach ($jobs as $job): ?>
                     <tr class="hover:bg-zinc-800">
-                        <td class="p-6"><?= htmlspecialchars($job . ' ' . $job ) ?></td>
-                        <td class="p-6"><?= htmlspecialchars($job ) ?></td>
+                        <td class="p-6"><?= htmlspecialchars($job['first_name'] . ' ' . $job['last_name']) ?></td>
+                        <td class="p-6"><?= htmlspecialchars($job['city'] ?? 'N/A') ?></td>
                         <td class="p-6 font-mono text-sm text-cyan-400">
-                            <?= $job && $job ? number_format($job ,4).', '.number_format($job ,4) : 'N/A' ?>
+                            <?= ($job['latitude'] && $job['longitude']) ? number_format((float)$job['latitude'], 4) . ', ' . number_format((float)$job['longitude'], 4) : 'N/A' ?>
                         </td>
                         <td class="p-6">
-                            <span class="px-4 py-1 rounded-full text-xs font-semibold <?= strtolower($job ?? '') === 'emergency' ? 'bg-red-500/20 text-red-300' : (strtolower($job ?? '') === 'vip' ? 'bg-orange-500/20 text-orange-300' : 'bg-blue-500/20 text-blue-300') ?>">
-                                <?= htmlspecialchars(ucfirst($job ?? 'Standard')) ?>
+                            <?php $priority = strtolower($job['priority_level'] ?? 'standard'); ?>
+                            <span class="px-4 py-1 rounded-full text-xs font-semibold <?= $priority === 'emergency' ? 'bg-red-500/20 text-red-300' : ($priority === 'vip' ? 'bg-orange-500/20 text-orange-300' : 'bg-blue-500/20 text-blue-300') ?>">
+                                <?= htmlspecialchars(ucfirst($job['priority_level'] ?? 'Standard')) ?>
                             </span>
                         </td>
-                        <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job ?? 'No summary') ?></td>
-                        <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job ?? 'N/A') ?></td>
+                        <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job['problem_summary'] ?? 'No summary') ?></td>
+                        <td class="p-6 text-sm text-zinc-400">
+                            <?= htmlspecialchars($job['preferred_date_start'] ?? 'N/A') ?>
+                            <?php if (!empty($job['preferred_date_end'])): ?>
+                                &ndash; <?= htmlspecialchars($job['preferred_date_end']) ?>
+                            <?php endif; ?>
+                        </td>
                         <td class="p-6">
                             <form method="POST" onsubmit="return confirm('Delete this request?');">
-                                <input type="hidden" name="delete_id" value="<?= $job ?>">
+                                <input type="hidden" name="delete_id" value="<?= (int)$job['id'] ?>">
                                 <button type="submit" class="text-red-400 hover:text-red-500 text-sm font-medium">Delete</button>
                             </form>
                         </td>
