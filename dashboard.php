@@ -2,7 +2,7 @@
 session_start();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout'])) {
-    $_SESSION = [];
+    $_SESSION = array();
 
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
@@ -90,7 +90,19 @@ if ($adminUsername === '') {
                     </span>
                     <span class="text-white font-bold text-lg tracking-tight">Ghost<span class="text-cyan-400">Laser</span></span>
                 </a>
-                <a href="/" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Home</a>
+                <div class="flex items-center gap-3">
+                    <a href="/" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Home</a>
+                    <form method="POST" action="">
+                        <button
+                            type="submit"
+                            name="logout"
+                            value="1"
+                            class="inline-flex items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300"
+                        >
+                            Logout
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
     </header>
@@ -115,16 +127,6 @@ if ($adminUsername === '') {
                         </p>
                     </div>
 
-                    <form method="POST" action="" class="md:self-start">
-                        <button
-                            type="submit"
-                            name="logout"
-                            value="1"
-                            class="inline-flex items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300"
-                        >
-                            Logout
-                        </button>
-                    </form>
                 </div>
 
                 <div class="mt-10 grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
