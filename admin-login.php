@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $error = "Login failed. HTTP Status: $httpStatus";
             if ($response) {
-                $error .= ' | Response: ' . substr(strip_tags($response), 0, 100);
+                $error .= " | Response: " . substr(strip_tags($response), 0, 100);
             }
         }
     }
