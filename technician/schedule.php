@@ -1,11 +1,5 @@
 <?php
 
-$host     = getenv('DB_HOST') ?: '127.0.0.1';
-$port     = getenv('DB_PORT') ?: '3306';
-$database = getenv('DB_NAME') ?: getenv('MYSQL_DATABASE') ?: '';
-$user     = getenv('DB_USER') ?: getenv('MYSQL_USER') ?: 'root';
-$password = getenv('DB_PASS') ?: getenv('MYSQL_PASSWORD') ?: '';
-
 $priorityStyles = [
     'Emergency' => [
         'badge' => 'border-red-400/30 bg-red-500/15 text-red-200',
@@ -36,11 +30,16 @@ $serviceRequests = [];
 $errorMessage = null;
 
 try {
-    $dsn = "mysql:host=$host;port=$port;dbname=$database;charset=utf8mb4";
-    $pdo = new PDO($dsn, $user, $password, [
+    // Database connection
+    $pdo = new PDO(
+        "mysql:host=127.0.0.1;port=3306;dbname=ghost_laser;charset=utf8mb4",
+        "root",
+        "",
+        [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
+        ]
+    );
 
     $sql = "SELECT c.first_name, c.last_name, c.city, c.state,
                    sr.priority_level, sr.suggested_dates, sr.request_status
