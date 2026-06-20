@@ -1,66 +1,34 @@
 <?php
 session_start();
 
-if (!empty($_SESSION)) {
-    header('Location: /admin/dashboard.php');
+if (!empty($_SESSION['admin_id'])) {
+    header('Location: dashboard.php');
     exit;
 }
 
+require_once 'project/db.php';
+
 $error = '';
-
-$dbPath = $_SERVER['DOCUMENT_ROOT'] . '/website_a844b2f2/project/db.php';
-
-if (!file_exists($dbPath)) {
-    $error = 'System configuration error. Path not found: ' . $dbPath;
-} else {
-    require_once $dbPath;
-}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if ($username === '' || $password === '') {
+    if (empty($username) || empty($password)) {
         $error = 'Please enter your username and password.';
     } else {
-        try {
-            // ── PDO path ──────────────────────────────────────────────────────
-            if (isset($pdo)) {
-                $stmt = $pdo->prepare(
-                    'SELECT id, password_hash, is_admin, role FROM users WHERE username = ? LIMIT 1'
-                );
-                $stmt->execute([$username]);
-                $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare('SELECT id, password_hash, is_admin, role FROM users WHERE username = ? LIMIT 1');
+        $stmt->execute([$username]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            // ── mysqli path ───────────────────────────────────────────────────
-            } elseif (isset($conn)) {
-                $stmt = $conn->prepare(
-                    'SELECT id, password_hash, is_admin, role FROM users WHERE username = ? LIMIT 1'
-                );
-                $stmt->bind_param('s', $username);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                $admin  = $result->fetch_assoc();
-                $stmt->close();
-
-            } else {
-                throw new RuntimeException('No database connection available.');
-            }
-
-            $isAdmin = $admin && ($admin['is_admin'] == 1 || $admin['role'] === 'admin');
-
-            if ($isAdmin && password_verify($password, $admin['password_hash'])) {
-                // Regenerate session ID to prevent fixation
-                session_regenerate_id(true);
-                $_SESSION['admin_id']       = $admin['id'];
-                $_SESSION['admin_username'] = $username;
-                header('Location: /admin/dashboard.php');
-                exit;
-            } else {
-                $error = 'Invalid username or password.';
-            }
-        } catch (Throwable $e) {
-            $error = 'A server error occurred. Please try again later.';
+        if ($user && ($user['is_admin'] == 1 || $user['role'] === 'admin') && password_verify($password, $user['password_hash'])) {
+            session_regenerate_id(true);
+            $_SESSION['admin_id']       = $user['id'];
+            $_SESSION['admin_username'] = $username;
+            header('Location: dashboard.php');
+            exit;
+        } else {
+            $error = 'Invalid username or password.';
         }
     }
 }
