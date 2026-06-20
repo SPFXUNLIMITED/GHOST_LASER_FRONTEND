@@ -8,11 +8,10 @@ if (!empty($_SESSION)) {
 
 $error = '';
 
-try {
+if (!file_exists('../project/db.php')) {
+    $error = 'System configuration error. Please contact support.';
+} else {
     require_once '../project/db.php';
-} catch (Throwable $e) {
-    $error = 'Database configuration error. Please contact support.';
-    error_log('Admin login error: ' . $e->getMessage());
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
