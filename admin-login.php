@@ -1,5 +1,13 @@
 <?php
-require_once 'functions.php';
+session_start();
+
+// Already logged in — skip the form
+if (!empty($_SESSION['admin_id'])) {
+    header('Location: /admin/dashboard.php');
+    exit;
+}
+
+require_once __DIR__ . '/../project/db.php'; // provides $pdo / $conn
 
 $error = '';
 
@@ -7,34 +15,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if (empty($username) || empty($password)) {
+    if ($username === '' || $password === '') {
         $error = 'Please enter your username and password.';
     } else {
-        $ch = curl_init('https://ghostlaser.com/project/login.php');
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query([
-                'login_input' => $username,
-                'password'    => $password
-            ]),
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            CURLOPT_REFERER        => 'https://ghostlaser.com/',
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 12,
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_HEADER         => true,
-        ]);
+        try {
+            // ── PDO path ──────────────────────────────────────────────────────
+            if (isset($pdo)) {
+                $stmt = $pdo->prepare(
+                    'SELECT id, password_hash, is_admin, role FROM users WHERE username = ? LIMIT 1'
+                );
+                $stmt->execute([$username]);
+                $admin = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $response = curl_exec($ch);
-        $status   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error    = curl_error($ch);
-        curl_close($ch);
+            // ── mysqli path ───────────────────────────────────────────────────
+            } elseif (isset($conn)) {
+                $stmt = $conn->prepare(
+                    'SELECT id, password_hash, is_admin, role FROM users WHERE username = ? LIMIT 1'
+                );
+                $stmt->bind_param('s', $username);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $admin  = $result->fetch_assoc();
+                $stmt->close();
 
-        $error = "Debug: HTTP Status = $status";
-        if ($response) {
-            $error .= " | Response preview: " . substr(strip_tags($response), 0, 80);
+            } else {
+                throw new RuntimeException('No database connection available.');
+            }
+
+            $isAdmin = $admin && ($admin['is_admin'] == 1 || $admin['role'] === 'admin');
+
+            if ($isAdmin && password_verify($password, $admin['password_hash'])) {
+                // Regenerate session ID to prevent fixation
+                session_regenerate_id(true);
+                $_SESSION['admin_id']       = $admin['id'];
+                $_SESSION['admin_username'] = $username;
+                header('Location: /admin/dashboard.php');
+                exit;
+            } else {
+                $error = 'Invalid username or password.';
+            }
+        } catch (Throwable $e) {
+            $error = 'A server error occurred. Please try again later.';
         }
     }
 }
@@ -45,8 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Login | Ghost Laser</title>
-    <link rel="icon" type="image/x-icon" href="<?= asset('favicon.ico') ?>">
-    <link rel="shortcut icon" type="image/x-icon" href="<?= asset('favicon.ico') ?>">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
     <meta name="description" content="Ghost Laser admin login.">
     <script src="https://cdn.tailwindcss.com?v=1.2"></script>
     <script>
@@ -143,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                     </svg>
-                    <span><?= $error ?></span>
+                    <span><?= htmlspecialchars($error, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></span>
                 </div>
                 <?php endif; ?>
 
