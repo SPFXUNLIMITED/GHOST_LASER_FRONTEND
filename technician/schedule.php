@@ -1,149 +1,10 @@
 <?php
 
-declare(strict_types=1);
-
-function envValue(array $keys, ?string $default = null): ?string
-{
-    foreach ($keys as $key) {
-        $value = getenv($key);
-        if ($value !== false && $value !== '') {
-            return $value;
-        }
-    }
-
-    return $default;
-}
-
-function createDatabaseConnection(): PDO
-{
-    $databaseUrl = envValue(['DATABASE_URL', 'MYSQL_URL']);
-
-    if ($databaseUrl !== null) {
-        $parts = parse_url($databaseUrl);
-        if ($parts === false || !isset($parts['scheme']) || strtolower($parts['scheme']) !== 'mysql') {
-            throw new RuntimeException('DATABASE_URL must use the mysql scheme.');
-        }
-
-        $host = $parts['host'] ?? '127.0.0.1';
-        $port = (int) ($parts['port'] ?? 3306);
-        $database = isset($parts['path']) ? ltrim($parts['path'], '/') : '';
-        $user = $parts['user'] ?? '';
-        $password = $parts['pass'] ?? '';
-        parse_str($parts['query'] ?? '', $query);
-        $charset = $query['charset'] ?? 'utf8mb4';
-    } else {
-        $host = envValue(['DB_HOST', 'DATABASE_HOST', 'MYSQL_HOST'], '127.0.0.1');
-        $port = (int) envValue(['DB_PORT', 'DATABASE_PORT', 'MYSQL_PORT'], '3306');
-        $database = envValue(['DB_NAME', 'DB_DATABASE', 'DATABASE_NAME', 'MYSQL_DATABASE']);
-        $user = envValue(['DB_USER', 'DB_USERNAME', 'DATABASE_USER', 'MYSQL_USER'], 'root') ?? 'root';
-        $password = envValue(['DB_PASS', 'DB_PASSWORD', 'DATABASE_PASSWORD', 'MYSQL_PASSWORD'], '') ?? '';
-        $charset = envValue(['DB_CHARSET', 'DATABASE_CHARSET', 'MYSQL_CHARSET'], 'utf8mb4') ?? 'utf8mb4';
-    }
-
-    if ($database === null || $database === '') {
-        throw new RuntimeException('Database name is not configured for the technician schedule page.');
-    }
-
-    $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=%s', $host, $port, $database, $charset);
-
-    return new PDO($dsn, $user, $password, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-    ]);
-}
-
-
-function parseSuggestedDates(mixed $rawValue): array
-{
-    if ($rawValue === null) {
-        return [];
-    }
-
-    if (is_array($rawValue)) {
-        $values = $rawValue;
-    } else {
-        $rawString = trim((string) $rawValue);
-        if ($rawString === '') {
-            return [];
-        }
-
-        $decoded = json_decode($rawString, true);
-        if (json_last_error() === JSON_ERROR_NONE) {
-            if (is_array($decoded)) {
-                $values = $decoded;
-            } elseif (is_string($decoded) && trim($decoded) !== '') {
-                $values = [$decoded];
-            } else {
-                $values = [$rawString];
-            }
-        } else {
-            $values = preg_split('/\s*(?:,|\||;)\s*/', $rawString) ?: [];
-        }
-    }
-
-    $formatted = [];
-    foreach ($values as $value) {
-        $label = formatDateLabel((string) $value);
-        if ($label !== null) {
-            $formatted[$label] = $label;
-        }
-    }
-
-    return array_values($formatted);
-}
-
-function formatDateLabel(string $value): ?string
-{
-    $value = trim($value);
-    if ($value === '') {
-        return null;
-    }
-
-    $timestamp = strtotime($value);
-    if ($timestamp === false) {
-        return $value;
-    }
-
-    return date('F j, Y', $timestamp);
-}
-
-function earliestDateTimestamp(array $dates): ?int
-{
-    $timestamps = [];
-    foreach ($dates as $date) {
-        $timestamp = strtotime($date);
-        if ($timestamp !== false) {
-            $timestamps[] = strtotime(date('Y-m-d', $timestamp));
-        }
-    }
-
-    if ($timestamps === []) {
-        return null;
-    }
-
-    return min($timestamps);
-}
-
-function normalizePriority(string|null $priority): string
-{
-    $normalized = strtolower(trim((string) $priority));
-
-    return match ($normalized) {
-        'emergency' => 'Emergency',
-        'vip' => 'VIP',
-        default => 'Standard',
-    };
-}
-
-function priorityRank(string $priority): int
-{
-    return match (normalizePriority($priority)) {
-        'Emergency' => 0,
-        'VIP' => 1,
-        default => 2,
-    };
-}
+$host     = getenv('DB_HOST') ?: '127.0.0.1';
+$port     = getenv('DB_PORT') ?: '3306';
+$database = getenv('DB_NAME') ?: getenv('MYSQL_DATABASE') ?: '';
+$user     = getenv('DB_USER') ?: getenv('MYSQL_USER') ?: 'root';
+$password = getenv('DB_PASS') ?: getenv('MYSQL_PASSWORD') ?: '';
 
 $priorityStyles = [
     'Emergency' => [
@@ -175,69 +36,83 @@ $serviceRequests = [];
 $errorMessage = null;
 
 try {
-    $pdo = createDatabaseConnection();
+    $dsn = "mysql:host=$host;port=$port;dbname=$database;charset=utf8mb4";
+    $pdo = new PDO($dsn, $user, $password, [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
 
-    $sql = 'SELECT
-        c.first_name,
-        c.last_name,
-        c.city,
-        c.state,
-        sr.priority_level,
-        sr.suggested_dates,
-        sr.request_status,
-        sr.id
-    FROM service_requests sr
-    JOIN customers c ON sr.customer_id = c.id
-    WHERE sr.request_status NOT IN (\'completed\', \'cancelled\')
-    ORDER BY
-        CASE sr.priority_level
-            WHEN \'emergency\' THEN 1
-            WHEN \'vip\' THEN 2
-            ELSE 3
-        END,
-        sr.suggested_dates ASC';
+    $sql = "SELECT c.first_name, c.last_name, c.city, c.state,
+                   sr.priority_level, sr.suggested_dates, sr.request_status
+            FROM service_requests sr
+            JOIN customers c ON sr.customer_id = c.id
+            WHERE sr.request_status NOT IN ('completed', 'cancelled')
+            ORDER BY FIELD(LOWER(sr.priority_level), 'emergency', 'vip') DESC, sr.suggested_dates ASC";
 
-    $statement = $pdo->query($sql);
-    $rows = $statement->fetchAll();
-
+    $rows = $pdo->query($sql)->fetchAll();
     $today = strtotime(date('Y-m-d'));
 
     foreach ($rows as $row) {
-        $dates = parseSuggestedDates($row['suggested_dates'] ?? null);
-        $earliestDate = earliestDateTimestamp($dates);
-
-        if ($earliestDate !== null && $earliestDate < $today) {
-            continue;
+        // Parse suggested dates from JSON or comma-separated string
+        $raw = trim((string) ($row['suggested_dates'] ?? ''));
+        $dateValues = [];
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            $dateValues = is_array($decoded) ? $decoded : preg_split('/\s*[,|;]\s*/', $raw);
         }
 
-        $firstName = trim((string) ($row['first_name'] ?? ''));
-        $lastName = trim((string) ($row['last_name'] ?? ''));
-        $customerName = trim($firstName . ' ' . $lastName);
+        // Format dates as "Month Day, Year" and skip fully past requests
+        $dates = [];
+        $earliest = null;
+        foreach ($dateValues as $d) {
+            $ts = strtotime(trim((string) $d));
+            if ($ts === false) continue;
+            $dayTs = strtotime(date('Y-m-d', $ts));
+            if ($earliest === null || $dayTs < $earliest) $earliest = $dayTs;
+            $label = date('F j, Y', $ts);
+            if (!in_array($label, $dates, true)) $dates[] = $label;
+        }
+
+        if ($earliest !== null && $earliest < $today) continue;
+
+        $priorityRaw = strtolower(trim((string) ($row['priority_level'] ?? '')));
+        $priority = match ($priorityRaw) {
+            'emergency' => 'Emergency',
+            'vip'       => 'VIP',
+            default     => 'Standard',
+        };
+        $priorityRank = match ($priority) {
+            'Emergency' => 0,
+            'VIP'       => 1,
+            default     => 2,
+        };
+
+        $name = trim(trim((string) $row['first_name']) . ' ' . trim((string) $row['last_name']));
 
         $serviceRequests[] = [
-            'customer_name' => $customerName !== '' ? $customerName : 'Unknown Customer',
-            'city' => trim((string) ($row['city'] ?? '')),
-            'state' => strtoupper(trim((string) ($row['state'] ?? ''))),
-            'priority_level' => normalizePriority((string) ($row['priority_level'] ?? '')),
-            'suggested_dates' => $dates,
-            'status' => trim((string) ($row['request_status'] ?? '')) !== '' ? (string) $row['request_status'] : 'Pending Review',
-            'sort_priority' => priorityRank((string) ($row['priority_level'] ?? '')),
-            'sort_date' => $earliestDate ?? PHP_INT_MAX,
+            'customer_name'  => $name !== '' ? $name : 'Unknown Customer',
+            'city'           => trim((string) ($row['city'] ?? '')),
+            'state'          => strtoupper(trim((string) ($row['state'] ?? ''))),
+            'priority_level' => $priority,
+            'suggested_dates'=> $dates,
+            'status'         => trim((string) ($row['request_status'] ?? '')) ?: 'Pending Review',
+            'sort_priority'  => $priorityRank,
+            'sort_date'      => $earliest ?? PHP_INT_MAX,
         ];
     }
 
-    usort($serviceRequests, static function (array $left, array $right): int {
-        return [$left['sort_priority'], $left['sort_date'], $left['customer_name']]
-            <=> [$right['sort_priority'], $right['sort_date'], $right['customer_name']];
-    });
-} catch (Throwable $throwable) {
-    $errorMessage = $throwable->getMessage();
+    usort($serviceRequests, fn($a, $b) =>
+        [$a['sort_priority'], $a['sort_date'], $a['customer_name']]
+        <=> [$b['sort_priority'], $b['sort_date'], $b['customer_name']]
+    );
+} catch (Throwable $e) {
+    $errorMessage = $e->getMessage();
 }
 
-$totalRequests = count($serviceRequests);
-$emergencyCount = count(array_filter($serviceRequests, static fn (array $request): bool => $request['priority_level'] === 'Emergency'));
-$vipCount = count(array_filter($serviceRequests, static fn (array $request): bool => $request['priority_level'] === 'VIP'));
-$standardCount = count(array_filter($serviceRequests, static fn (array $request): bool => $request['priority_level'] === 'Standard'));
+$totalRequests  = count($serviceRequests);
+$emergencyCount = count(array_filter($serviceRequests, fn($r) => $r['priority_level'] === 'Emergency'));
+$vipCount       = count(array_filter($serviceRequests, fn($r) => $r['priority_level'] === 'VIP'));
+$standardCount  = count(array_filter($serviceRequests, fn($r) => $r['priority_level'] === 'Standard'));
 ?>
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
