@@ -30,6 +30,8 @@ function firstNonEmpty(array $row, array $keys, string $fallback = 'N/A'): strin
 try {
     $sql = "SELECT
                 sr.*,
+                sr.latitude,
+                sr.longitude,
                 c.first_name,
                 c.last_name,
                 c.city
@@ -69,14 +71,20 @@ try {
         }
 
         $priority = firstNonEmpty($row, ['priority_level', 'priority'], 'Standard');
+        $latitude = $row['latitude'] ?? null;
+        $longitude = $row['longitude'] ?? null;
+        $coordinates = 'Not available';
+
+        if ($latitude !== null && $longitude !== null && $latitude !== '' && $longitude !== '' && is_numeric($latitude) && is_numeric($longitude)) {
+            $coordinates = number_format((float) $latitude, 4, '.', '') . ', ' . number_format((float) $longitude, 4, '.', '');
+        }
 
         $jobs[] = [
             'customer_name' => $customerName,
             'city' => firstNonEmpty($row, ['city'], 'Unknown City'),
+            'coordinates' => $coordinates,
             'priority' => ucfirst(strtolower($priority)),
             'problem_summary' => firstNonEmpty($row, ['problem_summary', 'problem_description', 'problem', 'issue_summary'], 'No summary provided'),
-            'latitude' => firstNonEmpty($row, ['latitude', 'lat'], 'N/A'),
-            'longitude' => firstNonEmpty($row, ['longitude', 'lng', 'lon'], 'N/A'),
             'preferred_dates' => $preferredDates,
         ];
     }
@@ -176,18 +184,17 @@ try {
                             <thead class="bg-zinc-900/90">
                                 <tr>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Customer Name</th>
-                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">City</th>
-                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Priority</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Service address</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Coordinates</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Priority level</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Problem Summary</th>
-                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Latitude</th>
-                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Longitude</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Preferred Dates</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-zinc-800/80">
                                 <?php if ($jobs === []): ?>
                                     <tr>
-                                        <td colspan="7" class="px-4 py-10 text-center">
+                                        <td colspan="6" class="px-4 py-10 text-center">
                                             <p class="text-sm font-semibold text-white">No pending jobs found.</p>
                                             <p class="mt-2 text-sm text-zinc-400">Jobs with status <span class="text-cyan-300">new</span> or <span class="text-cyan-300">queued</span> will appear here.</p>
                                         </td>
@@ -197,10 +204,9 @@ try {
                                         <tr class="align-top hover:bg-zinc-900/80">
                                             <td class="px-4 py-4 text-sm font-semibold text-white"><?= htmlspecialchars($job['customer_name'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
                                             <td class="px-4 py-4 text-sm text-zinc-300"><?= htmlspecialchars($job['city'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
+                                            <td class="px-4 py-4 text-sm text-zinc-300"><?= htmlspecialchars($job['coordinates'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
                                             <td class="px-4 py-4 text-sm text-cyan-300"><?= htmlspecialchars($job['priority'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
                                             <td class="px-4 py-4 text-sm text-zinc-300 max-w-xs"><?= htmlspecialchars($job['problem_summary'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
-                                            <td class="px-4 py-4 text-sm text-zinc-300"><?= htmlspecialchars($job['latitude'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
-                                            <td class="px-4 py-4 text-sm text-zinc-300"><?= htmlspecialchars($job['longitude'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
                                             <td class="px-4 py-4 text-sm text-zinc-300"><?= htmlspecialchars($job['preferred_dates'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
                                         </tr>
                                     <?php endforeach; ?>
