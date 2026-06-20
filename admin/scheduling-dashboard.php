@@ -8,6 +8,18 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once '../project/db.php';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
+    $deleteId = (int) $_POST['delete_id'];
+    try {
+        $stmt = $pdo->prepare("DELETE FROM service_requests WHERE id = ?");
+        $stmt->execute([$deleteId]);
+    } catch (Throwable $e) {
+        // ignore and fall through to redirect
+    }
+    header('Location: ' . $_SERVER['PHP_SELF']);
+    exit;
+}
+
 $jobs = [];
 $errorMessage = null;
 
@@ -80,6 +92,7 @@ try {
         }
 
         $jobs[] = [
+            'id' => (int) ($row['id'] ?? 0),
             'customer_name' => $customerName,
             'city' => firstNonEmpty($row, ['city'], 'Unknown City'),
             'coordinates' => $coordinates,
@@ -189,12 +202,13 @@ try {
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Priority level</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Problem Summary</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Preferred Dates</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">Actions</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-zinc-800/80">
                                 <?php if ($jobs === []): ?>
                                     <tr>
-                                        <td colspan="6" class="px-4 py-10 text-center">
+                                        <td colspan="7" class="px-4 py-10 text-center">
                                             <p class="text-sm font-semibold text-white">No pending jobs found.</p>
                                             <p class="mt-2 text-sm text-zinc-400">Jobs with status <span class="text-cyan-300">new</span> or <span class="text-cyan-300">queued</span> will appear here.</p>
                                         </td>
@@ -208,6 +222,12 @@ try {
                                             <td class="px-4 py-4 text-sm text-cyan-300"><?= htmlspecialchars($job['priority'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
                                             <td class="px-4 py-4 text-sm text-zinc-300 max-w-xs"><?= htmlspecialchars($job['problem_summary'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
                                             <td class="px-4 py-4 text-sm text-zinc-300"><?= htmlspecialchars($job['preferred_dates'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></td>
+                                            <td class="px-4 py-4">
+                                                <form method="POST" action="" onsubmit="return confirm('Are you sure you want to delete this request?');">
+                                                    <input type="hidden" name="delete_id" value="<?= (int) $job['id'] ?>">
+                                                    <button type="submit" class="rounded px-3 py-1 text-xs font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors">Delete</button>
+                                                </form>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
