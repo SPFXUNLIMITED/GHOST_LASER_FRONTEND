@@ -24,17 +24,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             CURLOPT_TIMEOUT        => 12,
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HEADER         => true,
         ]);
 
         $response = curl_exec($ch);
         $status   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error    = curl_error($ch);
         curl_close($ch);
 
-        if ($status >= 300 && $status < 400) {
-            header('Location: /project/');
-            exit;
-        } else {
-            $error = 'Invalid credentials. Please try again.';
+        $error = "Debug: HTTP Status = $status";
+        if ($response) {
+            $error .= " | Response preview: " . substr(strip_tags($response), 0, 80);
         }
     }
 }
