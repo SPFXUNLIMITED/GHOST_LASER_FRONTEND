@@ -1,4 +1,5 @@
 <?php
+require_once '../db.php';
 
 $priorityStyles = [
     'Emergency' => [
@@ -30,8 +31,6 @@ $serviceRequests = [];
 $errorMessage = null;
 
 try {
-    require_once '../config.php';
-
     $sql = "SELECT c.first_name, c.last_name, c.city, c.state,
                    sr.priority_level, sr.suggested_dates, sr.request_status
             FROM service_requests sr
