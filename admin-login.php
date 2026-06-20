@@ -14,14 +14,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($username === '' || $password === '') {
         $error = 'Please enter your username and password.';
     } else {
-        $payload = json_encode(['username' => $username, 'password' => $password]);
-
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL            => 'https://ghostlaser.com/project/login.php',
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $payload,
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
+            CURLOPT_POSTFIELDS     => http_build_query(['login_input' => $username, 'password' => $password]),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 10,
             CURLOPT_FOLLOWLOCATION => false,
@@ -34,16 +32,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($curlError) {
             $error = 'Unable to reach the server. Please try again.';
+        } elseif ($httpStatus >= 300 && $httpStatus < 400) {
+            header('Location: /project/');
+            exit;
         } else {
-            $json = json_decode($body, true);
-            if ($httpStatus >= 200 && $httpStatus < 300 && ($json['success'] ?? true) !== false) {
-                header('Location: /project/');
-                exit;
-            } else {
-                $error = $json['message'] ?? $json['error'] ?? 'Invalid credentials. Please try again.';
-                // Sanitise for HTML output
-                $error = htmlspecialchars($error, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            }
+            $error = 'Invalid credentials. Please try again.';
         }
     }
 }
