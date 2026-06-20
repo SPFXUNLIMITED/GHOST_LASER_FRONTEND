@@ -1,15 +1,19 @@
 <?php
 session_start();
 
-// Already logged in — skip the form
-if (!empty($_SESSION['admin_id'])) {
+if (!empty($_SESSION)) {
     header('Location: /admin/dashboard.php');
     exit;
 }
 
-require_once __DIR__ . '/../project/db.php'; // provides $pdo / $conn
-
 $error = '';
+
+try {
+    require_once '../project/db.php';
+} catch (Throwable $e) {
+    $error = 'Database configuration error. Please contact support.';
+    error_log('Admin login error: ' . $e->getMessage());
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
