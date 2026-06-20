@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // ── PDO path ──────────────────────────────────────────────────────
             if (isset($pdo)) {
                 $stmt = $pdo->prepare(
-                    'SELECT id, password_hash FROM admins WHERE username = ? LIMIT 1'
+                    'SELECT id, password_hash, is_admin, role FROM users WHERE username = ? LIMIT 1'
                 );
                 $stmt->execute([$username]);
                 $admin = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // ── mysqli path ───────────────────────────────────────────────────
             } elseif (isset($conn)) {
                 $stmt = $conn->prepare(
-                    'SELECT id, password_hash FROM admins WHERE username = ? LIMIT 1'
+                    'SELECT id, password_hash, is_admin, role FROM users WHERE username = ? LIMIT 1'
                 );
                 $stmt->bind_param('s', $username);
                 $stmt->execute();
@@ -42,7 +42,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('No database connection available.');
             }
 
-            if ($admin && password_verify($password, $admin['password_hash'])) {
+            $isAdmin = $admin && ($admin['is_admin'] == 1 || $admin['role'] === 'admin');
+
+            if ($isAdmin && password_verify($password, $admin['password_hash'])) {
                 // Regenerate session ID to prevent fixation
                 session_regenerate_id(true);
                 $_SESSION['admin_id']       = $admin['id'];
