@@ -14,11 +14,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($username === '' || $password === '') {
         $error = 'Please enter your username and password.';
     } else {
+        $payload = http_build_query([
+            'login_input' => $username,
+            'password'    => $password,
+        ]);
+
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL            => 'https://ghostlaser.com/project/login.php',
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query(['login_input' => $username, 'password' => $password]),
+            CURLOPT_POSTFIELDS     => $payload,
             CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
             CURLOPT_REFERER        => 'https://ghostlaser.com/',
@@ -35,12 +40,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_close($ch);
 
         if ($curlError) {
-            $error = 'Connection error. Please try again.';
+            $error = 'Connection error: ' . $curlError;
         } elseif ($httpStatus >= 300 && $httpStatus < 400) {
             header('Location: /project/');
             exit;
         } else {
-            $error = 'Invalid credentials. Please try again.';
+            $error = "Login failed. HTTP Status: $httpStatus";
+            if ($response) {
+                $error .= ' | Response: ' . substr(strip_tags($response), 0, 100);
+            }
         }
     }
 }
