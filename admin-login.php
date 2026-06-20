@@ -149,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <?php endif; ?>
 
-                <form method="POST" action="admin-login.php">
+                <form method="POST" action="">
                     <div class="flex flex-col gap-5">
                         <!-- Username -->
                         <div>
