@@ -33,12 +33,23 @@ $serviceRequests = [];
 $errorMessage = null;
 
 try {
-    $sql = "SELECT c.first_name, c.last_name, c.city, c.state,
-                   sr.priority_level, sr.suggested_dates, sr.request_status
-            FROM service_requests sr
-            JOIN customers c ON sr.customer_id = c.id
-            WHERE sr.request_status NOT IN ('completed', 'cancelled')
-            ORDER BY FIELD(LOWER(sr.priority_level), 'emergency', 'vip') DESC, sr.suggested_dates ASC";
+    $sql = "SELECT 
+            c.first_name, 
+            c.last_name, 
+            c.city, 
+            c.state,
+            sr.priority_level,
+            sr.preferred_date_start,
+            sr.preferred_date_end,
+            sr.promised_service_date,
+            sr.request_status as status
+        FROM service_requests sr
+        JOIN customers c ON sr.customer_id = c.id
+        WHERE sr.request_status NOT IN ('completed', 'cancelled')
+        ORDER BY 
+            FIELD(sr.priority_level, 'emergency', 'vip', 'standard'),
+            sr.promised_service_date ASC, 
+            sr.preferred_date_start ASC";
 
     $rows = $pdo->query($sql)->fetchAll();
     $today = strtotime(date('Y-m-d'));
