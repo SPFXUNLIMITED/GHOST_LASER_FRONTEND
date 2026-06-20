@@ -14,29 +14,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($username === '' || $password === '') {
         $error = 'Please enter your username and password.';
     } else {
+        $postData = http_build_query(['login_input' => $username, 'password' => $password]);
+
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL            => 'https://ghostlaser.com/project/login.php',
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query(['login_input' => $username, 'password' => $password]),
+            CURLOPT_POSTFIELDS     => $postData,
             CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_TIMEOUT        => 15,
             CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_HEADER         => true,
         ]);
 
-        $body       = curl_exec($ch);
+        $response   = curl_exec($ch);
         $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError  = curl_error($ch);
         curl_close($ch);
 
         if ($curlError) {
-            $error = 'Unable to reach the server. Please try again.';
+            $error = 'Curl error: ' . $curlError;
         } elseif ($httpStatus >= 300 && $httpStatus < 400) {
             header('Location: /project/');
             exit;
         } else {
-            $error = 'Invalid credentials. Please try again.';
+            $error = "Login failed. HTTP Status: $httpStatus";
         }
     }
 }
