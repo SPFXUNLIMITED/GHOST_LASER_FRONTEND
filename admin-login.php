@@ -1,9 +1,5 @@
 <?php
 require_once 'functions.php';
-// -----------------------------------------------------------------------
-// Server-side proxy: credentials are forwarded to the backend via cURL.
-// The real backend URL is never sent to the browser.
-// -----------------------------------------------------------------------
 
 $error = '';
 
@@ -11,32 +7,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if ($username === '' || $password === '') {
+    if (empty($username) || empty($password)) {
         $error = 'Please enter your username and password.';
     } else {
-        $ch = curl_init();
+        $ch = curl_init('https://ghostlaser.com/project/login.php');
         curl_setopt_array($ch, [
-            CURLOPT_URL            => 'https://ghostlaser.com/project/login.php',
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query(['login_input' => $username, 'password' => $password]),
+            CURLOPT_POSTFIELDS     => http_build_query([
+                'login_input' => $username,
+                'password'    => $password
+            ]),
             CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             CURLOPT_REFERER        => 'https://ghostlaser.com/',
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_TIMEOUT        => 12,
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => 2,
         ]);
 
-        $response   = curl_exec($ch);
-        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError  = curl_error($ch);
+        $response = curl_exec($ch);
+        $status   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        if ($curlError) {
-            $error = 'Connection error. Please try again.';
-        } elseif ($httpStatus >= 300 && $httpStatus < 400) {
+        if ($status >= 300 && $status < 400) {
             header('Location: /project/');
             exit;
         } else {
