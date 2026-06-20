@@ -8,10 +8,12 @@ if (!empty($_SESSION)) {
 
 $error = '';
 
-if (!file_exists('../project/db.php')) {
+$projectPath = __DIR__ . '/../project/db.php';
+
+if (!file_exists($projectPath)) {
     $error = 'System configuration error. Please contact support.';
 } else {
-    require_once '../project/db.php';
+    require_once $projectPath;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
