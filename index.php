@@ -75,9 +75,17 @@
                     <a href="#process" class="text-sm text-zinc-400 hover:text-white transition-colors">Process</a>
                     <a href="#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a>
                 </nav>
-                <a href="book-repair.php" class="hidden md:inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors btn-glow">
-                    Book a Repair
-                </a>
+                <div class="hidden md:flex items-center gap-3">
+                    <a href="book-repair.php" class="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors btn-glow">
+                        Book a Repair
+                    </a>
+                    <a
+                        href="admin-login.php"
+                        class="inline-flex items-center justify-center rounded-md border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-300 transition-colors hover:border-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-200"
+                    >
+                        Admin
+                    </a>
+                </div>
                 <!-- Mobile menu button -->
                 <button id="mobile-menu-btn" class="md:hidden text-zinc-400 hover:text-white p-1" aria-label="Open menu">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -95,6 +103,12 @@
                 <a href="#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a>
                 <a href="book-repair.php" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors w-full">
                     Book a Repair
+                </a>
+                <a
+                    href="admin-login.php"
+                    class="inline-flex items-center justify-center rounded-md border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-300 transition-colors hover:border-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-200 w-full"
+                >
+                    Admin
                 </a>
             </div>
         </div>
@@ -343,13 +357,6 @@
             <div class="flex items-center gap-5">
                 <a href="#services" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Services</a>
                 <a href="#contact" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Contact</a>
-                <a href="admin-login.php" class="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-cyan-400 border border-zinc-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-md transition-all">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                    </svg>
-                    Admin
-                </a>
             </div>
         </div>
     </footer>
