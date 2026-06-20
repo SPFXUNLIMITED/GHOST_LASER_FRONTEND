@@ -8,12 +8,12 @@ if (!empty($_SESSION)) {
 
 $error = '';
 
-$projectPath = __DIR__ . '/../project/db.php';
+$dbPath = $_SERVER['DOCUMENT_ROOT'] . '/website_a844b2f2/project/db.php';
 
-if (!file_exists($projectPath)) {
-    $error = 'System configuration error. Please contact support.';
+if (!file_exists($dbPath)) {
+    $error = 'System configuration error. Path not found: ' . $dbPath;
 } else {
-    require_once $projectPath;
+    require_once $dbPath;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
