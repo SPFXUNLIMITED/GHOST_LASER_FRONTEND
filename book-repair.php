@@ -1,4 +1,7 @@
-<?php require_once __DIR__ . '/project/config.php'; ?>
+<?php
+$config = require __DIR__ . '/project/config.php';
+define('RECAPTCHA_SITE_KEY', $config  ?? '');
+?>
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 <head>
