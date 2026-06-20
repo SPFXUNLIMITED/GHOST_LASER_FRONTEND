@@ -30,16 +30,7 @@ $serviceRequests = [];
 $errorMessage = null;
 
 try {
-    // Database connection - update these values for your environment
-    $pdo = new PDO(
-        "mysql:host=127.0.0.1;port=3306;dbname=ghost_laser;charset=utf8mb4",
-        "your_db_username",        // Change this
-        "your_db_password",        // Change this
-        [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]
-    );
+    require_once '../config.php';
 
     $sql = "SELECT c.first_name, c.last_name, c.city, c.state,
                    sr.priority_level, sr.suggested_dates, sr.request_status
