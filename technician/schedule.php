@@ -10,6 +10,30 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once '../project/db.php';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $deleteId = filter_input(
+        INPUT_POST,
+        'delete_id',
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1]]
+    );
+
+    if ($deleteId) {
+        $deleteStmt = $pdo->prepare("
+            UPDATE service_requests
+            SET request_status = :status
+            WHERE id = :id
+        ");
+        $deleteStmt->execute([
+            ':status' => 'deleted',
+            ':id' => $deleteId
+        ]);
+    }
+
+    header('Location: schedule.php');
+    exit;
+}
+
 $jobs = $pdo->query("
     SELECT 
         sr.id,
