@@ -10,29 +10,22 @@ if (empty($_SESSION )) {
 
 require_once '../project/db.php';
 
-$jobs = [];
-try {
-    $sql = "SELECT 
-                sr.id,
-                c.first_name,
-                c.last_name,
-                c.city,
-                sr.latitude,
-                sr.longitude,
-                sr.priority_level,
-                sr.problem_summary,
-                sr.preferred_date_start,
-                sr.preferred_date_end
-            FROM service_requests sr
-            JOIN customers c ON sr.customer_id = c.id
-            WHERE sr.request_status IN ('new', 'queued')
-            ORDER BY FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'), sr.id DESC";
-
-    $jobs = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-} catch (Throwable $e) {
-    echo "Error: " . $e->getMessage();
-    exit;
-}
+$jobs = $pdo->query("
+    SELECT 
+        c.first_name, 
+        c.last_name, 
+        c.city,
+        sr.latitude,
+        sr.longitude,
+        sr.priority_level,
+        sr.problem_summary,
+        sr.preferred_date_start,
+        sr.preferred_date_end
+    FROM service_requests sr
+    JOIN customers c ON sr.customer_id = c.id
+    WHERE sr.request_status IN ('new', 'queued')
+    ORDER BY FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'), sr.id DESC
+")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -42,10 +35,51 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scheduling Dashboard | Ghost Laser</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { font-family: 'Inter', system-ui, sans-serif; }
-    </style>
 </head>
-<body class="bg-zinc-950 text-white">
-    <header class="fixed top-0 left-0 right-0 z-50 bg-zinc-950/80 backdrop-blur-lg border-b border-zinc-800">
-        <div class="max-w-7xl mx-auto px
+<body class="bg-zinc-950 text-white p-8">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-5xl font-bold mb-2">Scheduling Dashboard</h1>
+        <p class="text-zinc-400 mb-8">Pending service requests (<?= count($jobs) ?> found)</p>
+
+        <div class="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-zinc-800">
+                    <tr>
+                        <th class="p-6 text-left">Customer</th>
+                        <th class="p-6 text-left">City</th>
+                        <th class="p-6 text-left">Coordinates</th>
+                        <th class="p-6 text-left">Priority</th>
+                        <th class="p-6 text-left">Problem</th>
+                        <th class="p-6 text-left">Dates</th>
+                        <th class="p-6 text-left">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-700">
+                    <?php foreach ($jobs as $job): ?>
+                    <tr class="hover:bg-zinc-800">
+                        <td class="p-6"><?= htmlspecialchars($job . ' ' . $job ) ?></td>
+                        <td class="p-6"><?= htmlspecialchars($job ) ?></td>
+                        <td class="p-6 font-mono text-sm text-cyan-400">
+                            <?= $job && $job ? number_format($job ,4).', '.number_format($job ,4) : 'N/A' ?>
+                        </td>
+                        <td class="p-6">
+                            <span class="px-4 py-1 rounded-full text-xs font-semibold <?= strtolower($job ?? '') === 'emergency' ? 'bg-red-500/20 text-red-300' : (strtolower($job ?? '') === 'vip' ? 'bg-orange-500/20 text-orange-300' : 'bg-blue-500/20 text-blue-300') ?>">
+                                <?= htmlspecialchars(ucfirst($job ?? 'Standard')) ?>
+                            </span>
+                        </td>
+                        <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job ?? 'No summary') ?></td>
+                        <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job ?? 'N/A') ?></td>
+                        <td class="p-6">
+                            <form method="POST" onsubmit="return confirm('Delete this request?');">
+                                <input type="hidden" name="delete_id" value="<?= $job ?>">
+                                <button type="submit" class="text-red-400 hover:text-red-500 text-sm font-medium">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
