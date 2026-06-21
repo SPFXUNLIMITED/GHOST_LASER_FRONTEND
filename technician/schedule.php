@@ -247,10 +247,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['insert_test_data'])) {
+        $emailSuffix = base_convert(time(), 10, 36); // short unique suffix per button press
+
         $testCustomers = [
             [
                 'first_name' => 'Maria',    'last_name' => 'Gonzalez',
-                'email'      => 'maria.gonzalez.testgl@example.com',
+                'email'      => "maria.gonzalez.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '714-555-0101',
                 'address'    => '1234 Harbor Blvd',
                 'city'       => 'Anaheim',  'state' => 'CA', 'zip' => '92801',
@@ -260,7 +262,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'James',    'last_name' => 'Chen',
-                'email'      => 'james.chen.testgl@example.com',
+                'email'      => "james.chen.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '951-555-0202',
                 'address'    => '4500 Magnolia Ave',
                 'city'       => 'Riverside', 'state' => 'CA', 'zip' => '92506',
@@ -270,7 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'Sandra',   'last_name' => 'Williams',
-                'email'      => 'sandra.williams.testgl@example.com',
+                'email'      => "sandra.williams.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '562-555-0303',
                 'address'    => '850 Pine Ave',
                 'city'       => 'Long Beach', 'state' => 'CA', 'zip' => '90813',
@@ -280,7 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'Robert',   'last_name' => 'Kim',
-                'email'      => 'robert.kim.testgl@example.com',
+                'email'      => "robert.kim.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '949-555-0404',
                 'address'    => '2200 Michelson Dr',
                 'city'       => 'Irvine',   'state' => 'CA', 'zip' => '92612',
@@ -290,7 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'Jennifer', 'last_name' => 'Davis',
-                'email'      => 'jennifer.davis.testgl@example.com',
+                'email'      => "jennifer.davis.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '714-555-0505',
                 'address'    => '700 W Commonwealth Ave',
                 'city'       => 'Fullerton', 'state' => 'CA', 'zip' => '92832',
@@ -300,7 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'Michael',  'last_name' => 'Torres',
-                'email'      => 'michael.torres.testgl@example.com',
+                'email'      => "michael.torres.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '714-555-0606',
                 'address'    => '12200 Euclid St',
                 'city'       => 'Garden Grove', 'state' => 'CA', 'zip' => '92840',
@@ -310,7 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'Lisa',     'last_name' => 'Johnson',
-                'email'      => 'lisa.johnson.testgl@example.com',
+                'email'      => "lisa.johnson.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '619-555-0707',
                 'address'    => '3900 Convoy St',
                 'city'       => 'San Diego', 'state' => 'CA', 'zip' => '92111',
@@ -320,7 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'David',    'last_name' => 'Martinez',
-                'email'      => 'david.martinez.testgl@example.com',
+                'email'      => "david.martinez.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '760-555-0808',
                 'address'    => '1425 E Main St',
                 'city'       => 'Barstow',  'state' => 'CA', 'zip' => '92311',
@@ -330,7 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'Amanda',   'last_name' => 'Brown',
-                'email'      => 'amanda.brown.testgl@example.com',
+                'email'      => "amanda.brown.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '213-555-0909',
                 'address'    => '1100 S Flower St',
                 'city'       => 'Los Angeles', 'state' => 'CA', 'zip' => '90015',
@@ -340,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'Carlos',   'last_name' => 'Ramirez',
-                'email'      => 'carlos.ramirez.testgl@example.com',
+                'email'      => "carlos.ramirez.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '323-555-1010',
                 'address'    => '3200 E Imperial Hwy',
                 'city'       => 'Lynwood',  'state' => 'CA', 'zip' => '90262',
@@ -350,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'Patricia', 'last_name' => 'Lee',
-                'email'      => 'patricia.lee.testgl@example.com',
+                'email'      => "patricia.lee.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '714-555-1111',
                 'address'    => '1801 E Edinger Ave',
                 'city'       => 'Santa Ana', 'state' => 'CA', 'zip' => '92705',
@@ -360,7 +362,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ],
             [
                 'first_name' => 'Brian',    'last_name' => 'Thompson',
-                'email'      => 'brian.thompson.testgl@example.com',
+                'email'      => "brian.thompson.{$emailSuffix}@ghostlaser.test",
                 'phone'      => '714-555-1212',
                 'address'    => '4201 Katella Ave',
                 'city'       => 'Orange',   'state' => 'CA', 'zip' => '92869',
