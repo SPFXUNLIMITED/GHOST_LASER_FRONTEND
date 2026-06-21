@@ -264,7 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             INSERT INTO customers
                 (first_name, last_name, email, phone, address, city, state, zip, hubspot_contact_id)
             VALUES
-                (:first_name, :last_name, :email, :phone, :address, :city, :state, :zip, NULL)
+                (:first_name, :last_name, :email, :phone, :address, :city, :state, :zip, '')
         ");
         $insertReq = $pdo->prepare("
             INSERT INTO service_requests
