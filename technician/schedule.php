@@ -2,7 +2,7 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-const CLUSTER_DISTANCE_MILES = 25;
+const CLUSTER_DISTANCE_MILES = 20;
 
 /**
  * Determine whether the provided coordinates can be used for geographic clustering.
@@ -29,6 +29,54 @@ function haversineDistanceMiles($latitudeOne, $longitudeOne, $latitudeTwo, $long
         + cos($latitudeOne) * cos($latitudeTwo) * sin($longitudeDelta / 2) ** 2;
 
     return 2 * $earthRadiusMiles * asin(min(1, sqrt($haversine)));
+}
+
+/**
+ * Allow a job to join a cluster when its closest neighbor is within the max radius.
+ */
+function canJoinCluster(array $job, array $clusterJobs)
+{
+    $closestDistance = null;
+
+    foreach ($clusterJobs as $clusteredJob) {
+        $distance = haversineDistanceMiles(
+            $job['latitude'],
+            $job['longitude'],
+            $clusteredJob['latitude'],
+            $clusteredJob['longitude']
+        );
+
+        if ($closestDistance === null || $distance < $closestDistance) {
+            $closestDistance = $distance;
+        }
+    }
+
+    return $closestDistance !== null && $closestDistance <= CLUSTER_DISTANCE_MILES;
+}
+
+/**
+ * Calculate the true max spread (furthest pair distance) for a group of jobs.
+ */
+function getMaxSpreadMiles(array $jobs)
+{
+    $jobCount = count($jobs);
+    $maxSpreadMiles = 0;
+
+    for ($leftIndex = 0; $leftIndex < $jobCount; $leftIndex++) {
+        for ($rightIndex = $leftIndex + 1; $rightIndex < $jobCount; $rightIndex++) {
+            $maxSpreadMiles = max(
+                $maxSpreadMiles,
+                haversineDistanceMiles(
+                    $jobs[$leftIndex]['latitude'],
+                    $jobs[$leftIndex]['longitude'],
+                    $jobs[$rightIndex]['latitude'],
+                    $jobs[$rightIndex]['longitude']
+                )
+            );
+        }
+    }
+
+    return $maxSpreadMiles;
 }
 
 function isBusinessDay(DateTimeImmutable $date)
@@ -107,6 +155,10 @@ function buildGeographicClusters(array $jobs)
         $closestDistance = null;
 
         foreach ($clusters as $clusterIndex => $cluster) {
+            if (!canJoinCluster($job, $cluster['jobs'])) {
+                continue;
+            }
+
             $distance = haversineDistanceMiles(
                 $job['latitude'],
                 $job['longitude'],
@@ -114,7 +166,7 @@ function buildGeographicClusters(array $jobs)
                 $cluster['centroid_longitude']
             );
 
-            if ($distance <= CLUSTER_DISTANCE_MILES && ($closestDistance === null || $distance < $closestDistance)) {
+            if ($closestDistance === null || $distance < $closestDistance) {
                 $closestDistance = $distance;
                 $bestClusterIndex = $clusterIndex;
             }
@@ -161,21 +213,7 @@ function buildGeographicClusters(array $jobs)
             return (int) $rightJob['id'] <=> (int) $leftJob['id'];
         });
 
-        $furthestJobDistance = 0;
-
-        foreach ($cluster['jobs'] as $clusteredJob) {
-            $furthestJobDistance = max(
-                $furthestJobDistance,
-                haversineDistanceMiles(
-                    $clusteredJob['latitude'],
-                    $clusteredJob['longitude'],
-                    $cluster['centroid_latitude'],
-                    $cluster['centroid_longitude']
-                )
-            );
-        }
-
-        $cluster['max_distance_miles'] = $furthestJobDistance;
+        $cluster['max_distance_miles'] = getMaxSpreadMiles($cluster['jobs']);
     }
     unset($cluster);
 
