@@ -32,10 +32,12 @@ function haversineDistanceMiles($latitudeOne, $longitudeOne, $latitudeTwo, $long
 }
 
 /**
- * Ensure a job can join a cluster only when it remains within the max radius from every job.
+ * Allow a job to join a cluster when its closest neighbor is within the max radius.
  */
 function canJoinCluster(array $job, array $clusterJobs)
 {
+    $closestDistance = null;
+
     foreach ($clusterJobs as $clusteredJob) {
         $distance = haversineDistanceMiles(
             $job['latitude'],
@@ -44,12 +46,12 @@ function canJoinCluster(array $job, array $clusterJobs)
             $clusteredJob['longitude']
         );
 
-        if ($distance > CLUSTER_DISTANCE_MILES) {
-            return false;
+        if ($closestDistance === null || $distance < $closestDistance) {
+            $closestDistance = $distance;
         }
     }
 
-    return true;
+    return $closestDistance !== null && $closestDistance <= CLUSTER_DISTANCE_MILES;
 }
 
 /**
