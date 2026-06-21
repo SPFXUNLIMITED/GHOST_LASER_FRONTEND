@@ -32,26 +32,17 @@ function haversineDistanceMiles($latitudeOne, $longitudeOne, $latitudeTwo, $long
 }
 
 /**
- * Allow a job to join a cluster when its closest neighbor is within the max radius.
+ * Sort higher-priority jobs first so clusters are anchored by the most urgent work.
  */
-function canJoinCluster(array $job, array $clusterJobs)
+function compareJobsByPriority(array $leftJob, array $rightJob)
 {
-    $closestDistance = null;
+    $priorityComparison = $leftJob['priority_meta']['order'] <=> $rightJob['priority_meta']['order'];
 
-    foreach ($clusterJobs as $clusteredJob) {
-        $distance = haversineDistanceMiles(
-            $job['latitude'],
-            $job['longitude'],
-            $clusteredJob['latitude'],
-            $clusteredJob['longitude']
-        );
-
-        if ($closestDistance === null || $distance < $closestDistance) {
-            $closestDistance = $distance;
-        }
+    if ($priorityComparison !== 0) {
+        return $priorityComparison;
     }
 
-    return $closestDistance !== null && $closestDistance <= CLUSTER_DISTANCE_MILES;
+    return (int) $rightJob['id'] <=> (int) $leftJob['id'];
 }
 
 /**
@@ -148,33 +139,32 @@ function getPriorityScheduleWindow($priorityLevel)
  */
 function buildGeographicClusters(array $jobs)
 {
+    usort($jobs, 'compareJobsByPriority');
+
     $clusters = [];
 
     foreach ($jobs as $job) {
-        $bestClusterIndex = null;
-        $closestDistance = null;
+        $assignedClusterIndex = null;
 
         foreach ($clusters as $clusterIndex => $cluster) {
-            if (!canJoinCluster($job, $cluster['jobs'])) {
-                continue;
-            }
-
-            $distance = haversineDistanceMiles(
+            $anchorDistance = haversineDistanceMiles(
                 $job['latitude'],
                 $job['longitude'],
-                $cluster['centroid_latitude'],
-                $cluster['centroid_longitude']
+                $cluster['anchor_latitude'],
+                $cluster['anchor_longitude']
             );
 
-            if ($closestDistance === null || $distance < $closestDistance) {
-                $closestDistance = $distance;
-                $bestClusterIndex = $clusterIndex;
+            if ($anchorDistance <= CLUSTER_DISTANCE_MILES) {
+                $assignedClusterIndex = $clusterIndex;
+                break;
             }
         }
 
-        if ($bestClusterIndex === null) {
+        if ($assignedClusterIndex === null) {
             $clusters[] = [
                 'cluster_label' => 'Cluster ' . str_pad((string) (count($clusters) + 1), 2, '0', STR_PAD_LEFT),
+                'anchor_latitude' => (float) $job['latitude'],
+                'anchor_longitude' => (float) $job['longitude'],
                 'centroid_latitude' => (float) $job['latitude'],
                 'centroid_longitude' => (float) $job['longitude'],
                 'jobs' => [$job],
@@ -186,7 +176,7 @@ function buildGeographicClusters(array $jobs)
             continue;
         }
 
-        $cluster = $clusters[$bestClusterIndex];
+        $cluster = $clusters[$assignedClusterIndex];
         $newJobCount = $cluster['job_count'] + 1;
 
         $cluster['centroid_latitude'] = (($cluster['centroid_latitude'] * $cluster['job_count']) + (float) $job['latitude']) / $newJobCount;
@@ -199,20 +189,11 @@ function buildGeographicClusters(array $jobs)
             $cluster['highest_priority_label'] = $job['priority_meta']['label'];
         }
 
-        $clusters[$bestClusterIndex] = $cluster;
+        $clusters[$assignedClusterIndex] = $cluster;
     }
 
     foreach ($clusters as &$cluster) {
-        usort($cluster['jobs'], function ($leftJob, $rightJob) {
-            $priorityComparison = $leftJob['priority_meta']['order'] <=> $rightJob['priority_meta']['order'];
-
-            if ($priorityComparison !== 0) {
-                return $priorityComparison;
-            }
-
-            return (int) $rightJob['id'] <=> (int) $leftJob['id'];
-        });
-
+        usort($cluster['jobs'], 'compareJobsByPriority');
         $cluster['max_distance_miles'] = getMaxSpreadMiles($cluster['jobs']);
     }
     unset($cluster);
