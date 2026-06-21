@@ -220,6 +220,8 @@ if (empty($_SESSION['admin_id'])) {
 require_once '../project/db.php';
 
 $clusteringRequested = false;
+$testDataMessage = null;
+$testDataError = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $deleteId = filter_input(
@@ -242,6 +244,205 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         header('Location: schedule.php');
         exit;
+    }
+
+    if (isset($_POST['insert_test_data'])) {
+        $testCustomers = [
+            [
+                'first_name' => 'Maria',    'last_name' => 'Gonzalez',
+                'email'      => 'maria.gonzalez.testgl@example.com',
+                'phone'      => '714-555-0101',
+                'address'    => '1234 Harbor Blvd',
+                'city'       => 'Anaheim',  'state' => 'CA', 'zip' => '92801',
+                'latitude'   => 33.8366,    'longitude' => -117.9143,
+                'priority'   => 'emergency',
+                'problem'    => 'Laser tube not firing — no beam output on any power setting.',
+            ],
+            [
+                'first_name' => 'James',    'last_name' => 'Chen',
+                'email'      => 'james.chen.testgl@example.com',
+                'phone'      => '951-555-0202',
+                'address'    => '4500 Magnolia Ave',
+                'city'       => 'Riverside', 'state' => 'CA', 'zip' => '92506',
+                'latitude'   => 33.9533,     'longitude' => -117.3961,
+                'priority'   => 'standard',
+                'problem'    => 'X-axis stepper motor making grinding noise and skipping steps.',
+            ],
+            [
+                'first_name' => 'Sandra',   'last_name' => 'Williams',
+                'email'      => 'sandra.williams.testgl@example.com',
+                'phone'      => '562-555-0303',
+                'address'    => '850 Pine Ave',
+                'city'       => 'Long Beach', 'state' => 'CA', 'zip' => '90813',
+                'latitude'   => 33.7844,      'longitude' => -118.1894,
+                'priority'   => 'vip',
+                'problem'    => 'Control panel touchscreen unresponsive, machine will not power up.',
+            ],
+            [
+                'first_name' => 'Robert',   'last_name' => 'Kim',
+                'email'      => 'robert.kim.testgl@example.com',
+                'phone'      => '949-555-0404',
+                'address'    => '2200 Michelson Dr',
+                'city'       => 'Irvine',   'state' => 'CA', 'zip' => '92612',
+                'latitude'   => 33.6846,    'longitude' => -117.8265,
+                'priority'   => 'standard',
+                'problem'    => 'Laser head crashing into bed; limit switch failure suspected.',
+            ],
+            [
+                'first_name' => 'Jennifer', 'last_name' => 'Davis',
+                'email'      => 'jennifer.davis.testgl@example.com',
+                'phone'      => '714-555-0505',
+                'address'    => '700 W Commonwealth Ave',
+                'city'       => 'Fullerton', 'state' => 'CA', 'zip' => '92832',
+                'latitude'   => 33.8703,     'longitude' => -117.9253,
+                'priority'   => 'emergency',
+                'problem'    => 'Inconsistent cutting depth — beam appears severely misaligned.',
+            ],
+            [
+                'first_name' => 'Michael',  'last_name' => 'Torres',
+                'email'      => 'michael.torres.testgl@example.com',
+                'phone'      => '714-555-0606',
+                'address'    => '12200 Euclid St',
+                'city'       => 'Garden Grove', 'state' => 'CA', 'zip' => '92840',
+                'latitude'   => 33.7740,         'longitude' => -117.9412,
+                'priority'   => 'vip',
+                'problem'    => 'Water chiller alarm triggering during operation; machine overheating.',
+            ],
+            [
+                'first_name' => 'Lisa',     'last_name' => 'Johnson',
+                'email'      => 'lisa.johnson.testgl@example.com',
+                'phone'      => '619-555-0707',
+                'address'    => '3900 Convoy St',
+                'city'       => 'San Diego', 'state' => 'CA', 'zip' => '92111',
+                'latitude'   => 32.8057,     'longitude' => -117.1495,
+                'priority'   => 'standard',
+                'problem'    => 'Y-axis belt slipping; prints skewing at high speeds.',
+            ],
+            [
+                'first_name' => 'David',    'last_name' => 'Martinez',
+                'email'      => 'david.martinez.testgl@example.com',
+                'phone'      => '760-555-0808',
+                'address'    => '1425 E Main St',
+                'city'       => 'Barstow',  'state' => 'CA', 'zip' => '92311',
+                'latitude'   => 34.8958,    'longitude' => -117.0173,
+                'priority'   => 'standard',
+                'problem'    => 'Exhaust fan failure; smoke backing up into the enclosure.',
+            ],
+            [
+                'first_name' => 'Amanda',   'last_name' => 'Brown',
+                'email'      => 'amanda.brown.testgl@example.com',
+                'phone'      => '213-555-0909',
+                'address'    => '1100 S Flower St',
+                'city'       => 'Los Angeles', 'state' => 'CA', 'zip' => '90015',
+                'latitude'   => 34.0411,       'longitude' => -118.2688,
+                'priority'   => 'emergency',
+                'problem'    => 'Focus lens cracked; machine producing scattered, unusable beam.',
+            ],
+            [
+                'first_name' => 'Carlos',   'last_name' => 'Ramirez',
+                'email'      => 'carlos.ramirez.testgl@example.com',
+                'phone'      => '323-555-1010',
+                'address'    => '3200 E Imperial Hwy',
+                'city'       => 'Lynwood',  'state' => 'CA', 'zip' => '90262',
+                'latitude'   => 33.9197,    'longitude' => -118.2038,
+                'priority'   => 'vip',
+                'problem'    => 'Power supply board failure — machine displaying error code E05.',
+            ],
+            [
+                'first_name' => 'Patricia', 'last_name' => 'Lee',
+                'email'      => 'patricia.lee.testgl@example.com',
+                'phone'      => '714-555-1111',
+                'address'    => '1801 E Edinger Ave',
+                'city'       => 'Santa Ana', 'state' => 'CA', 'zip' => '92705',
+                'latitude'   => 33.7538,     'longitude' => -117.8262,
+                'priority'   => 'standard',
+                'problem'    => 'Air assist pump not working; lens burning up on every cut.',
+            ],
+            [
+                'first_name' => 'Brian',    'last_name' => 'Thompson',
+                'email'      => 'brian.thompson.testgl@example.com',
+                'phone'      => '714-555-1212',
+                'address'    => '4201 Katella Ave',
+                'city'       => 'Orange',   'state' => 'CA', 'zip' => '92869',
+                'latitude'   => 33.8112,    'longitude' => -117.8481,
+                'priority'   => 'vip',
+                'problem'    => 'Rotary attachment not syncing with controller; jobs are misregistered.',
+            ],
+        ];
+
+        $inserted = 0;
+        $skipped  = 0;
+
+        try {
+            $checkEmail  = $pdo->prepare("SELECT id FROM customers WHERE email = :email LIMIT 1");
+            $insertCust  = $pdo->prepare("
+                INSERT INTO customers (first_name, last_name, email, phone, address, city, state, zip)
+                VALUES (:first_name, :last_name, :email, :phone, :address, :city, :state, :zip)
+            ");
+            $insertReq   = $pdo->prepare("
+                INSERT INTO service_requests
+                    (customer_id, priority_level, problem_summary, preferred_date_start, preferred_date_end, request_status, latitude, longitude)
+                VALUES
+                    (:customer_id, :priority_level, :problem_summary, :preferred_date_start, :preferred_date_end, 'new', :latitude, :longitude)
+            ");
+
+            $today = new DateTimeImmutable('today');
+
+            foreach ($testCustomers as $cust) {
+                $checkEmail->execute([':email' => $cust['email']]);
+                $existing = $checkEmail->fetchColumn();
+
+                if ($existing) {
+                    $skipped++;
+                    continue;
+                }
+
+                $insertCust->execute([
+                    ':first_name' => $cust['first_name'],
+                    ':last_name'  => $cust['last_name'],
+                    ':email'      => $cust['email'],
+                    ':phone'      => $cust['phone'],
+                    ':address'    => $cust['address'],
+                    ':city'       => $cust['city'],
+                    ':state'      => $cust['state'],
+                    ':zip'        => $cust['zip'],
+                ]);
+                $customerId = (int) $pdo->lastInsertId();
+
+                $window = getPriorityScheduleWindow($cust['priority']);
+                $startDate = $today->format('Y-m-d');
+
+                switch (strtolower($cust['priority'])) {
+                    case 'emergency':
+                        $endDate = $today->modify('+1 day')->format('Y-m-d');
+                        break;
+                    case 'vip':
+                        $endDate = addBusinessDays($today, 2)->format('Y-m-d');
+                        break;
+                    default:
+                        $startDate = addBusinessDays($today, 3)->format('Y-m-d');
+                        $endDate   = addBusinessDays($today, 5)->format('Y-m-d');
+                        break;
+                }
+
+                $insertReq->execute([
+                    ':customer_id'          => $customerId,
+                    ':priority_level'       => $cust['priority'],
+                    ':problem_summary'      => $cust['problem'],
+                    ':preferred_date_start' => $startDate,
+                    ':preferred_date_end'   => $endDate,
+                    ':latitude'             => $cust['latitude'],
+                    ':longitude'            => $cust['longitude'],
+                ]);
+
+                $inserted++;
+            }
+
+            $testDataMessage = "Inserted {$inserted} new customer(s) and service request(s)."
+                . ($skipped > 0 ? " Skipped {$skipped} already-existing customer(s)." : '');
+        } catch (PDOException $e) {
+            $testDataError = 'Database error: ' . htmlspecialchars($e->getMessage());
+        }
     }
 
     $clusteringRequested = isset($_POST['run_clustering']);
@@ -304,17 +505,43 @@ foreach ($clusters as $cluster) {
                 </p>
             </div>
 
-            <form method="POST">
-                <button
-                    type="submit"
-                    name="run_clustering"
-                    value="1"
-                    class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
-                >
-                    Run Geographic Clustering
-                </button>
-            </form>
+            <div class="flex flex-wrap gap-3">
+                <form method="POST">
+                    <button
+                        type="submit"
+                        name="insert_test_data"
+                        value="1"
+                        class="inline-flex items-center justify-center rounded-lg bg-amber-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-amber-400"
+                        onclick="return confirm('Insert up to 12 SoCal test customers and service requests? Existing emails will be skipped.');"
+                    >
+                        Insert Test Data
+                    </button>
+                </form>
+
+                <form method="POST">
+                    <button
+                        type="submit"
+                        name="run_clustering"
+                        value="1"
+                        class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
+                    >
+                        Run Geographic Clustering
+                    </button>
+                </form>
+            </div>
         </div>
+
+        <?php if ($testDataMessage !== null): ?>
+            <div class="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                <?= htmlspecialchars($testDataMessage) ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($testDataError !== null): ?>
+            <div class="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                <?= $testDataError ?>
+            </div>
+        <?php endif; ?>
 
         <?php if ($clusteringRequested): ?>
             <div class="mb-8 rounded-3xl border border-cyan-500/30 bg-zinc-900/80 p-6">
