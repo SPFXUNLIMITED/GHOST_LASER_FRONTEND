@@ -264,7 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             INSERT INTO customers
                 (first_name, last_name, email, phone, address, city, state, zip, hubspot_contact_id)
             VALUES
-                (:first_name, :last_name, :email, :phone, :address, :city, :state, :zip, '')
+                (:first_name, :last_name, :email, :phone, :address, :city, :state, :zip, :hubspot_contact_id)
         ");
         $insertReq = $pdo->prepare("
             INSERT INTO service_requests
@@ -281,14 +281,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $phone = "555-{$ts}-" . strtoupper($cust['slug']);
 
             $insertCust->execute([
-                ':first_name' => $cust['first_name'],
-                ':last_name'  => $cust['last_name'],
-                ':email'      => $email,
-                ':phone'      => $phone,
-                ':address'    => $cust['address'],
-                ':city'       => $cust['city'],
-                ':state'      => 'CA',
-                ':zip'        => $cust['zip'],
+                ':first_name'          => $cust['first_name'],
+                ':last_name'           => $cust['last_name'],
+                ':email'               => $email,
+                ':phone'               => $phone,
+                ':address'             => $cust['address'],
+                ':city'                => $cust['city'],
+                ':state'               => 'CA',
+                ':zip'                 => $cust['zip'],
+                ':hubspot_contact_id'  => "test-{$ts}-{$cust['slug']}",
             ]);
             $customerId = (int) $pdo->lastInsertId();
 
