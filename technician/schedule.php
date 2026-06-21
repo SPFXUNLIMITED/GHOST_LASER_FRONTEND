@@ -391,10 +391,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $today = new DateTimeImmutable('today');
 
-        foreach ($testCustomers as $cust) {
+        foreach ($testCustomers as $index => $cust) {
+            $email = preg_replace(
+                '/@ghostlaser\.test$/',
+                '.' . str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) . '@ghostlaser.test',
+                $cust['email']
+            );
+
             try {
-                $checkEmail->execute([':email' => $cust['email']]);
+                $checkEmail->execute([':email' => $email]);
                 $existing = $checkEmail->fetchColumn();
+                $checkEmail->closeCursor();
 
                 if ($existing) {
                     $skipped++;
@@ -404,7 +411,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insertCust->execute([
                     ':first_name' => $cust['first_name'],
                     ':last_name'  => $cust['last_name'],
-                    ':email'      => $cust['email'],
+                    ':email'      => $email,
                     ':phone'      => $cust['phone'],
                     ':address'    => $cust['address'],
                     ':city'       => $cust['city'],
@@ -441,6 +448,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $inserted++;
             } catch (PDOException $e) {
                 // Skip rows that violate unique constraints (e.g. duplicate phone or email)
+                $checkEmail->closeCursor();
                 $skipped++;
             }
         }
