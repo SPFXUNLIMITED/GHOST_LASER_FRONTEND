@@ -373,22 +373,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $inserted = 0;
         $skipped  = 0;
 
-        try {
-            $checkEmail  = $pdo->prepare("SELECT id FROM customers WHERE email = :email LIMIT 1");
-            $insertCust  = $pdo->prepare("
-                INSERT INTO customers (first_name, last_name, email, phone, address, city, state, zip)
-                VALUES (:first_name, :last_name, :email, :phone, :address, :city, :state, :zip)
-            ");
-            $insertReq   = $pdo->prepare("
-                INSERT INTO service_requests
-                    (customer_id, priority_level, problem_summary, preferred_date_start, preferred_date_end, request_status, latitude, longitude)
-                VALUES
-                    (:customer_id, :priority_level, :problem_summary, :preferred_date_start, :preferred_date_end, 'new', :latitude, :longitude)
-            ");
+        $checkEmail  = $pdo->prepare("SELECT id FROM customers WHERE email = :email LIMIT 1");
+        $insertCust  = $pdo->prepare("
+            INSERT INTO customers
+                (first_name, last_name, email, phone, address, city, state, zip, hubspot_contact_id)
+            VALUES
+                (:first_name, :last_name, :email, :phone, :address, :city, :state, :zip, NULL)
+        ");
+        $insertReq   = $pdo->prepare("
+            INSERT INTO service_requests
+                (customer_id, priority_level, problem_summary, preferred_date_start, preferred_date_end, request_status, latitude, longitude)
+            VALUES
+                (:customer_id, :priority_level, :problem_summary, :preferred_date_start, :preferred_date_end, 'new', :latitude, :longitude)
+        ");
 
-            $today = new DateTimeImmutable('today');
+        $today = new DateTimeImmutable('today');
 
-            foreach ($testCustomers as $cust) {
+        foreach ($testCustomers as $cust) {
+            try {
                 $checkEmail->execute([':email' => $cust['email']]);
                 $existing = $checkEmail->fetchColumn();
 
@@ -409,7 +411,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $customerId = (int) $pdo->lastInsertId();
 
-                $window = getPriorityScheduleWindow($cust['priority']);
                 $startDate = $today->format('Y-m-d');
 
                 switch (strtolower($cust['priority'])) {
@@ -436,13 +437,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 $inserted++;
+            } catch (PDOException $e) {
+                // Skip rows that violate unique constraints (e.g. duplicate phone or email)
+                $skipped++;
             }
-
-            $testDataMessage = "Inserted {$inserted} new customer(s) and service request(s)."
-                . ($skipped > 0 ? " Skipped {$skipped} already-existing customer(s)." : '');
-        } catch (PDOException $e) {
-            $testDataError = 'Database error: ' . htmlspecialchars($e->getMessage());
         }
+
+        $testDataMessage = "Inserted {$inserted} new customer(s) and service request(s)."
+            . ($skipped > 0 ? " Skipped {$skipped} already-existing customer(s)." : '');
     }
 
     $clusteringRequested = isset($_POST['run_clustering']);
