@@ -1,74 +1,20 @@
-<?php require_once 'functions.php'; ?>
-<!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghost Laser | Expert Laser Machine Repair</title>
-	<link rel="icon" type="image/png" href="<?= asset('ghost-logo2-32x32.png') ?>">
-	<link rel="shortcut icon" type="image/png" href="<?= asset('ghost-logo2-32x32.png') ?>">
-	<link rel="apple-touch-icon" href="<?= asset('ghost-logo2-32x32.png') ?>">
-    <meta name="description" content="Ghost Laser — precision laser cutting machine repair, calibration, and maintenance. Fast turnaround, trusted by professionals.">
-    <script src="https://cdn.tailwindcss.com?v=1.2"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        cyan: {
-                            400: '#22d3ee',
-                            500: '#06b6d4',
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    },
-                    backgroundImage: {
-                        'grid-pattern': "linear-gradient(rgba(6,182,212,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.05) 1px, transparent 1px)",
-                    },
-                    backgroundSize: {
-                        'grid': '60px 60px',
-                    }
-                }
-            }
-        }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap&v=1.2" rel="stylesheet">
+<?php
+$pageTitle       = 'Ghost Laser | Expert Laser Machine Repair';
+$pageDescription = 'Ghost Laser — precision laser cutting machine repair, calibration, and maintenance. Fast turnaround, trusted by professionals.';
+$logoHref        = '#';
+$extraHead       = <<<'HTML'
     <style>
         .glow-cyan { text-shadow: 0 0 30px rgba(6,182,212,0.6), 0 0 60px rgba(6,182,212,0.3); }
         .glow-box { box-shadow: 0 0 0 1px rgba(6,182,212,0.2), 0 0 40px rgba(6,182,212,0.05); }
         .glow-box:hover { box-shadow: 0 0 0 1px rgba(6,182,212,0.5), 0 0 40px rgba(6,182,212,0.15); }
         .btn-glow { box-shadow: 0 0 20px rgba(6,182,212,0.4); }
         .btn-glow:hover { box-shadow: 0 0 30px rgba(6,182,212,0.7); }
-        .hero-grid {
-            background-image: linear-gradient(rgba(6,182,212,0.04) 1px, transparent 1px),
-                              linear-gradient(90deg, rgba(6,182,212,0.04) 1px, transparent 1px);
-            background-size: 60px 60px;
-        }
         .gradient-fade-bottom {
             background: linear-gradient(to bottom, transparent 60%, rgb(9,9,11) 100%);
         }
-        .nav-blur {
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-        }
     </style>
-</head>
-<body class="bg-zinc-950 text-white font-sans antialiased">
-
-    <!-- NAV -->
-    <header class="fixed top-0 left-0 right-0 z-50 nav-blur bg-zinc-950/80 border-b border-zinc-800/60">
-        <div class="max-w-7xl mx-auto px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <a href="#" class="flex items-center gap-2.5 group">
-                    <span class="w-7 h-7 rounded bg-cyan-500 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-400 transition-colors">
-                        <svg class="w-4 h-4 text-zinc-950" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M10 1C6.13 1 3 4.13 3 8v10l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V8C17 4.13 13.87 1 10 1z"/>
-                        </svg>
-                    </span>
-                    <span class="text-white font-bold text-lg tracking-tight">Ghost<span class="text-cyan-400">Laser</span></span>
-                </a>
+HTML;
+$headerRight     = <<<'HTML'
                 <nav class="hidden md:flex items-center gap-8">
                     <a href="#services" class="text-sm text-zinc-400 hover:text-white transition-colors">Services</a>
                     <a href="#why-us" class="text-sm text-zinc-400 hover:text-white transition-colors">Why Us</a>
@@ -92,8 +38,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                     </svg>
                 </button>
-            </div>
-        </div>
+HTML;
+$headerMobileMenu = <<<'HTML'
         <!-- Mobile menu -->
         <div id="mobile-menu" class="hidden md:hidden border-t border-zinc-800/60 bg-zinc-950/95">
             <div class="px-6 py-4 flex flex-col gap-4">
@@ -112,7 +58,9 @@
                 </a>
             </div>
         </div>
-    </header>
+HTML;
+require_once __DIR__ . '/templates/header.php';
+?>
 
     <!-- HERO -->
     <section class="relative min-h-screen flex items-center hero-grid overflow-hidden pt-16">
