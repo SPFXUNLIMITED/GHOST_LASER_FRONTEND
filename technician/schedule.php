@@ -377,7 +377,7 @@ if (empty($_SESSION['admin_id'])) {
     exit;
 }
 
-require_once '../project/db.php';
+require_once __DIR__ . '/../project/db.php';
 ensureClusterSchedulingTables($pdo);
 
 $clusteringRequested = false;
