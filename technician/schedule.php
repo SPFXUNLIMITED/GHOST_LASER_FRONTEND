@@ -501,6 +501,9 @@ $jobs = $pdo->query("
     FROM service_requests sr
     JOIN customers c ON sr.customer_id = c.id
     WHERE sr.request_status IN ('new', 'queued')
+    AND NOT EXISTS (
+        SELECT 1 FROM scheduled_cluster_jobs scj WHERE scj.service_request_id = sr.id
+    )
     ORDER BY FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'), sr.id DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
