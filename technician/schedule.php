@@ -1752,5 +1752,4 @@ require_once __DIR__ . '/../templates/header.php';
         }
     });
 </script>
-</body>
-</html>
+<?php require_once __DIR__ . '/../templates/footer.php'; ?>

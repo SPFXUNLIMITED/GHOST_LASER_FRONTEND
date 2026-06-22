@@ -231,5 +231,4 @@ require_once __DIR__ . '/templates/header.php';
             </form>
         </div>
     </main>
-</body>
-</html>
+<?php require_once __DIR__ . '/templates/footer.php'; ?>
