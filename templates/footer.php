@@ -7,14 +7,14 @@
                         <path d="M10 1C6.13 1 3 4.13 3 8v10l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V8C17 4.13 13.87 1 10 1z"/>
                     </svg>
                 </span>
-                <span class="text-white font-bold text-sm">Ghost<span class="text-cyan-400">Laser</span></span>
+				<span class="text-white font-bold text-sm">Ghost<span class="text-cyan-400">Laser</span></span>
             </div>
             <div class="text-center">
                 <p class="text-xs text-zinc-500">
                     &copy; <?= date('Y') ?> Ghost Laser. All rights reserved. Expert laser machine repair.
                 </p>
                 <p class="text-xs text-zinc-600 mt-1">
-                    123 Laser Way, Suite 100 &middot; Houston, TX 77001 &middot; (555) 867-5309
+                    19801 Esperanza Rd &middot; Yorba Linda, CA 92886 &middot; (949) 565-2660
                 </p>
             </div>
             <div class="flex items-center gap-5">
