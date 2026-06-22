@@ -679,7 +679,7 @@ foreach ($clusters as $cluster) {
 
                                 <div class="mt-4 space-y-3">
                                     <?php foreach ($cluster['jobs'] as $clusteredJob): ?>
-                                        <div class="rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3">
+                                        <div class="rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 cluster-job-card" data-job-id="<?= (int) $clusteredJob['id'] ?>">
                                             <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                                                 <div>
                                                     <div class="font-medium text-white">
@@ -691,9 +691,16 @@ foreach ($clusters as $cluster) {
                                                         <?= htmlspecialchars($clusteredJob['problem_summary'] ?? 'No summary') ?>
                                                     </div>
                                                 </div>
-                                                <div class="text-sm text-right text-zinc-300">
-                                                    <div><?= htmlspecialchars($clusteredJob['priority_meta']['label']) ?></div>
-                                                    <div class="text-zinc-500"><?= htmlspecialchars($clusteredJob['priority_meta']['window_summary']) ?></div>
+                                                <div class="flex items-start gap-3">
+                                                    <div class="text-sm text-right text-zinc-300">
+                                                        <div><?= htmlspecialchars($clusteredJob['priority_meta']['label']) ?></div>
+                                                        <div class="text-zinc-500"><?= htmlspecialchars($clusteredJob['priority_meta']['window_summary']) ?></div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        class="remove-job-btn mt-0.5 flex-shrink-0 rounded-md px-1.5 py-0.5 text-sm text-zinc-500 hover:bg-zinc-700 hover:text-white transition"
+                                                        title="Remove from cluster"
+                                                    >&times;</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -770,6 +777,27 @@ foreach ($clusters as $cluster) {
         minDate: 'today',
         dateFormat: 'Y-m-d',
         disableMobile: false
+    });
+
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.remove-job-btn');
+        if (!btn) return;
+
+        const card = btn.closest('.cluster-job-card');
+        const jobId = card ? card.dataset.jobId : null;
+        if (!jobId) return;
+
+        const form = card.closest('section').querySelector('form');
+        const idsInput = form ? form.querySelector('[name="cluster_job_ids"]') : null;
+        if (idsInput) {
+            idsInput.value = idsInput.value
+                .split(',')
+                .map(s => s.trim())
+                .filter(s => s !== jobId)
+                .join(',');
+        }
+
+        card.remove();
     });
 </script>
 </html>
