@@ -429,6 +429,133 @@ function buildGeographicClusters(array $jobs, array $settings)
     return $processedClusters;
 }
 
+/**
+ * Format a minute-offset from midnight (e.g. 540) into a human-readable
+ * 12-hour string such as "9:00 AM" or "10:30 AM".
+ */
+function formatMinutesAsTime(int $minutes): string
+{
+    $hour        = intdiv($minutes, 60) % 24;
+    $minute      = $minutes % 60;
+    $period      = $hour >= 12 ? 'PM' : 'AM';
+    $displayHour = $hour % 12;
+
+    if ($displayHour === 0) {
+        $displayHour = 12;
+    }
+
+    return $minute === 0
+        ? "{$displayHour}:00 {$period}"
+        : sprintf('%d:%02d %s', $displayHour, $minute, $period);
+}
+
+/**
+ * Convert two stored TIME strings ("HH:MM") into a display label such as
+ * "9:00 AM – 11:00 AM".  Returns null when either value is absent.
+ */
+function formatStoredTimeWindow(?string $start, ?string $end): ?string
+{
+    if ($start === null || $end === null) {
+        return null;
+    }
+
+    $toMinutes = static function (string $time): int {
+        [$h, $m] = array_map('intval', explode(':', $time));
+        return $h * 60 + $m;
+    };
+
+    return formatMinutesAsTime($toMinutes($start)) . ' – ' . formatMinutesAsTime($toMinutes($end));
+}
+
+/**
+ * Calculate a realistic arrival time window for every job in a cluster.
+ *
+ * The route starts at the shop location defined in scheduling settings and
+ * walks through each job in the supplied order.  Every parameter — shop
+ * coordinates, business start time, average job duration, buffer between
+ * jobs, and customer-facing window size — is read exclusively from
+ * $settings (the return value of getSchedulingSettings()).  Nothing is
+ * hard-coded.
+ *
+ * Driving speed is estimated at 30 mph, a conservative figure for Southern
+ * California urban/suburban routes that keeps windows realistic.
+ *
+ * @param array[] $jobs     Ordered list of jobs.  Each must carry 'id',
+ *                          'latitude', and 'longitude'.
+ * @param array   $settings Full scheduling-settings array from
+ *                          getSchedulingSettings().
+ *
+ * @return array<int, array{
+ *     time_window_start: string,
+ *     time_window_end: string,
+ *     time_window_label: string,
+ *     drive_minutes_from_previous: int,
+ *     estimated_arrival: string
+ * }>  Keyed by integer job/service-request id.
+ */
+function calculateClusterTimeWindows(array $jobs, array $settings): array
+{
+    // ── Origin: shop location from settings (never hard-coded) ───────────────
+    $shopLat = (float) $settings['shop_latitude'];
+    $shopLng = (float) $settings['shop_longitude'];
+
+    // ── Day start: business_start_time from settings ──────────────────────────
+    [$startHour, $startMin] = array_map('intval', explode(':', (string) $settings['business_start_time']));
+    $currentMinutes = $startHour * 60 + $startMin;
+
+    // ── Timing parameters from settings ──────────────────────────────────────
+    $avgJobDurationMinutes = max(1, (int) $settings['average_job_duration_minutes']);
+    $bufferMinutes         = max(0, (int) $settings['default_buffer_between_jobs_minutes']);
+    $windowSizeMinutes     = max(60, (int) $settings['default_time_window_size_hours'] * 60);
+
+    // Conservative urban/suburban driving speed for SoCal routes.
+    $averageDrivingSpeedMph = 30.0;
+
+    $prevLat     = $shopLat;
+    $prevLng     = $shopLng;
+    $timeWindows = [];
+
+    foreach ($jobs as $job) {
+        $jobId    = (int) $job['id'];
+        $hasCoords = hasValidCoordinates($job['latitude'] ?? null, $job['longitude'] ?? null);
+
+        if ($hasCoords) {
+            $distanceMiles = haversineDistanceMiles(
+                $prevLat,
+                $prevLng,
+                (float) $job['latitude'],
+                (float) $job['longitude']
+            );
+            $driveMinutes = (int) round(($distanceMiles / $averageDrivingSpeedMph) * 60);
+        } else {
+            // No coordinates — fall back to a sensible default drive segment.
+            $driveMinutes = 15;
+        }
+
+        $arrivalMinutes     = $currentMinutes + $driveMinutes;
+        $windowStartMinutes = $arrivalMinutes;
+        $windowEndMinutes   = $windowStartMinutes + $windowSizeMinutes;
+
+        $timeWindows[$jobId] = [
+            'time_window_start'           => sprintf('%02d:%02d', intdiv($windowStartMinutes, 60) % 24, $windowStartMinutes % 60),
+            'time_window_end'             => sprintf('%02d:%02d', intdiv($windowEndMinutes, 60) % 24, $windowEndMinutes % 60),
+            'time_window_label'           => formatMinutesAsTime($windowStartMinutes) . ' – ' . formatMinutesAsTime($windowEndMinutes),
+            'drive_minutes_from_previous' => $driveMinutes,
+            'estimated_arrival'           => sprintf('%02d:%02d', intdiv($arrivalMinutes, 60) % 24, $arrivalMinutes % 60),
+        ];
+
+        // Advance the clock: complete this job, observe the buffer, then drive.
+        $currentMinutes = $arrivalMinutes + $avgJobDurationMinutes + $bufferMinutes;
+
+        if ($hasCoords) {
+            $prevLat = (float) $job['latitude'];
+            $prevLng = (float) $job['longitude'];
+        }
+    }
+
+    return $timeWindows;
+}
+
 function ensureClusterSchedulingTables(PDO $pdo): void
 {
     $pdo->exec("
@@ -448,11 +575,31 @@ function ensureClusterSchedulingTables(PDO $pdo): void
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             scheduled_cluster_id INT UNSIGNED NOT NULL,
             service_request_id INT UNSIGNED NOT NULL,
+            time_window_start TIME NULL,
+            time_window_end TIME NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY uniq_scheduled_cluster_job (scheduled_cluster_id, service_request_id),
             KEY idx_scheduled_cluster_jobs_service_request (service_request_id)
         )
     ");
+
+    // Idempotent column migration for existing installations that were
+    // created before time_window_start/end were added to the schema.
+    $colExists = (int) $pdo->query("
+        SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'scheduled_cluster_jobs'
+          AND COLUMN_NAME = 'time_window_start'
+    ")->fetchColumn();
+
+    if ($colExists === 0) {
+        $pdo->exec("
+            ALTER TABLE scheduled_cluster_jobs
+                ADD COLUMN time_window_start TIME NULL AFTER service_request_id,
+                ADD COLUMN time_window_end   TIME NULL AFTER time_window_start
+        ");
+    }
 }
 
 session_start();
@@ -766,13 +913,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $placeholders = implode(',', array_fill(0, count($clusterJobIds), '?'));
                 $validJobsStmt = $pdo->prepare("
-                    SELECT id
+                    SELECT id, latitude, longitude
                     FROM service_requests
                     WHERE id IN ({$placeholders})
                       AND request_status IN ('new', 'queued')
                 ");
                 $validJobsStmt->execute($clusterJobIds);
-                $validJobIds = array_map('intval', $validJobsStmt->fetchAll(PDO::FETCH_COLUMN));
+                $validJobs = $validJobsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                // Preserve the order in which the admin submitted the jobs.
+                $submittedOrder = array_flip($clusterJobIds);
+                usort($validJobs, static function ($a, $b) use ($submittedOrder) {
+                    return ($submittedOrder[(int) $a['id']] ?? PHP_INT_MAX)
+                        <=> ($submittedOrder[(int) $b['id']] ?? PHP_INT_MAX);
+                });
+
+                $validJobIds = array_map(static fn($job) => (int) $job['id'], $validJobs);
 
                 if ($validJobIds === []) {
                     $clusterAssignError = 'No assignable jobs were found for this cluster.';
@@ -791,10 +947,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ");
                     $insertClusterJobStmt = $pdo->prepare("
                         INSERT INTO scheduled_cluster_jobs
-                            (scheduled_cluster_id, service_request_id)
+                            (scheduled_cluster_id, service_request_id, time_window_start, time_window_end)
                         VALUES
-                            (:scheduled_cluster_id, :service_request_id)
+                            (:scheduled_cluster_id, :service_request_id, :time_window_start, :time_window_end)
                     ");
+
+                    // Calculate time windows from shop location + business start
+                    // time — both read from scheduling settings, nothing hard-coded.
+                    $clusterTimeWindows = calculateClusterTimeWindows($validJobs, $schedulingSettings);
 
                     $pdo->beginTransaction();
                     $insertClusterStmt->execute([
@@ -806,10 +966,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
 
                     $scheduledClusterId = (int) $pdo->lastInsertId();
-                    foreach ($validJobIds as $serviceRequestId) {
+                    foreach ($validJobs as $validJob) {
+                        $validJobId = (int) $validJob['id'];
+                        $tw         = $clusterTimeWindows[$validJobId] ?? null;
                         $insertClusterJobStmt->execute([
                             ':scheduled_cluster_id' => $scheduledClusterId,
-                            ':service_request_id' => $serviceRequestId,
+                            ':service_request_id'   => $validJobId,
+                            ':time_window_start'    => $tw['time_window_start'] ?? null,
+                            ':time_window_end'      => $tw['time_window_end'] ?? null,
                         ]);
                     }
 
@@ -884,6 +1048,8 @@ $scheduledJobsStmt = $pdo->prepare("
         sc.centroid_latitude,
         sc.centroid_longitude,
         scj.id AS scheduled_cluster_job_id,
+        scj.time_window_start,
+        scj.time_window_end,
         sr.id AS service_request_id,
         sr.priority_level,
         sr.problem_summary,
@@ -926,6 +1092,10 @@ foreach ($scheduledJobs as $scheduledJob) {
     $scheduledJob['customer_name'] = $customerName !== '' ? $customerName : 'Unknown Customer';
     $scheduledJob['priority_meta'] = getPriorityScheduleWindow($scheduledJob['priority_level'] ?? 'standard', $schedulingSettings);
     $scheduledJob['service_address'] = formatCustomerAddress($scheduledJob);
+    $scheduledJob['time_window_label'] = formatStoredTimeWindow(
+        $scheduledJob['time_window_start'] ?? null,
+        $scheduledJob['time_window_end'] ?? null
+    );
     if (
         hasValidCoordinates($scheduledJob['job_latitude'] ?? null, $scheduledJob['job_longitude'] ?? null) &&
         hasValidCoordinates($scheduledJob['centroid_latitude'] ?? null, $scheduledJob['centroid_longitude'] ?? null)
@@ -1224,6 +1394,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                             'phone' => $scheduledJob['phone'] ?? 'N/A',
                                                             'priority' => $scheduledJob['priority_meta']['label'],
                                                             'window_summary' => $scheduledJob['priority_meta']['window_summary'],
+                                                            'time_window_label' => $scheduledJob['time_window_label'] ?? 'Not assigned',
                                                             'problem_summary' => $scheduledJob['problem_summary'] ?? 'No summary provided',
                                                             'scheduled_date' => $scheduledJob['scheduled_date'],
                                                             'cluster_label' => $scheduledJob['cluster_label'],
@@ -1234,7 +1405,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                             class="scheduled-job-trigger block w-full truncate text-left text-[11px] text-zinc-100 transition hover:text-cyan-100"
                                                             data-job-details="<?= htmlspecialchars(json_encode($modalPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
                                                         >
-                                                            <?= htmlspecialchars($scheduledJob['customer_name']) ?><?php if ($scheduledJob['distance_from_center_miles'] !== null): ?> <span class="text-zinc-400">+<?= number_format((float) $scheduledJob['distance_from_center_miles'], 1) ?>mi</span><?php endif; ?>
+                                                            <?= htmlspecialchars($scheduledJob['customer_name']) ?><?php if ($scheduledJob['time_window_label'] !== null): ?> <span class="text-cyan-400/80"><?= htmlspecialchars($scheduledJob['time_window_label']) ?></span><?php elseif ($scheduledJob['distance_from_center_miles'] !== null): ?> <span class="text-zinc-400">+<?= number_format((float) $scheduledJob['distance_from_center_miles'], 1) ?>mi</span><?php endif; ?>
                                                         </button>
                                                     <?php endforeach; ?>
                                                 </div>
@@ -1342,7 +1513,11 @@ require_once __DIR__ . '/../templates/header.php';
                                 </form>
 
                                 <div class="mt-4 space-y-3">
+                                    <?php
+                                    $previewTimeWindows = calculateClusterTimeWindows($cluster['jobs'], $schedulingSettings);
+                                    ?>
                                     <?php foreach ($cluster['jobs'] as $clusteredJob): ?>
+                                        <?php $previewTw = $previewTimeWindows[(int) $clusteredJob['id']] ?? null; ?>
                                         <div class="rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 cluster-job-card" data-job-id="<?= (int) $clusteredJob['id'] ?>">
                                             <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                                                 <div>
@@ -1358,6 +1533,10 @@ require_once __DIR__ . '/../templates/header.php';
                                                 <div class="flex items-start gap-3">
                                                     <div class="text-sm text-right text-zinc-300">
                                                         <div><?= htmlspecialchars($clusteredJob['priority_meta']['label']) ?></div>
+                                                        <?php if ($previewTw !== null): ?>
+                                                            <div class="mt-0.5 font-medium text-cyan-300"><?= htmlspecialchars($previewTw['time_window_label']) ?></div>
+                                                            <div class="text-xs text-zinc-500"><?= (int) $previewTw['drive_minutes_from_previous'] ?> min drive</div>
+                                                        <?php endif; ?>
                                                         <div class="text-zinc-500"><?= htmlspecialchars($clusteredJob['priority_meta']['window_summary']) ?></div>
                                                     </div>
                                                     <button
@@ -1465,6 +1644,7 @@ require_once __DIR__ . '/../templates/header.php';
                     <div><span class="text-zinc-500">Cluster:</span> <span id="modal-cluster-label">N/A</span></div>
                     <div><span class="text-zinc-500">Scheduled date:</span> <span id="modal-scheduled-date">N/A</span></div>
                     <div><span class="text-zinc-500">Priority:</span> <span id="modal-priority">N/A</span></div>
+                    <div><span class="text-zinc-500">Time window:</span> <span id="modal-time-window-label" class="font-medium text-cyan-300">N/A</span></div>
                     <div><span class="text-zinc-500">Target window:</span> <span id="modal-window-summary">N/A</span></div>
                 </div>
             </div>
@@ -1532,6 +1712,7 @@ require_once __DIR__ . '/../templates/header.php';
         cluster_label: document.getElementById('modal-cluster-label'),
         scheduled_date: document.getElementById('modal-scheduled-date'),
         priority: document.getElementById('modal-priority'),
+        time_window_label: document.getElementById('modal-time-window-label'),
         window_summary: document.getElementById('modal-window-summary'),
         problem_summary: document.getElementById('modal-problem-summary')
     };
