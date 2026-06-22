@@ -3,6 +3,7 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 const CLUSTER_DISTANCE_MILES = 20;
+const MAX_JOBS_PER_CLUSTER = 5;
 
 /**
  * Determine whether the provided coordinates can be used for geographic clustering.
@@ -154,7 +155,10 @@ function buildGeographicClusters(array $jobs)
                 $cluster['anchor_longitude']
             );
 
-            if ($anchorDistance <= CLUSTER_DISTANCE_MILES) {
+            $withinRange = $anchorDistance <= CLUSTER_DISTANCE_MILES;
+            $hasCapacity = $cluster['job_count'] < MAX_JOBS_PER_CLUSTER;
+
+            if ($withinRange && $hasCapacity) {
                 $assignedClusterIndex = $clusterIndex;
                 break;
             }
