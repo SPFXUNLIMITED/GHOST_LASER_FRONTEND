@@ -530,6 +530,9 @@ foreach ($clusters as $cluster) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scheduling Dashboard | Ghost Laser</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 </head>
 <body class="bg-zinc-950 text-white p-8">
     <div class="max-w-7xl mx-auto">
@@ -657,11 +660,12 @@ foreach ($clusters as $cluster) {
                                     <label class="flex-1 text-sm text-zinc-300">
                                        Schedule for date:
                                         <input
-                                            type="date"
+                                           type="text"
                                             name="cluster_date"
-                                            min="<?php echo date('Y-m-d'); ?>"
-                                            required
-                                            class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
+                                           required
+                                           placeholder="Pick a date…"
+                                           autocomplete="off"
+                                           class="cluster-date-picker mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
                                         >
                                     </label>
 
@@ -761,4 +765,11 @@ foreach ($clusters as $cluster) {
         </div>
     </div>
 </body>
+<script>
+    flatpickr('.cluster-date-picker', {
+        minDate: 'today',
+        dateFormat: 'Y-m-d',
+        disableMobile: false
+    });
+</script>
 </html>
