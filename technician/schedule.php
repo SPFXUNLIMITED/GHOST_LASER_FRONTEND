@@ -315,15 +315,38 @@ function buildGeographicClusters(array $jobs)
         $centroidLatitude  = $latSum / $jobCount;
         $centroidLongitude = $lngSum / $jobCount;
 
+        error_log(sprintf(
+            '[CLUSTER DEBUG] %s centroid calculated: lat=%.6f, lng=%.6f (%d jobs)',
+            $cluster['cluster_label'],
+            $centroidLatitude,
+            $centroidLongitude,
+            $jobCount
+        ));
+
         // Stamp each job with its distance from the centroid.
         $jobsWithDistance = [];
         foreach ($clusterJobs as $job) {
+            error_log(sprintf(
+                '[CLUSTER DEBUG] %s — calculating distance for job id=%s (lat=%.6f, lng=%.6f) to centroid (lat=%.6f, lng=%.6f)',
+                $cluster['cluster_label'],
+                $job['id'] ?? 'unknown',
+                (float) $job['latitude'],
+                (float) $job['longitude'],
+                $centroidLatitude,
+                $centroidLongitude
+            ));
             $job['distance_from_center_miles'] = haversineDistanceMiles(
                 $job['latitude'],
                 $job['longitude'],
                 $centroidLatitude,
                 $centroidLongitude
             );
+            error_log(sprintf(
+                '[CLUSTER DEBUG] %s — job id=%s distance_from_center=%.4f miles',
+                $cluster['cluster_label'],
+                $job['id'] ?? 'unknown',
+                $job['distance_from_center_miles']
+            ));
             $jobsWithDistance[] = $job;
         }
 
