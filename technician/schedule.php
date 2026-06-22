@@ -311,12 +311,19 @@ function buildGeographicClusters(array $jobs)
 
         $processedJobs = [];
         foreach ($cluster['jobs'] as $clusterJob) {
-            $clusterJob['distance_from_center_miles'] = haversineDistanceMiles(
+            $calculatedDistance = haversineDistanceMiles(
                 $clusterJob['latitude'],
                 $clusterJob['longitude'],
                 $cluster['centroid_latitude'],
                 $cluster['centroid_longitude']
             );
+            $clusterJob['distance_from_center_miles'] = $calculatedDistance;
+            error_log(sprintf(
+                '[cluster-debug] %s job_id=%d distance_from_center_miles=%.6f',
+                (string) ($cluster['cluster_label'] ?? 'Unknown Cluster'),
+                (int) ($clusterJob['id'] ?? 0),
+                (float) $calculatedDistance
+            ));
             $processedJobs[] = $clusterJob;
         }
         $cluster['jobs'] = $processedJobs;
