@@ -655,11 +655,11 @@ foreach ($clusters as $cluster) {
                                     >
 
                                     <label class="flex-1 text-sm text-zinc-300">
-                                        Assign date
+                                        Schedule for
                                         <input
                                             type="date"
                                             name="cluster_date"
-                                            min="<?= htmlspecialchars((new DateTimeImmutable('today'))->format('Y-m-d')) ?>"
+                                            min="<?php echo date('Y-m-d'); ?>"
                                             required
                                             class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
                                         >
