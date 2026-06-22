@@ -358,8 +358,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         FILTER_VALIDATE_INT,
         ['options' => ['min_range' => 1]]
     );
+    $unassignScheduledClusterId = filter_input(
+        INPUT_POST,
+        'unassign_scheduled_cluster_id',
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1]]
+    );
 
-    if ($unassignScheduledJobId) {
+    if ($unassignScheduledClusterId) {
+        try {
+            $scheduledClusterLookupStmt = $pdo->prepare("
+                SELECT
+                    sc.id,
+                    sc.scheduled_date,
+                    sc.centroid_latitude,
+                    sc.centroid_longitude,
+                    COUNT(scj.id) AS job_count
+                FROM scheduled_clusters sc
+                LEFT JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
+                WHERE sc.id = :id
+                GROUP BY
+                    sc.id,
+                    sc.scheduled_date,
+                    sc.centroid_latitude,
+                    sc.centroid_longitude
+                LIMIT 1
+            ");
+            $scheduledClusterLookupStmt->execute([':id' => $unassignScheduledClusterId]);
+            $scheduledCluster = $scheduledClusterLookupStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($scheduledCluster === false) {
+                $clusterAssignError = 'That scheduled cluster could not be found.';
+            } else {
+                $deleteClusterJobsStmt = $pdo->prepare("
+                    DELETE FROM scheduled_cluster_jobs
+                    WHERE scheduled_cluster_id = :scheduled_cluster_id
+                ");
+                $deleteClusterStmt = $pdo->prepare("
+                    DELETE FROM scheduled_clusters
+                    WHERE id = :id
+                ");
+
+                $pdo->beginTransaction();
+                $deleteClusterJobsStmt->execute([':scheduled_cluster_id' => $unassignScheduledClusterId]);
+                $deleteClusterStmt->execute([':id' => $unassignScheduledClusterId]);
+                $pdo->commit();
+
+                $centerCity = 'Unknown';
+                if (hasValidCoordinates($scheduledCluster['centroid_latitude'] ?? null, $scheduledCluster['centroid_longitude'] ?? null)) {
+                    $centerCity = getClosestCityName(
+                        (float) $scheduledCluster['centroid_latitude'],
+                        (float) $scheduledCluster['centroid_longitude']
+                    );
+                }
+
+                $clusterAssignMessage = sprintf(
+                    '%s cluster on %s returned to the clustering pool (%d job%s).',
+                    $centerCity,
+                    (new DateTimeImmutable((string) $scheduledCluster['scheduled_date']))->format('M j, Y'),
+                    (int) $scheduledCluster['job_count'],
+                    (int) $scheduledCluster['job_count'] === 1 ? '' : 's'
+                );
+            }
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            $clusterAssignError = 'Unable to unassign that cluster right now.';
+        }
+    }
+
+    if ($unassignScheduledJobId && !$unassignScheduledClusterId) {
         try {
             $scheduledJobLookupStmt = $pdo->prepare("
                 SELECT
@@ -415,7 +485,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (isset($_POST['insert_test_data']) && !$unassignScheduledJobId) {
+    if (isset($_POST['insert_test_data']) && !$unassignScheduledJobId && !$unassignScheduledClusterId) {
         $ts = time(); // unique timestamp per button press
 
         $testCustomers = [
@@ -491,7 +561,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $testDataMessage = "Inserted {$inserted} new customer(s) and service request(s).";
-    } elseif (isset($_POST['assign_cluster']) && !$unassignScheduledJobId) {
+    } elseif (isset($_POST['assign_cluster']) && !$unassignScheduledJobId && !$unassignScheduledClusterId) {
         $clusteringRequested = true;
         $clusterLabel = trim((string) ($_POST['cluster_label'] ?? ''));
         $clusterDate = trim((string) ($_POST['cluster_date'] ?? ''));
@@ -571,11 +641,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $clusterAssignError = 'Unable to assign this cluster right now.';
             }
         }
-    } elseif (!$unassignScheduledJobId) {
+    } elseif (!$unassignScheduledJobId && !$unassignScheduledClusterId) {
         $clusteringRequested = isset($_POST['run_clustering']);
     }
 
-    if (!$clusteringRequested && !$unassignScheduledJobId) {
+    if (!$clusteringRequested && !$unassignScheduledJobId && !$unassignScheduledClusterId) {
         $clusteringRequested = isset($_POST['run_clustering']);
     }
 }
@@ -624,6 +694,8 @@ $scheduledJobsStmt = $pdo->prepare("
         sc.id AS scheduled_cluster_id,
         sc.cluster_label,
         sc.scheduled_date,
+        sc.centroid_latitude,
+        sc.centroid_longitude,
         scj.id AS scheduled_cluster_job_id,
         sr.id AS service_request_id,
         sr.priority_level,
@@ -656,14 +728,40 @@ $scheduledJobsStmt->execute([
 ]);
 $scheduledJobs = $scheduledJobsStmt->fetchAll(PDO::FETCH_ASSOC);
 $scheduledJobsByDate = [];
+$scheduledClustersByDate = [];
 
 foreach ($scheduledJobs as $scheduledJob) {
     $dateKey = (string) $scheduledJob['scheduled_date'];
+    $scheduledClusterId = (int) $scheduledJob['scheduled_cluster_id'];
     $customerName = trim((string) $scheduledJob['first_name'] . ' ' . (string) $scheduledJob['last_name']);
     $scheduledJob['customer_name'] = $customerName !== '' ? $customerName : 'Unknown Customer';
     $scheduledJob['priority_meta'] = getPriorityScheduleWindow($scheduledJob['priority_level'] ?? 'standard');
     $scheduledJob['service_address'] = formatCustomerAddress($scheduledJob);
     $scheduledJobsByDate[$dateKey][] = $scheduledJob;
+
+    if (!isset($scheduledClustersByDate[$dateKey][$scheduledClusterId])) {
+        $centerCity = 'Unknown';
+        if (hasValidCoordinates($scheduledJob['centroid_latitude'] ?? null, $scheduledJob['centroid_longitude'] ?? null)) {
+            $centerCity = getClosestCityName(
+                (float) $scheduledJob['centroid_latitude'],
+                (float) $scheduledJob['centroid_longitude']
+            );
+        }
+
+        $scheduledClustersByDate[$dateKey][$scheduledClusterId] = [
+            'scheduled_cluster_id' => $scheduledClusterId,
+            'cluster_label' => $scheduledJob['cluster_label'],
+            'scheduled_date' => $scheduledJob['scheduled_date'],
+            'center_city' => $centerCity,
+            'jobs' => [],
+        ];
+    }
+
+    $scheduledClustersByDate[$dateKey][$scheduledClusterId]['jobs'][] = $scheduledJob;
+}
+
+foreach ($scheduledClustersByDate as $dateKey => $clustersOnDate) {
+    $scheduledClustersByDate[$dateKey] = array_values($clustersOnDate);
 }
 
 $calendarStart = $currentMonth->modify('-' . $currentMonth->format('w') . ' days');
@@ -678,7 +776,7 @@ while ($calendarCursor <= $calendarEnd) {
         'date_key' => $calendarDateKey,
         'is_current_month' => $calendarCursor->format('Y-m') === $currentMonth->format('Y-m'),
         'is_today' => $calendarDateKey === (new DateTimeImmutable('today'))->format('Y-m-d'),
-        'jobs' => $scheduledJobsByDate[$calendarDateKey] ?? [],
+        'clusters' => $scheduledClustersByDate[$calendarDateKey] ?? [],
     ];
     $calendarCursor = $calendarCursor->modify('+1 day');
 }
@@ -762,7 +860,7 @@ while ($calendarCursor <= $calendarEnd) {
                 <div>
                     <h2 class="text-2xl font-semibold text-white"><?= htmlspecialchars($currentMonth->format('F Y')) ?></h2>
                     <p class="mt-2 text-sm text-zinc-400">
-                        Monthly technician calendar for assigned jobs. Click a customer to view full details or unassign them back into the clustering pool.
+                        Monthly technician calendar for assigned jobs. Click a customer to view full details, or use the X on a cluster card to return that full cluster to the pooling queue.
                     </p>
                 </div>
 
@@ -788,54 +886,65 @@ while ($calendarCursor <= $calendarEnd) {
 
                     <div class="mt-2 grid grid-cols-7 gap-1">
                         <?php foreach ($calendarDays as $calendarDay): ?>
-                            <div class="rounded-lg border px-2 py-1 <?= $calendarDay['is_current_month'] ? 'border-zinc-700 bg-zinc-950/80' : 'border-zinc-800 bg-zinc-950/40 text-zinc-600' ?> <?= $calendarDay['jobs'] !== [] ? 'pb-2' : '' ?>">
+                            <?php
+                            $dayHasAssignments = $calendarDay['clusters'] !== [];
+                            $totalDayAssignments = array_sum(array_map(static fn($cluster) => count($cluster['jobs']), $calendarDay['clusters']));
+                            ?>
+                            <div class="rounded-lg border px-2 py-1 <?= $calendarDay['is_current_month'] ? 'border-zinc-700 bg-zinc-950/80' : 'border-zinc-800 bg-zinc-950/40 text-zinc-600' ?> <?= $dayHasAssignments ? 'pb-2' : '' ?>">
                                 <div class="flex items-center justify-between">
                                     <span class="text-xs font-semibold <?= $calendarDay['is_today'] ? 'rounded-full bg-cyan-500 px-1.5 py-0.5 text-zinc-950' : ($calendarDay['is_current_month'] ? 'text-white' : 'text-zinc-600') ?>">
                                         <?= htmlspecialchars($calendarDay['date']->format('j')) ?>
                                     </span>
-                                    <?php if ($calendarDay['jobs'] !== []): ?>
+                                    <?php if ($dayHasAssignments): ?>
                                         <span class="rounded-full bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-medium text-cyan-300">
-                                            <?= count($calendarDay['jobs']) ?>
+                                            <?= $totalDayAssignments ?>
                                         </span>
                                     <?php endif; ?>
                                 </div>
 
-                                <?php if ($calendarDay['jobs'] !== []): ?>
-                                    <div class="mt-1 space-y-1">
-                                        <?php foreach ($calendarDay['jobs'] as $scheduledJob): ?>
-                                            <?php
-                                            $modalPayload = [
-                                                'customer_name' => $scheduledJob['customer_name'],
-                                                'service_address' => $scheduledJob['service_address'],
-                                                'city' => $scheduledJob['city'] ?? 'N/A',
-                                                'email' => $scheduledJob['email'] ?? 'N/A',
-                                                'phone' => $scheduledJob['phone'] ?? 'N/A',
-                                                'priority' => $scheduledJob['priority_meta']['label'],
-                                                'window_summary' => $scheduledJob['priority_meta']['window_summary'],
-                                                'problem_summary' => $scheduledJob['problem_summary'] ?? 'No summary provided',
-                                                'scheduled_date' => $scheduledJob['scheduled_date'],
-                                                'cluster_label' => $scheduledJob['cluster_label'],
-                                            ];
-                                            ?>
-                                            <div class="flex items-center gap-1 rounded border border-zinc-800 bg-zinc-900/80 px-1.5 py-0.5">
-                                                <button
-                                                    type="button"
-                                                    class="scheduled-job-trigger min-w-0 flex-1 text-left"
-                                                    data-job-details="<?= htmlspecialchars(json_encode($modalPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
-                                                >
-                                                    <div class="truncate text-[11px] font-medium leading-tight text-white hover:text-cyan-300 transition"><?= htmlspecialchars($scheduledJob['customer_name']) ?></div>
-                                                    <div class="truncate text-[10px] leading-tight text-zinc-500"><?= htmlspecialchars($scheduledJob['priority_meta']['label']) ?></div>
-                                                </button>
-
-                                                <form method="POST" onsubmit="return confirm('Return this job to the clustering pool?');">
-                                                    <input type="hidden" name="unassign_scheduled_job_id" value="<?= (int) $scheduledJob['scheduled_cluster_job_id'] ?>">
-                                                    <button
-                                                        type="submit"
-                                                        class="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-xs text-zinc-500 transition hover:bg-zinc-700 hover:text-red-300"
-                                                        title="Unassign job"
-                                                        aria-label="Unassign <?= htmlspecialchars($scheduledJob['customer_name']) ?>"
-                                                    >&times;</button>
-                                                </form>
+                                <?php if ($dayHasAssignments): ?>
+                                    <div class="mt-2 space-y-2">
+                                        <?php foreach ($calendarDay['clusters'] as $scheduledCluster): ?>
+                                            <div class="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2 py-1.5 shadow-[inset_0_0_0_1px_rgba(6,182,212,0.12)]">
+                                                <div class="flex items-start justify-between gap-2">
+                                                    <div class="min-w-0">
+                                                        <div class="truncate text-[10px] font-semibold uppercase tracking-wide text-cyan-200"><?= htmlspecialchars($scheduledCluster['center_city']) ?></div>
+                                                    </div>
+                                                    <form method="POST" onsubmit="return confirm('Unassign this entire cluster? This returns all jobs in the cluster to the clustering pool.');">
+                                                        <input type="hidden" name="unassign_scheduled_cluster_id" value="<?= (int) $scheduledCluster['scheduled_cluster_id'] ?>">
+                                                        <button
+                                                            type="submit"
+                                                            class="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-xs text-cyan-100/80 transition hover:bg-cyan-900/50 hover:text-red-200"
+                                                            title="Unassign cluster"
+                                                            aria-label="Unassign cluster centered in <?= htmlspecialchars($scheduledCluster['center_city']) ?>"
+                                                        >&times;</button>
+                                                    </form>
+                                                </div>
+                                                <div class="mt-1 space-y-0.5">
+                                                    <?php foreach ($scheduledCluster['jobs'] as $scheduledJob): ?>
+                                                        <?php
+                                                        $modalPayload = [
+                                                            'customer_name' => $scheduledJob['customer_name'],
+                                                            'service_address' => $scheduledJob['service_address'],
+                                                            'city' => $scheduledJob['city'] ?? 'N/A',
+                                                            'email' => $scheduledJob['email'] ?? 'N/A',
+                                                            'phone' => $scheduledJob['phone'] ?? 'N/A',
+                                                            'priority' => $scheduledJob['priority_meta']['label'],
+                                                            'window_summary' => $scheduledJob['priority_meta']['window_summary'],
+                                                            'problem_summary' => $scheduledJob['problem_summary'] ?? 'No summary provided',
+                                                            'scheduled_date' => $scheduledJob['scheduled_date'],
+                                                            'cluster_label' => $scheduledJob['cluster_label'],
+                                                        ];
+                                                        ?>
+                                                        <button
+                                                            type="button"
+                                                            class="scheduled-job-trigger block w-full truncate text-left text-[11px] text-zinc-100 transition hover:text-cyan-100"
+                                                            data-job-details="<?= htmlspecialchars(json_encode($modalPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
+                                                        >
+                                                            <?= htmlspecialchars($scheduledJob['customer_name']) ?>
+                                                        </button>
+                                                    <?php endforeach; ?>
+                                                </div>
                                             </div>
                                         <?php endforeach; ?>
                                     </div>
