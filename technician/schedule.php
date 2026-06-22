@@ -1531,6 +1531,11 @@ require_once __DIR__ . '/../templates/header.php';
             </div>
         <?php endif; ?>
 
+        <section class="mb-4">
+            <h2 class="text-2xl font-semibold text-white">Jobs Awaiting Scheduling</h2>
+            <p class="mt-2 text-sm text-zinc-400">Review the current unassigned jobs below before routing them to a technician schedule.</p>
+        </section>
+
         <div class="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
             <table class="w-full">
                 <thead class="bg-zinc-800">
