@@ -71,6 +71,49 @@ function getMaxSpreadMiles(array $jobs)
     return $maxSpreadMiles;
 }
 
+/**
+ * Return the name of the closest major Southern California city to the given coordinates.
+ */
+function getClosestCityName(float $latitude, float $longitude): string
+{
+    $cities = [
+        'Los Angeles'    => [34.0522, -118.2437],
+        'Long Beach'     => [33.7701, -118.1937],
+        'Anaheim'        => [33.8353, -117.9145],
+        'Santa Ana'      => [33.7455, -117.8677],
+        'Irvine'         => [33.6846, -117.8265],
+        'Riverside'      => [33.9806, -117.3755],
+        'San Bernardino' => [34.1083, -117.2898],
+        'Ontario'        => [34.0633, -117.6509],
+        'Fontana'        => [34.0922, -117.4350],
+        'Moreno Valley'  => [33.9375, -117.2306],
+        'San Diego'      => [32.7157, -117.1611],
+        'Chula Vista'    => [32.6401, -117.0842],
+        'Escondido'      => [33.1192, -117.0864],
+        'El Monte'       => [34.0686, -118.0276],
+        'Pasadena'       => [34.1478, -118.1445],
+        'Torrance'       => [33.8358, -118.3406],
+        'Pomona'         => [34.0551, -117.7500],
+        'Orange'         => [33.7879, -117.8531],
+        'Fullerton'      => [33.8704, -117.9242],
+        'Garden Grove'   => [33.7743, -117.9378],
+    ];
+
+    $closestCity = 'Unknown';
+    $closestDistance = PHP_FLOAT_MAX;
+
+    foreach ($cities as $name => $coords) {
+        $distance = haversineDistanceMiles($latitude, $longitude, $coords[0], $coords[1]);
+
+        if ($distance < $closestDistance) {
+            $closestDistance = $distance;
+            $closestCity = $name;
+        }
+    }
+
+    return $closestCity;
+}
+
 function isBusinessDay(DateTimeImmutable $date)
 {
     return (int) $date->format('N') < 6;
@@ -471,7 +514,7 @@ foreach ($clusters as $cluster) {
                                         </p>
                                     </div>
                                     <div class="text-sm text-cyan-300">
-                                        Center: <?= number_format($cluster['centroid_latitude'], 4) ?>, <?= number_format($cluster['centroid_longitude'], 4) ?>
+                                        Center: <?= htmlspecialchars(getClosestCityName($cluster['centroid_latitude'], $cluster['centroid_longitude'])) ?> (<?= number_format($cluster['centroid_latitude'], 4) ?>, <?= number_format($cluster['centroid_longitude'], 4) ?>)
                                     </div>
                                 </div>
 
@@ -482,6 +525,7 @@ foreach ($clusters as $cluster) {
                                                 <div>
                                                     <div class="font-medium text-white">
                                                         <?= htmlspecialchars($clusteredJob['first_name'] . ' ' . $clusteredJob['last_name']) ?>
+                                                        <span class="ml-2 text-sm font-normal text-zinc-400">&bull; <?= number_format(haversineDistanceMiles($clusteredJob['latitude'], $clusteredJob['longitude'], $cluster['centroid_latitude'], $cluster['centroid_longitude']), 1) ?> miles from center</span>
                                                     </div>
                                                     <div class="mt-1 text-sm text-zinc-400">
                                                         <?= htmlspecialchars($clusteredJob['city'] ?? 'N/A') ?> &bull;
