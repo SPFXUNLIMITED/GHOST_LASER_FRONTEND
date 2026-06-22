@@ -3,7 +3,7 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 const CLUSTER_DISTANCE_MILES = 20;
-const MAX_JOBS_PER_CLUSTER = 5;
+const MAX_JOBS_PER_CLUSTER = 3;
 
 /**
  * Determine whether the provided coordinates can be used for geographic clustering.
