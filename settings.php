@@ -27,6 +27,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'maximum_jobs_per_technician_per_day' => trim((string) ($_POST['maximum_jobs_per_technician_per_day'] ?? '')),
         'default_time_window_size_hours' => trim((string) ($_POST['default_time_window_size_hours'] ?? '')),
         'work_days' => trim((string) ($_POST['work_days'] ?? '')),
+        'initial_appointment_confirmation_subject' => trim((string) ($_POST['initial_appointment_confirmation_subject'] ?? '')),
+        'initial_appointment_confirmation_body' => trim((string) ($_POST['initial_appointment_confirmation_body'] ?? '')),
+        'day_before_reminder_subject' => trim((string) ($_POST['day_before_reminder_subject'] ?? '')),
+        'day_before_reminder_body' => trim((string) ($_POST['day_before_reminder_body'] ?? '')),
+        'one_hour_arrival_notification_subject' => trim((string) ($_POST['one_hour_arrival_notification_subject'] ?? '')),
+        'one_hour_arrival_notification_body' => trim((string) ($_POST['one_hour_arrival_notification_body'] ?? '')),
     ];
 
     if ($submittedSettings['shop_address'] === '') {
@@ -64,6 +70,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if (!array_key_exists($submittedSettings['work_days'], $workDayOptions)) {
         $formErrors[] = 'Select a valid work day schedule.';
+    }
+
+    $templateLabels = [
+        'initial_appointment_confirmation_subject' => 'Initial appointment confirmation subject',
+        'initial_appointment_confirmation_body' => 'Initial appointment confirmation body',
+        'day_before_reminder_subject' => 'Day-before reminder subject',
+        'day_before_reminder_body' => 'Day-before reminder body',
+        'one_hour_arrival_notification_subject' => 'One-hour arrival notification subject',
+        'one_hour_arrival_notification_body' => 'One-hour arrival notification body',
+    ];
+    foreach ($templateLabels as $field => $label) {
+        if ($submittedSettings[$field] === '') {
+            $formErrors[] = $label . ' is required.';
+        }
     }
 
     if ($formErrors === []) {
@@ -227,6 +247,51 @@ require_once __DIR__ . '/templates/header.php';
                     <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400">
                         Save Settings
                     </button>
+                </section>
+
+                <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8 card-glow space-y-6 lg:col-span-2">
+                    <div>
+                        <h2 class="text-xl font-semibold text-white">Email Templates</h2>
+                        <p class="mt-2 text-sm text-zinc-400">Manage reusable subject and message templates for future email and SMS notifications.</p>
+                    </div>
+
+                    <div class="grid gap-6">
+                        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 space-y-4">
+                            <h3 class="text-sm font-semibold uppercase tracking-wide text-cyan-300">Initial Appointment Confirmation</h3>
+                            <label class="block">
+                                <span class="text-sm font-medium text-zinc-200">Subject</span>
+                                <input type="text" name="initial_appointment_confirmation_subject" value="<?= htmlspecialchars((string) $settings['initial_appointment_confirmation_subject'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required>
+                            </label>
+                            <label class="block">
+                                <span class="text-sm font-medium text-zinc-200">Body</span>
+                                <textarea name="initial_appointment_confirmation_body" rows="5" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required><?= htmlspecialchars((string) $settings['initial_appointment_confirmation_body'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></textarea>
+                            </label>
+                        </div>
+
+                        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 space-y-4">
+                            <h3 class="text-sm font-semibold uppercase tracking-wide text-cyan-300">Day-Before Reminder</h3>
+                            <label class="block">
+                                <span class="text-sm font-medium text-zinc-200">Subject</span>
+                                <input type="text" name="day_before_reminder_subject" value="<?= htmlspecialchars((string) $settings['day_before_reminder_subject'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required>
+                            </label>
+                            <label class="block">
+                                <span class="text-sm font-medium text-zinc-200">Body</span>
+                                <textarea name="day_before_reminder_body" rows="5" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required><?= htmlspecialchars((string) $settings['day_before_reminder_body'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></textarea>
+                            </label>
+                        </div>
+
+                        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 space-y-4">
+                            <h3 class="text-sm font-semibold uppercase tracking-wide text-cyan-300">One-Hour Arrival Notification</h3>
+                            <label class="block">
+                                <span class="text-sm font-medium text-zinc-200">Subject</span>
+                                <input type="text" name="one_hour_arrival_notification_subject" value="<?= htmlspecialchars((string) $settings['one_hour_arrival_notification_subject'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required>
+                            </label>
+                            <label class="block">
+                                <span class="text-sm font-medium text-zinc-200">Body</span>
+                                <textarea name="one_hour_arrival_notification_body" rows="5" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required><?= htmlspecialchars((string) $settings['one_hour_arrival_notification_body'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></textarea>
+                            </label>
+                        </div>
+                    </div>
                 </section>
             </form>
         </div>
