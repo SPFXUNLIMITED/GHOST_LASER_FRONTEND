@@ -72,6 +72,38 @@ function getMaxSpreadMiles(array $jobs)
 }
 
 /**
+ * Calculate the centroid for a group of jobs with valid coordinates.
+ */
+function getClusterCentroid(array $jobs): array
+{
+    $latitudeTotal = 0.0;
+    $longitudeTotal = 0.0;
+    $coordinateCount = 0;
+
+    foreach ($jobs as $job) {
+        if (!hasValidCoordinates($job['latitude'] ?? null, $job['longitude'] ?? null)) {
+            continue;
+        }
+
+        $latitudeTotal += (float) $job['latitude'];
+        $longitudeTotal += (float) $job['longitude'];
+        $coordinateCount++;
+    }
+
+    if ($coordinateCount === 0) {
+        return [
+            'latitude' => null,
+            'longitude' => null,
+        ];
+    }
+
+    return [
+        'latitude' => $latitudeTotal / $coordinateCount,
+        'longitude' => $longitudeTotal / $coordinateCount,
+    ];
+}
+
+/**
  * Return the name of the closest major Southern California city to the given coordinates.
  */
 function getClosestCityName(float $latitude, float $longitude): string
@@ -269,6 +301,22 @@ function buildGeographicClusters(array $jobs)
 
     foreach ($clusters as &$cluster) {
         usort($cluster['jobs'], 'compareJobsByPriority');
+        $centroid = getClusterCentroid($cluster['jobs']);
+        if ($centroid['latitude'] !== null && $centroid['longitude'] !== null) {
+            $cluster['centroid_latitude'] = $centroid['latitude'];
+            $cluster['centroid_longitude'] = $centroid['longitude'];
+        }
+
+        foreach ($cluster['jobs'] as &$clusterJob) {
+            $clusterJob['distance_from_center_miles'] = haversineDistanceMiles(
+                $clusterJob['latitude'],
+                $clusterJob['longitude'],
+                $cluster['centroid_latitude'],
+                $cluster['centroid_longitude']
+            );
+        }
+        unset($clusterJob);
+
         $cluster['max_distance_miles'] = getMaxSpreadMiles($cluster['jobs']);
     }
     unset($cluster);
@@ -1044,7 +1092,7 @@ while ($calendarCursor <= $calendarEnd) {
                                                 <div>
                                                     <div class="font-medium text-white">
                                                         <?= htmlspecialchars($clusteredJob['first_name'] . ' ' . $clusteredJob['last_name']) ?>
-                                                        <span class="ml-2 text-sm font-normal text-zinc-400">&bull; <?= number_format(haversineDistanceMiles($clusteredJob['latitude'], $clusteredJob['longitude'], $cluster['centroid_latitude'], $cluster['centroid_longitude']), 1) ?> miles from center</span>
+                                                        <span class="ml-2 text-sm font-normal text-zinc-400">&bull; <?= number_format((float) ($clusteredJob['distance_from_center_miles'] ?? 0), 1) ?> miles from center</span>
                                                     </div>
                                                     <div class="mt-1 text-sm text-zinc-400">
                                                         <?= htmlspecialchars($clusteredJob['city'] ?? 'N/A') ?> &bull;
