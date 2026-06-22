@@ -1018,7 +1018,8 @@ while ($calendarCursor <= $calendarEnd) {
         }
     </style>
 </head>
-<body class="bg-zinc-950 text-white p-8">
+<body class="bg-zinc-950 text-white px-8 pb-8 pt-24">
+    <?php require_once __DIR__ . '/schedule-header.php'; ?>
     <div class="max-w-7xl mx-auto">
         <h1 class="text-5xl font-bold mb-2">Scheduling Dashboard</h1>
 
