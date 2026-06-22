@@ -648,14 +648,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
             }
 
+            // Apply a small random offset (±0.002°, ≈ ±200 m) so that repeated
+            // test-data insertions produce distinct coordinates instead of
+            // stacking jobs on the exact same point.
+            $latJitter = mt_rand(-200, 200) / 100000.0;
+            $lngJitter = mt_rand(-200, 200) / 100000.0;
+
             $insertReq->execute([
                 ':customer_id'          => $customerId,
                 ':priority_level'       => $cust['priority'],
                 ':problem_summary'      => $cust['problem'],
                 ':preferred_date_start' => $startDate,
                 ':preferred_date_end'   => $endDate,
-                ':latitude'             => $cust['lat'],
-                ':longitude'            => $cust['lng'],
+                ':latitude'             => round($cust['lat'] + $latJitter, 6),
+                ':longitude'            => round($cust['lng'] + $lngJitter, 6),
             ]);
 
             $inserted++;
