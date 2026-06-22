@@ -466,7 +466,6 @@ require_once __DIR__ . '/../scheduling_settings.php';
 ensureClusterSchedulingTables($pdo);
 $schedulingSettings = getSchedulingSettings($pdo);
 $dailyTechnicianCapacity = calculateTechnicianDailyCapacity($schedulingSettings);
-$disabledScheduleWeekdays = getDisabledJsWeekdayIndexes($schedulingSettings);
 
 $clusteringRequested = false;
 $testDataMessage = null;
@@ -761,8 +760,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($clusterLabel === '' || !$isValidDate || $clusterJobIds === []) {
             $clusterAssignError = 'Select a valid date and cluster before assigning.';
-        } elseif (!isBusinessDay($parsedDate, $schedulingSettings)) {
-            $clusterAssignError = 'Selected date is outside the configured work days.';
         } else {
             try {
                 ensureClusterSchedulingTables($pdo);
@@ -1254,7 +1251,7 @@ while ($calendarCursor <= $calendarEnd) {
             <div class="mt-3 flex items-center gap-3 px-1 text-[10px] text-zinc-500">
                 <span class="inline-flex items-center gap-1.5">
                     <span class="inline-block h-3 w-3 rounded-sm border border-amber-600/50 bg-amber-500/20"></span>
-                    US Holiday — scheduling blocked
+                    US Holiday
                 </span>
                 <span class="inline-flex items-center gap-1.5">
                     <span class="inline-block h-3 w-3 rounded-sm border border-cyan-400/40 bg-cyan-500/10"></span>
@@ -1489,16 +1486,10 @@ while ($calendarCursor <= $calendarEnd) {
     }
     ?>
     const usHolidayDates = <?= json_encode(array_values($flatpickrHolidays), JSON_UNESCAPED_SLASHES) ?>;
-    const disabledScheduleWeekdays = <?= json_encode($disabledScheduleWeekdays ?? [0,6]) ?>;
 
     flatpickr('.cluster-date-picker', {
         minDate: 'today',
         dateFormat: 'Y-m-d',
-        disable: [
-            function (date) {
-                return disabledScheduleWeekdays.includes(date.getDay());
-            }
-        ],
         disableMobile: false,
         onDayCreate: function(dObj, dStr, fp, dayElem) {
             const dateStr = dayElem.dateObj.toISOString().slice(0, 10);
