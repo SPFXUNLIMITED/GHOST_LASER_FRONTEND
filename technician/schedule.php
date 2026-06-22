@@ -1372,39 +1372,6 @@ require_once __DIR__ . '/../templates/header.php';
             </div>
         </section>
 
-        <div class="mb-8 flex flex-wrap gap-3">
-            <form method="POST">
-                <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
-                <button
-                    type="submit"
-                    name="insert_test_data"
-                    value="1"
-                    class="inline-flex items-center justify-center rounded-lg bg-amber-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-amber-400"
-                    onclick="return confirm('Insert 8 test customers and service requests?');"
-                >
-                    Insert Test Data
-                </button>
-            </form>
-
-            <form method="POST">
-                <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
-                <button
-                    type="submit"
-                    name="run_clustering"
-                    value="1"
-                    class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
-                >
-                    Run Geographic Clustering
-                </button>
-            </form>
-            <a
-                href="../settings.php"
-                class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:border-cyan-400 hover:text-white"
-            >
-                Admin Settings
-            </a>
-        </div>
-
         <?php if ($clusteringRequested): ?>
             <div class="mb-8 rounded-3xl border border-cyan-500/30 bg-zinc-900/80 p-6">
                 <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -1531,67 +1498,107 @@ require_once __DIR__ . '/../templates/header.php';
             </div>
         <?php endif; ?>
 
-        <section class="mb-4">
-            <h2 class="text-2xl font-semibold text-white">Jobs Awaiting Scheduling</h2>
-            <p class="mt-2 text-sm text-zinc-400">Review the current unassigned jobs below before routing them to a technician schedule.</p>
-        </section>
+        <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_17rem] xl:items-start">
+            <div class="min-w-0">
+                <section class="mb-4">
+                    <h2 class="text-2xl font-semibold text-white">Jobs Awaiting Scheduling</h2>
+                    <p class="mt-2 text-sm text-zinc-400">Review the current unassigned jobs below before routing them to a technician schedule.</p>
+                </section>
 
-        <div class="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
-            <table class="w-full">
-                <thead class="bg-zinc-800">
-                    <tr>
-                        <th class="p-6 text-left">Customer</th>
-                        <th class="p-6 text-left">City</th>
-                        <th class="p-6 text-left">Coordinates</th>
-                        <th class="p-6 text-left">Priority</th>
-                        <th class="p-6 text-left">Target Window</th>
-                        <th class="p-6 text-left">Problem</th>
-                        <th class="p-6 text-left">Dates</th>
-                        <th class="p-6 text-left">Cluster</th>
-                        <th class="p-6 text-left">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-zinc-700">
-                    <?php if (empty($jobs)): ?>
-                        <tr>
-                            <td colspan="9" class="p-6 text-center text-zinc-400">No pending jobs found.</td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($jobs as $job): ?>
-                        <tr class="hover:bg-zinc-800">
-                            <td class="p-6"><?= htmlspecialchars($job['first_name'] . ' ' . $job['last_name']) ?></td>
-                            <td class="p-6"><?= htmlspecialchars($job['city'] ?? 'N/A') ?></td>
-                            <td class="p-6 font-mono text-sm text-cyan-400">
-                                <?= hasValidCoordinates($job['latitude'] ?? null, $job['longitude'] ?? null) ? number_format((float) $job['latitude'], 4) . ', ' . number_format((float) $job['longitude'], 4) : 'N/A' ?>
-                            </td>
-                            <td class="p-6">
-                                <?php $priority = strtolower($job['priority_level'] ?? 'standard'); ?>
-                                <span class="px-4 py-1 rounded-full text-xs font-semibold <?= $priority === 'emergency' ? 'bg-red-500/20 text-red-300' : ($priority === 'vip' ? 'bg-orange-500/20 text-orange-300' : 'bg-blue-500/20 text-blue-300') ?>">
-                                    <?= htmlspecialchars($job['priority_meta']['label']) ?>
-                                </span>
-                            </td>
-                            <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job['priority_meta']['window_summary']) ?></td>
-                            <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job['problem_summary'] ?? 'No summary') ?></td>
-                            <td class="p-6 text-sm text-zinc-400">
-                                <?= htmlspecialchars($job['preferred_date_start'] ?? 'N/A') ?>
-                                <?php if (!empty($job['preferred_date_end'])): ?>
-                                    &ndash; <?= htmlspecialchars($job['preferred_date_end']) ?>
+                <div class="overflow-hidden rounded-3xl border border-zinc-700 bg-zinc-900">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-zinc-800">
+                                <tr>
+                                    <th class="p-6 text-left">Customer</th>
+                                    <th class="p-6 text-left">City</th>
+                                    <th class="p-6 text-left">Coordinates</th>
+                                    <th class="p-6 text-left">Priority</th>
+                                    <th class="p-6 text-left">Target Window</th>
+                                    <th class="p-6 text-left">Problem</th>
+                                    <th class="p-6 text-left">Dates</th>
+                                    <th class="p-6 text-left">Cluster</th>
+                                    <th class="p-6 text-left">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-700">
+                                <?php if (empty($jobs)): ?>
+                                    <tr>
+                                        <td colspan="9" class="p-6 text-center text-zinc-400">No pending jobs found.</td>
+                                    </tr>
+                                <?php else: ?>
+                                    <?php foreach ($jobs as $job): ?>
+                                    <tr class="hover:bg-zinc-800">
+                                        <td class="p-6"><?= htmlspecialchars($job['first_name'] . ' ' . $job['last_name']) ?></td>
+                                        <td class="p-6"><?= htmlspecialchars($job['city'] ?? 'N/A') ?></td>
+                                        <td class="p-6 font-mono text-sm text-cyan-400">
+                                            <?= hasValidCoordinates($job['latitude'] ?? null, $job['longitude'] ?? null) ? number_format((float) $job['latitude'], 4) . ', ' . number_format((float) $job['longitude'], 4) : 'N/A' ?>
+                                        </td>
+                                        <td class="p-6">
+                                            <?php $priority = strtolower($job['priority_level'] ?? 'standard'); ?>
+                                            <span class="px-4 py-1 rounded-full text-xs font-semibold <?= $priority === 'emergency' ? 'bg-red-500/20 text-red-300' : ($priority === 'vip' ? 'bg-orange-500/20 text-orange-300' : 'bg-blue-500/20 text-blue-300') ?>">
+                                                <?= htmlspecialchars($job['priority_meta']['label']) ?>
+                                            </span>
+                                        </td>
+                                        <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job['priority_meta']['window_summary']) ?></td>
+                                        <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job['problem_summary'] ?? 'No summary') ?></td>
+                                        <td class="p-6 text-sm text-zinc-400">
+                                            <?= htmlspecialchars($job['preferred_date_start'] ?? 'N/A') ?>
+                                            <?php if (!empty($job['preferred_date_end'])): ?>
+                                                &ndash; <?= htmlspecialchars($job['preferred_date_end']) ?>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="p-6 text-sm text-cyan-300">
+                                            <?= htmlspecialchars($clusterLookup[(int) $job['id']] ?? 'Not clustered') ?>
+                                        </td>
+                                        <td class="p-6">
+                                            <form method="POST" onsubmit="return confirm('Delete this request?');">
+                                                <input type="hidden" name="delete_id" value="<?= (int) $job['id'] ?>">
+                                                <button type="submit" class="text-red-400 hover:text-red-500 text-sm font-medium">Delete</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
                                 <?php endif; ?>
-                            </td>
-                            <td class="p-6 text-sm text-cyan-300">
-                                <?= htmlspecialchars($clusterLookup[(int) $job['id']] ?? 'Not clustered') ?>
-                            </td>
-                            <td class="p-6">
-                                <form method="POST" onsubmit="return confirm('Delete this request?');">
-                                    <input type="hidden" name="delete_id" value="<?= (int) $job['id'] ?>">
-                                    <button type="submit" class="text-red-400 hover:text-red-500 text-sm font-medium">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="flex flex-col gap-3 xl:sticky xl:top-6">
+                <form method="POST">
+                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                    <button
+                        type="submit"
+                        name="insert_test_data"
+                        value="1"
+                        class="inline-flex w-full items-center justify-center rounded-lg bg-amber-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-amber-400"
+                        onclick="return confirm('Insert 8 test customers and service requests?');"
+                    >
+                        Insert Test Data
+                    </button>
+                </form>
+
+                <form method="POST">
+                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                    <button
+                        type="submit"
+                        name="run_clustering"
+                        value="1"
+                        class="inline-flex w-full items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
+                    >
+                        Run Geographic Clustering
+                    </button>
+                </form>
+
+                <a
+                    href="../settings.php"
+                    class="inline-flex w-full items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:border-cyan-400 hover:text-white"
+                >
+                    Admin Settings
+                </a>
+            </aside>
         </div>
     </div>
     <div id="scheduled-job-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-zinc-950/80 px-4">
