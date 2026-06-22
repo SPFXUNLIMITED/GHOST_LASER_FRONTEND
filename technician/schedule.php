@@ -1336,10 +1336,18 @@ require_once __DIR__ . '/../templates/header.php';
                                                         ?>
                                                         <button
                                                             type="button"
-                                                            class="scheduled-job-trigger block w-full truncate text-left text-[11px] text-zinc-100 transition hover:text-cyan-100"
+                                                            class="scheduled-job-trigger block w-full text-left text-[11px] text-zinc-100 transition hover:text-cyan-100"
                                                             data-job-details="<?= htmlspecialchars(json_encode($modalPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
                                                         >
-                                                            <?= htmlspecialchars($scheduledJob['customer_name']) ?><?php if ($scheduledJob['time_window_label'] !== null): ?> <span class="text-cyan-400/80"><?= htmlspecialchars($scheduledJob['time_window_label']) ?></span><?php elseif ($scheduledJob['distance_from_center_miles'] !== null): ?> <span class="text-zinc-400">+<?= number_format((float) $scheduledJob['distance_from_center_miles'], 1) ?>mi</span><?php endif; ?>
+                                                            <span class="flex items-baseline justify-between gap-1">
+                                                                <span class="truncate"><?= htmlspecialchars($scheduledJob['customer_name']) ?></span>
+                                                                <?php if ($scheduledJob['distance_from_center_miles'] !== null): ?>
+                                                                    <span class="shrink-0 text-zinc-400">+<?= number_format((float) $scheduledJob['distance_from_center_miles'], 1) ?>mi</span>
+                                                                <?php endif; ?>
+                                                            </span>
+                                                            <?php if ($scheduledJob['time_window_label'] !== null): ?>
+                                                                <span class="block text-cyan-400/80"><?= htmlspecialchars($scheduledJob['time_window_label']) ?></span>
+                                                            <?php endif; ?>
                                                         </button>
                                                     <?php endforeach; ?>
                                                 </div>
