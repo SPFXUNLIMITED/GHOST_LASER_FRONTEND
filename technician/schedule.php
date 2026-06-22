@@ -170,6 +170,55 @@ function addBusinessDays(DateTimeImmutable $date, $businessDays, array $settings
 }
 
 /**
+ * Return the Y-m-d date string for the nth occurrence of a given weekday
+ * (0 = Sunday … 6 = Saturday) within the given month.
+ */
+function nthWeekdayOfMonth(int $year, int $month, int $weekday, int $n): string
+{
+    $date = new DateTimeImmutable(sprintf('%d-%02d-01', $year, $month));
+    while ((int) $date->format('w') !== $weekday) {
+        $date = $date->modify('+1 day');
+    }
+    for ($i = 1; $i < $n; $i++) {
+        $date = $date->modify('+7 days');
+    }
+    return $date->format('Y-m-d');
+}
+
+/**
+ * Return the Y-m-d date string for the last occurrence of a given weekday
+ * (0 = Sunday … 6 = Saturday) within the given month.
+ */
+function lastWeekdayOfMonth(int $year, int $month, int $weekday): string
+{
+    $date = new DateTimeImmutable(sprintf('last day of %d-%02d', $year, $month));
+    while ((int) $date->format('w') !== $weekday) {
+        $date = $date->modify('-1 day');
+    }
+    return $date->format('Y-m-d');
+}
+
+/**
+ * Return an array of [ 'Y-m-d' => 'Holiday Name' ] for standard US federal
+ * and widely-observed holidays in the given year.
+ */
+function getUsHolidays(int $year): array
+{
+    return [
+        sprintf('%d-01-01', $year)          => "New Year's Day",
+        nthWeekdayOfMonth($year, 1, 1, 3)  => 'MLK Day',
+        nthWeekdayOfMonth($year, 2, 1, 3)  => "Presidents' Day",
+        lastWeekdayOfMonth($year, 5, 1)    => 'Memorial Day',
+        sprintf('%d-07-04', $year)          => 'Independence Day',
+        nthWeekdayOfMonth($year, 9, 1, 1)  => 'Labor Day',
+        nthWeekdayOfMonth($year, 10, 1, 2) => 'Columbus Day',
+        sprintf('%d-11-11', $year)          => 'Veterans Day',
+        nthWeekdayOfMonth($year, 11, 4, 4) => 'Thanksgiving',
+        sprintf('%d-12-25', $year)          => 'Christmas Day',
+    ];
+}
+
+/**
  * Build a one-line service address for scheduled job detail views.
  */
 function formatCustomerAddress(array $customer): string
@@ -922,17 +971,29 @@ foreach ($scheduledClustersByDate as $dateKey => $clustersOnDate) {
 
 $calendarStart = $currentMonth->modify('-' . $currentMonth->format('w') . ' days');
 $calendarEnd = $currentMonthEnd->modify('+' . (6 - (int) $currentMonthEnd->format('w')) . ' days');
+
+// Build a map of US holidays covering every year the visible calendar touches.
+$calendarHolidayYears = array_unique([
+    (int) $calendarStart->format('Y'),
+    (int) $calendarEnd->format('Y'),
+]);
+$holidaysMap = [];
+foreach ($calendarHolidayYears as $holidayYear) {
+    $holidaysMap = array_merge($holidaysMap, getUsHolidays($holidayYear));
+}
+
 $calendarDays = [];
 $calendarCursor = $calendarStart;
 
 while ($calendarCursor <= $calendarEnd) {
     $calendarDateKey = $calendarCursor->format('Y-m-d');
     $calendarDays[] = [
-        'date' => $calendarCursor,
-        'date_key' => $calendarDateKey,
+        'date'             => $calendarCursor,
+        'date_key'         => $calendarDateKey,
         'is_current_month' => $calendarCursor->format('Y-m') === $currentMonth->format('Y-m'),
-        'is_today' => $calendarDateKey === (new DateTimeImmutable('today'))->format('Y-m-d'),
-        'clusters' => $scheduledClustersByDate[$calendarDateKey] ?? [],
+        'is_today'         => $calendarDateKey === (new DateTimeImmutable('today'))->format('Y-m-d'),
+        'clusters'         => $scheduledClustersByDate[$calendarDateKey] ?? [],
+        'holiday_name'     => $holidaysMap[$calendarDateKey] ?? null,
     ];
     $calendarCursor = $calendarCursor->modify('+1 day');
 }
@@ -948,6 +1009,14 @@ while ($calendarCursor <= $calendarEnd) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <style>
+        .flatpickr-day.holiday-date:not(.selected) {
+            border-color: rgba(245, 158, 11, 0.55);
+            background: rgba(245, 158, 11, 0.18);
+            color: #fbbf24;
+            font-weight: 600;
+        }
+    </style>
 </head>
 <body class="bg-zinc-950 text-white p-8">
     <div class="max-w-7xl mx-auto">
@@ -1101,8 +1170,17 @@ while ($calendarCursor <= $calendarEnd) {
                             <?php
                             $dayHasAssignments = $calendarDay['clusters'] !== [];
                             $totalDayAssignments = array_sum(array_map(static fn($cluster) => count($cluster['jobs']), $calendarDay['clusters']));
+                            $dayIsHoliday = $calendarDay['holiday_name'] !== null;
                             ?>
-                            <div class="rounded-lg border px-2 py-1 <?= $calendarDay['is_current_month'] ? 'border-zinc-700 bg-zinc-950/80' : 'border-zinc-800 bg-zinc-950/40 text-zinc-600' ?> <?= $dayHasAssignments ? 'pb-2' : '' ?>">
+                            <div class="rounded-lg border px-2 py-1 <?php
+                                if ($dayIsHoliday && $calendarDay['is_current_month']) {
+                                    echo 'border-amber-600/50 bg-amber-500/10';
+                                } elseif ($calendarDay['is_current_month']) {
+                                    echo 'border-zinc-700 bg-zinc-950/80';
+                                } else {
+                                    echo 'border-zinc-800 bg-zinc-950/40 text-zinc-600';
+                                }
+                            ?> <?= ($dayHasAssignments || $dayIsHoliday) ? 'pb-2' : '' ?>">
                                 <div class="flex items-center justify-between">
                                     <span class="text-xs font-semibold <?= $calendarDay['is_today'] ? 'rounded-full bg-cyan-500 px-1.5 py-0.5 text-zinc-950' : ($calendarDay['is_current_month'] ? 'text-white' : 'text-zinc-600') ?>">
                                         <?= htmlspecialchars($calendarDay['date']->format('j')) ?>
@@ -1113,6 +1191,12 @@ while ($calendarCursor <= $calendarEnd) {
                                         </span>
                                     <?php endif; ?>
                                 </div>
+
+                                <?php if ($dayIsHoliday): ?>
+                                    <div class="mt-1 truncate text-[9px] font-semibold uppercase tracking-wide text-amber-400" title="<?= htmlspecialchars($calendarDay['holiday_name']) ?>">
+                                        🇺🇸 <?= htmlspecialchars($calendarDay['holiday_name']) ?>
+                                    </div>
+                                <?php endif; ?>
 
                                 <?php if ($dayHasAssignments): ?>
                                     <div class="mt-2 space-y-2">
@@ -1166,6 +1250,16 @@ while ($calendarCursor <= $calendarEnd) {
                         <?php endforeach; ?>
                     </div>
                 </div>
+            </div>
+            <div class="mt-3 flex items-center gap-3 px-1 text-[10px] text-zinc-500">
+                <span class="inline-flex items-center gap-1.5">
+                    <span class="inline-block h-3 w-3 rounded-sm border border-amber-600/50 bg-amber-500/20"></span>
+                    US Holiday — scheduling blocked
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                    <span class="inline-block h-3 w-3 rounded-sm border border-cyan-400/40 bg-cyan-500/10"></span>
+                    Assigned cluster
+                </span>
             </div>
         </section>
 
@@ -1386,7 +1480,16 @@ while ($calendarCursor <= $calendarEnd) {
     </div>
     </div>
 <script>
-    const disabledScheduleWeekdays = <?= json_encode($disabledScheduleWeekdays, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+    <?php
+    // Pre-compute holiday dates for visual display
+    $flatpickrHolidayYears = [(int) date('Y'), (int) date('Y') + 1, (int) date('Y') + 2];
+    $flatpickrHolidays = [];
+    foreach ($flatpickrHolidayYears as $fpYear) {
+        $flatpickrHolidays = array_merge($flatpickrHolidays, array_keys(getUsHolidays($fpYear)));
+    }
+    ?>
+    const usHolidayDates = <?= json_encode(array_values($flatpickrHolidays), JSON_UNESCAPED_SLASHES) ?>;
+    const disabledScheduleWeekdays = <?= json_encode($disabledScheduleWeekdays ?? [0,6]) ?>;
 
     flatpickr('.cluster-date-picker', {
         minDate: 'today',
@@ -1396,7 +1499,14 @@ while ($calendarCursor <= $calendarEnd) {
                 return disabledScheduleWeekdays.includes(date.getDay());
             }
         ],
-        disableMobile: false
+        disableMobile: false,
+        onDayCreate: function(dObj, dStr, fp, dayElem) {
+            const dateStr = dayElem.dateObj.toISOString().slice(0, 10);
+            if (usHolidayDates.includes(dateStr)) {
+                dayElem.title = 'Holiday';
+                dayElem.classList.add('holiday-date');
+            }
+        }
     });
 
     document.addEventListener('click', function (e) {
