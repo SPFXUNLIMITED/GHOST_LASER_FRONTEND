@@ -1087,12 +1087,23 @@ while ($calendarCursor <= $calendarEnd) {
 
                                 <div class="mt-4 space-y-3">
                                     <?php foreach ($cluster['jobs'] as $clusteredJob): ?>
+                                        <?php
+                                        $distanceFromCenterMiles = $clusteredJob['distance_from_center_miles'] ?? null;
+                                        if ($distanceFromCenterMiles === null && hasValidCoordinates($clusteredJob['latitude'] ?? null, $clusteredJob['longitude'] ?? null)) {
+                                            $distanceFromCenterMiles = haversineDistanceMiles(
+                                                $clusteredJob['latitude'],
+                                                $clusteredJob['longitude'],
+                                                $cluster['centroid_latitude'],
+                                                $cluster['centroid_longitude']
+                                            );
+                                        }
+                                        ?>
                                         <div class="rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 cluster-job-card" data-job-id="<?= (int) $clusteredJob['id'] ?>">
                                             <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                                                 <div>
                                                     <div class="font-medium text-white">
                                                         <?= htmlspecialchars($clusteredJob['first_name'] . ' ' . $clusteredJob['last_name']) ?>
-                                                        <span class="ml-2 text-sm font-normal text-zinc-400">&bull; <?= number_format((float) ($clusteredJob['distance_from_center_miles'] ?? 0), 1) ?> miles from center</span>
+                                                        <span class="ml-2 text-sm font-normal text-zinc-400">&bull; <?= number_format((float) ($distanceFromCenterMiles ?? 0), 1) ?> miles from center</span>
                                                     </div>
                                                     <div class="mt-1 text-sm text-zinc-400">
                                                         <?= htmlspecialchars($clusteredJob['city'] ?? 'N/A') ?> &bull;
