@@ -1188,59 +1188,13 @@ require_once __DIR__ . '/../templates/header.php';
     <div class="max-w-7xl mx-auto">
         <h1 class="text-5xl font-bold mb-2">Scheduling Dashboard</h1>
 
-        <div class="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div class="mb-8">
             <div>
                 <p class="text-zinc-400">Pending service requests (<?= count($jobs) ?> found)</p>
                 <p class="mt-2 text-sm text-zinc-500">
                     Geographic clustering groups pending jobs with valid coordinates into route-friendly batches within <?= CLUSTER_DISTANCE_MILES ?> miles.
                     Current work week: <?= htmlspecialchars(getSchedulingWorkDayLabel((string) $schedulingSettings['work_days'])) ?>, <?= htmlspecialchars($schedulingSettings['business_start_time']) ?>-<?= htmlspecialchars($schedulingSettings['business_end_time']) ?>, <?= (int) $schedulingSettings['default_time_window_size_hours'] ?>h windows, max <?= $dailyTechnicianCapacity ?> jobs/day.
                 </p>
-            </div>
-
-            <div class="flex flex-wrap gap-3">
-                <form method="POST">
-                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
-                    <button
-                        type="submit"
-                        name="insert_test_data"
-                        value="1"
-                        class="inline-flex items-center justify-center rounded-lg bg-amber-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-amber-400"
-                        onclick="return confirm('Insert 8 test customers and service requests?');"
-                    >
-                        Insert Test Data
-                    </button>
-                </form>
-
-                <form method="POST">
-                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
-                    <button
-                        type="submit"
-                        name="clear_test_data"
-                        value="1"
-                        class="inline-flex items-center justify-center rounded-lg bg-rose-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-400"
-                        onclick="return confirm('Delete all jobs with notes or address containing \"Test\"?');"
-                    >
-                        Clear Test Data
-                    </button>
-                </form>
-
-                <form method="POST">
-                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
-                    <button
-                        type="submit"
-                        name="run_clustering"
-                        value="1"
-                        class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
-                    >
-                        Run Geographic Clustering
-                    </button>
-                </form>
-                <a
-                    href="../settings.php"
-                    class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:border-cyan-400 hover:text-white"
-                >
-                    Admin Settings
-                </a>
             </div>
         </div>
 
@@ -1555,6 +1509,52 @@ require_once __DIR__ . '/../templates/header.php';
                 <?php endif; ?>
             </div>
         <?php endif; ?>
+
+        <div class="mb-4 flex flex-wrap gap-3">
+            <form method="POST">
+                <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                <button
+                    type="submit"
+                    name="insert_test_data"
+                    value="1"
+                    class="inline-flex items-center justify-center rounded-lg bg-amber-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-amber-400"
+                    onclick="return confirm('Insert 8 test customers and service requests?');"
+                >
+                    Insert Test Data
+                </button>
+            </form>
+
+            <form method="POST">
+                <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                <button
+                    type="submit"
+                    name="clear_test_data"
+                    value="1"
+                    class="inline-flex items-center justify-center rounded-lg bg-rose-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-400"
+                    onclick="return confirm('Delete all jobs with notes or address containing \"Test\"?');"
+                >
+                    Clear Test Data
+                </button>
+            </form>
+
+            <form method="POST">
+                <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                <button
+                    type="submit"
+                    name="run_clustering"
+                    value="1"
+                    class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
+                >
+                    Run Geographic Clustering
+                </button>
+            </form>
+            <a
+                href="../settings.php"
+                class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:border-cyan-400 hover:text-white"
+            >
+                Admin Settings
+            </a>
+        </div>
 
         <div class="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
             <table class="w-full">
