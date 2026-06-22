@@ -5,9 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ghost Laser | Expert Laser Machine Repair</title>
-	<link rel="icon" type="image/x-icon" href="<?= asset('favicon.ico') ?>">
-	<link rel="shortcut icon" type="image/x-icon" href="<?= asset('favicon.ico') ?>">
-	<link rel="apple-touch-icon" href="<?= asset('favicon.ico') ?>">
+	<link rel="icon" type="image/png" href="<?= asset('ghost-logo2-32x32.png') ?>">
+	<link rel="shortcut icon" type="image/png" href="<?= asset('ghost-logo2-32x32.png') ?>">
+	<link rel="apple-touch-icon" href="<?= asset('ghost-logo2-32x32.png') ?>">
     <meta name="description" content="Ghost Laser — precision laser cutting machine repair, calibration, and maintenance. Fast turnaround, trusted by professionals.">
     <script src="https://cdn.tailwindcss.com?v=1.2"></script>
     <script>
@@ -64,7 +64,7 @@
                 <a href="#" class="flex items-center gap-2.5 group">
                     <span class="w-7 h-7 rounded bg-cyan-500 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-400 transition-colors">
                         <svg class="w-4 h-4 text-zinc-950" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z"/>
+                            <path d="M10 1C6.13 1 3 4.13 3 8v10l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V8C17 4.13 13.87 1 10 1z"/>
                         </svg>
                     </span>
                     <span class="text-white font-bold text-lg tracking-tight">Ghost<span class="text-cyan-400">Laser</span></span>
@@ -346,7 +346,7 @@
             <div class="flex items-center gap-2.5">
                 <span class="w-6 h-6 rounded bg-cyan-500 flex items-center justify-center flex-shrink-0">
                     <svg class="w-3.5 h-3.5 text-zinc-950" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z"/>
+                        <path d="M10 1C6.13 1 3 4.13 3 8v10l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V8C17 4.13 13.87 1 10 1z"/>
                     </svg>
                 </span>
                 <span class="text-white font-bold text-sm">Ghost<span class="text-cyan-400">Laser</span></span>
