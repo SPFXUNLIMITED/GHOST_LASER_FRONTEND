@@ -258,6 +258,32 @@ function buildGeographicClusters(array $jobs)
     return $clusters;
 }
 
+function ensureClusterSchedulingTables(PDO $pdo): void
+{
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS scheduled_clusters (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            cluster_label VARCHAR(100) NOT NULL,
+            scheduled_date DATE NOT NULL,
+            centroid_latitude DECIMAL(10,6) NULL,
+            centroid_longitude DECIMAL(10,6) NULL,
+            created_by_admin_id INT UNSIGNED NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS scheduled_cluster_jobs (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            scheduled_cluster_id INT UNSIGNED NOT NULL,
+            service_request_id INT UNSIGNED NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_scheduled_cluster_job (scheduled_cluster_id, service_request_id),
+            KEY idx_scheduled_cluster_jobs_service_request (service_request_id)
+        )
+    ");
+}
+
 session_start();
 if (empty($_SESSION['admin_id'])) {
     header('Location: ../admin-login.php');
@@ -269,6 +295,8 @@ require_once '../project/db.php';
 $clusteringRequested = false;
 $testDataMessage = null;
 $testDataError = null;
+$clusterAssignMessage = null;
+$clusterAssignError = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $deleteId = filter_input(
@@ -369,9 +397,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $testDataMessage = "Inserted {$inserted} new customer(s) and service request(s).";
+    } elseif (isset($_POST['assign_cluster'])) {
+        $clusteringRequested = true;
+        $clusterLabel = trim((string) ($_POST['cluster_label'] ?? ''));
+        $clusterDate = trim((string) ($_POST['cluster_date'] ?? ''));
+        $clusterJobIdsRaw = trim((string) ($_POST['cluster_job_ids'] ?? ''));
+        $centroidLatitude = is_numeric($_POST['cluster_centroid_latitude'] ?? null) ? (float) $_POST['cluster_centroid_latitude'] : null;
+        $centroidLongitude = is_numeric($_POST['cluster_centroid_longitude'] ?? null) ? (float) $_POST['cluster_centroid_longitude'] : null;
+
+        $parsedDate = DateTimeImmutable::createFromFormat('Y-m-d', $clusterDate);
+        $isValidDate = $parsedDate !== false && $parsedDate->format('Y-m-d') === $clusterDate;
+
+        $clusterJobIds = array_values(array_unique(array_filter(
+            array_map('intval', array_map('trim', explode(',', $clusterJobIdsRaw))),
+            static fn($id) => $id > 0
+        )));
+
+        if ($clusterLabel === '' || !$isValidDate || $clusterJobIds === []) {
+            $clusterAssignError = 'Select a valid date and cluster before assigning.';
+        } else {
+            try {
+                ensureClusterSchedulingTables($pdo);
+
+                $placeholders = implode(',', array_fill(0, count($clusterJobIds), '?'));
+                $validJobsStmt = $pdo->prepare("
+                    SELECT id
+                    FROM service_requests
+                    WHERE id IN ({$placeholders})
+                      AND request_status IN ('new', 'queued')
+                ");
+                $validJobsStmt->execute($clusterJobIds);
+                $validJobIds = array_map('intval', $validJobsStmt->fetchAll(PDO::FETCH_COLUMN));
+
+                if ($validJobIds === []) {
+                    $clusterAssignError = 'No assignable jobs were found for this cluster.';
+                } else {
+                    $insertClusterStmt = $pdo->prepare("
+                        INSERT INTO scheduled_clusters
+                            (cluster_label, scheduled_date, centroid_latitude, centroid_longitude, created_by_admin_id)
+                        VALUES
+                            (:cluster_label, :scheduled_date, :centroid_latitude, :centroid_longitude, :created_by_admin_id)
+                    ");
+                    $insertClusterJobStmt = $pdo->prepare("
+                        INSERT INTO scheduled_cluster_jobs
+                            (scheduled_cluster_id, service_request_id)
+                        VALUES
+                            (:scheduled_cluster_id, :service_request_id)
+                    ");
+
+                    $pdo->beginTransaction();
+                    $insertClusterStmt->execute([
+                        ':cluster_label' => $clusterLabel,
+                        ':scheduled_date' => $clusterDate,
+                        ':centroid_latitude' => $centroidLatitude,
+                        ':centroid_longitude' => $centroidLongitude,
+                        ':created_by_admin_id' => $_SESSION['admin_id'] ?? null,
+                    ]);
+
+                    $scheduledClusterId = (int) $pdo->lastInsertId();
+                    foreach ($validJobIds as $serviceRequestId) {
+                        $insertClusterJobStmt->execute([
+                            ':scheduled_cluster_id' => $scheduledClusterId,
+                            ':service_request_id' => $serviceRequestId,
+                        ]);
+                    }
+
+                    $pdo->commit();
+                    $clusterAssignMessage = sprintf(
+                        '%s assigned to %s with %d job(s).',
+                        $clusterLabel,
+                        $parsedDate->format('M j, Y'),
+                        count($validJobIds)
+                    );
+                }
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                $clusterAssignError = 'Unable to assign this cluster right now.';
+            }
+        }
+    } else {
+        $clusteringRequested = isset($_POST['run_clustering']);
     }
 
-    $clusteringRequested = isset($_POST['run_clustering']);
+    if (!$clusteringRequested) {
+        $clusteringRequested = isset($_POST['run_clustering']);
+    }
 }
 
 $jobs = $pdo->query("
@@ -469,6 +581,18 @@ foreach ($clusters as $cluster) {
             </div>
         <?php endif; ?>
 
+        <?php if ($clusterAssignMessage !== null): ?>
+            <div class="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                <?= htmlspecialchars($clusterAssignMessage) ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($clusterAssignError !== null): ?>
+            <div class="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                <?= htmlspecialchars($clusterAssignError) ?>
+            </div>
+        <?php endif; ?>
+
         <?php if ($clusteringRequested): ?>
             <div class="mb-8 rounded-3xl border border-cyan-500/30 bg-zinc-900/80 p-6">
                 <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -517,6 +641,37 @@ foreach ($clusters as $cluster) {
                                         Center: <?= htmlspecialchars(getClosestCityName($cluster['centroid_latitude'], $cluster['centroid_longitude'])) ?> (<?= number_format($cluster['centroid_latitude'], 4) ?>, <?= number_format($cluster['centroid_longitude'], 4) ?>)
                                     </div>
                                 </div>
+
+                                <form method="POST" class="mt-4 flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 sm:flex-row sm:items-end">
+                                    <input type="hidden" name="assign_cluster" value="1">
+                                    <input type="hidden" name="run_clustering" value="1">
+                                    <input type="hidden" name="cluster_label" value="<?= htmlspecialchars($cluster['cluster_label'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="cluster_centroid_latitude" value="<?= htmlspecialchars((string) $cluster['centroid_latitude'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="cluster_centroid_longitude" value="<?= htmlspecialchars((string) $cluster['centroid_longitude'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <input
+                                        type="hidden"
+                                        name="cluster_job_ids"
+                                        value="<?= htmlspecialchars(implode(',', array_map(static fn($job) => (string) ((int) $job['id']), $cluster['jobs'])), ENT_QUOTES, 'UTF-8') ?>"
+                                    >
+
+                                    <label class="flex-1 text-sm text-zinc-300">
+                                        Assign date
+                                        <input
+                                            type="date"
+                                            name="cluster_date"
+                                            min="<?= htmlspecialchars((new DateTimeImmutable('today'))->format('Y-m-d')) ?>"
+                                            required
+                                            class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
+                                        >
+                                    </label>
+
+                                    <button
+                                        type="submit"
+                                        class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
+                                    >
+                                        Assign to Date
+                                    </button>
+                                </form>
 
                                 <div class="mt-4 space-y-3">
                                     <?php foreach ($cluster['jobs'] as $clusteredJob): ?>
