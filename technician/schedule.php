@@ -524,6 +524,55 @@ foreach ($clusters as $cluster) {
         $clusterLookup[(int) $job['id']] = $cluster['cluster_label'];
     }
 }
+
+$scheduledCalendarData = [];
+try {
+    ensureClusterSchedulingTables($pdo);
+    $calendarRows = $pdo->query("
+        SELECT
+            sc.id              AS cluster_id,
+            sc.cluster_label,
+            sc.scheduled_date,
+            sr.id              AS job_id,
+            c.first_name,
+            c.last_name,
+            c.city,
+            sr.priority_level,
+            sr.problem_summary
+        FROM scheduled_clusters sc
+        JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
+        JOIN service_requests sr ON sr.id = scj.service_request_id
+        JOIN customers c ON c.id = sr.customer_id
+        ORDER BY sc.scheduled_date, sc.id, sr.id
+    ")->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($calendarRows as $row) {
+        $date      = $row['scheduled_date'];
+        $clusterId = (int) $row['cluster_id'];
+        if (!isset($scheduledCalendarData[$date])) {
+            $scheduledCalendarData[$date] = [];
+        }
+        if (!isset($scheduledCalendarData[$date][$clusterId])) {
+            $scheduledCalendarData[$date][$clusterId] = [
+                'label' => $row['cluster_label'],
+                'jobs'  => [],
+            ];
+        }
+        $scheduledCalendarData[$date][$clusterId]['jobs'][] = [
+            'name'     => $row['first_name'] . ' ' . $row['last_name'],
+            'city'     => $row['city'] ?? '',
+            'priority' => $row['priority_level'] ?? 'standard',
+            'problem'  => $row['problem_summary'] ?? '',
+        ];
+    }
+} catch (Throwable $e) {
+    // Tables may not exist yet; calendar will show empty
+}
+
+$calendarJson = [];
+foreach ($scheduledCalendarData as $date => $clusterGroup) {
+    $calendarJson[$date] = array_values($clusterGroup);
+}
 ?>
 
 <!DOCTYPE html>
@@ -540,6 +589,25 @@ foreach ($clusters as $cluster) {
 <body class="bg-zinc-950 text-white p-8">
     <div class="max-w-7xl mx-auto">
         <h1 class="text-5xl font-bold mb-2">Scheduling Dashboard</h1>
+
+        <div class="mt-4 mb-8 flex gap-2">
+            <button
+                id="tab-btn-clustering"
+                onclick="switchTab('clustering')"
+                class="rounded-lg bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-zinc-950 transition"
+            >
+                Clustering
+            </button>
+            <button
+                id="tab-btn-calendar"
+                onclick="switchTab('calendar')"
+                class="rounded-lg bg-zinc-800 px-5 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
+            >
+                Calendar View
+            </button>
+        </div>
+
+        <div id="pane-clustering">
 
         <div class="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -773,7 +841,39 @@ foreach ($clusters as $cluster) {
                 </tbody>
             </table>
         </div>
-    </div>
+        </div><!-- /pane-clustering -->
+
+        <div id="pane-calendar" class="hidden">
+            <div class="mb-8 rounded-3xl border border-zinc-700 bg-zinc-900/80 p-6">
+                <div class="mb-6 flex items-center justify-between">
+                    <button id="cal-prev" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-700">&lsaquo; Prev</button>
+                    <h2 id="cal-month-label" class="text-xl font-semibold text-white"></h2>
+                    <button id="cal-next" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-700">Next &rsaquo;</button>
+                </div>
+
+                <div class="mb-1 grid grid-cols-7 gap-1">
+                    <div class="py-2 text-center text-xs font-semibold uppercase text-zinc-500">Sun</div>
+                    <div class="py-2 text-center text-xs font-semibold uppercase text-zinc-500">Mon</div>
+                    <div class="py-2 text-center text-xs font-semibold uppercase text-zinc-500">Tue</div>
+                    <div class="py-2 text-center text-xs font-semibold uppercase text-zinc-500">Wed</div>
+                    <div class="py-2 text-center text-xs font-semibold uppercase text-zinc-500">Thu</div>
+                    <div class="py-2 text-center text-xs font-semibold uppercase text-zinc-500">Fri</div>
+                    <div class="py-2 text-center text-xs font-semibold uppercase text-zinc-500">Sat</div>
+                </div>
+
+                <div id="cal-grid" class="grid grid-cols-7 gap-1"></div>
+
+                <div id="cal-day-details" class="mt-6 hidden">
+                    <h3 id="cal-day-label" class="mb-3 text-lg font-semibold text-white"></h3>
+                    <div id="cal-day-content" class="space-y-4"></div>
+                </div>
+
+                <div id="cal-no-events" class="mt-6 hidden rounded-2xl border border-zinc-700 bg-zinc-950/50 px-4 py-6 text-center text-sm text-zinc-400">
+                    No clusters scheduled for this day.
+                </div>
+            </div>
+        </div><!-- /pane-calendar -->
+    </div><!-- /max-w-7xl -->
 </body>
 <script>
     flatpickr('.cluster-date-picker', {
@@ -802,5 +902,176 @@ foreach ($clusters as $cluster) {
 
         card.remove();
     });
+
+    // ── Tab switching ────────────────────────────────────────────────────────
+    function switchTab(tab) {
+        const paneC = document.getElementById('pane-clustering');
+        const paneK = document.getElementById('pane-calendar');
+        const btnC  = document.getElementById('tab-btn-clustering');
+        const btnK  = document.getElementById('tab-btn-calendar');
+
+        const activeClass   = 'rounded-lg bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-zinc-950 transition';
+        const inactiveClass = 'rounded-lg bg-zinc-800 px-5 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700';
+
+        if (tab === 'calendar') {
+            paneC.classList.add('hidden');
+            paneK.classList.remove('hidden');
+            btnC.className = inactiveClass;
+            btnK.className = activeClass;
+        } else {
+            paneK.classList.add('hidden');
+            paneC.classList.remove('hidden');
+            btnC.className = activeClass;
+            btnK.className = inactiveClass;
+        }
+    }
+
+    // ── Calendar view ────────────────────────────────────────────────────────
+    const calendarData = <?= json_encode($calendarJson, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+
+    let calYear         = new Date().getFullYear();
+    let calMonth        = new Date().getMonth(); // 0-indexed
+    let calSelectedDate = null;
+
+    const MONTH_NAMES = [
+        'January','February','March','April','May','June',
+        'July','August','September','October','November','December'
+    ];
+
+    function escHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str || '';
+        return d.innerHTML;
+    }
+
+    function priorityBadge(priority) {
+        const p   = (priority || 'standard').toLowerCase();
+        const cls = p === 'emergency'
+            ? 'bg-red-500/20 text-red-300'
+            : p === 'vip'
+                ? 'bg-orange-500/20 text-orange-300'
+                : 'bg-blue-500/20 text-blue-300';
+        const label = p.charAt(0).toUpperCase() + p.slice(1);
+        return `<span class="flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${cls}">${label}</span>`;
+    }
+
+    function renderCalendar() {
+        const grid  = document.getElementById('cal-grid');
+        const label = document.getElementById('cal-month-label');
+        if (!grid || !label) return;
+
+        label.textContent = MONTH_NAMES[calMonth] + ' ' + calYear;
+        grid.innerHTML = '';
+
+        const firstDayOfWeek = new Date(calYear, calMonth, 1).getDay();
+        const daysInMonth    = new Date(calYear, calMonth + 1, 0).getDate();
+        const today          = new Date();
+        const todayStr       = today.getFullYear()
+            + '-' + String(today.getMonth() + 1).padStart(2, '0')
+            + '-' + String(today.getDate()).padStart(2, '0');
+
+        // Blank leading cells
+        for (let i = 0; i < firstDayOfWeek; i++) {
+            const blank = document.createElement('div');
+            blank.className = 'h-14 rounded-lg';
+            grid.appendChild(blank);
+        }
+
+        // Day cells
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr   = calYear
+                + '-' + String(calMonth + 1).padStart(2, '0')
+                + '-' + String(day).padStart(2, '0');
+            const scheduled = !!calendarData[dateStr];
+            const isToday   = dateStr === todayStr;
+            const isSelected = dateStr === calSelectedDate;
+
+            const cell  = document.createElement('button');
+            cell.type   = 'button';
+            cell.dataset.date = dateStr;
+
+            let cls = 'h-14 w-full rounded-lg flex flex-col items-center justify-center gap-1 text-sm font-medium transition ';
+            if (isSelected) {
+                cls += 'bg-cyan-500 text-zinc-950 ';
+            } else if (isToday) {
+                cls += 'border border-cyan-500/60 text-white hover:bg-zinc-800 ';
+            } else {
+                cls += 'text-zinc-300 hover:bg-zinc-800 ';
+            }
+            cell.className = cls;
+
+            let inner = `<span>${day}</span>`;
+            if (scheduled && !isSelected) {
+                inner += '<span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>';
+            } else if (scheduled && isSelected) {
+                inner += '<span class="h-1.5 w-1.5 rounded-full bg-zinc-950/60"></span>';
+            }
+            cell.innerHTML = inner;
+
+            cell.addEventListener('click', function () {
+                calSelectedDate = dateStr;
+                renderCalendar();
+                showDayDetails(dateStr);
+            });
+
+            grid.appendChild(cell);
+        }
+    }
+
+    function showDayDetails(dateStr) {
+        const detailsEl = document.getElementById('cal-day-details');
+        const labelEl   = document.getElementById('cal-day-label');
+        const contentEl = document.getElementById('cal-day-content');
+        const emptyEl   = document.getElementById('cal-no-events');
+
+        const clusters = calendarData[dateStr] || [];
+
+        // Format the selected date nicely
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dateObj   = new Date(y, m - 1, d);
+        labelEl.textContent = dateObj.toLocaleDateString('en-US', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+
+        detailsEl.classList.remove('hidden');
+
+        if (clusters.length === 0) {
+            contentEl.innerHTML = '';
+            emptyEl.classList.remove('hidden');
+            return;
+        }
+
+        emptyEl.classList.add('hidden');
+        contentEl.innerHTML = clusters.map(cluster => `
+            <div class="rounded-2xl border border-zinc-700 bg-zinc-950/70 p-4">
+                <div class="mb-3 font-semibold text-white">${escHtml(cluster.label)}</div>
+                <div class="space-y-2">
+                    ${cluster.jobs.map(job => `
+                        <div class="flex items-start justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2.5">
+                            <div class="min-w-0">
+                                <div class="truncate font-medium text-white text-sm">${escHtml(job.name)}</div>
+                                <div class="mt-0.5 text-xs text-zinc-400">${escHtml(job.city)} &bull; ${escHtml(job.problem)}</div>
+                            </div>
+                            ${priorityBadge(job.priority)}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    document.getElementById('cal-prev').addEventListener('click', function () {
+        calMonth--;
+        if (calMonth < 0) { calMonth = 11; calYear--; }
+        renderCalendar();
+    });
+
+    document.getElementById('cal-next').addEventListener('click', function () {
+        calMonth++;
+        if (calMonth > 11) { calMonth = 0; calYear++; }
+        renderCalendar();
+    });
+
+    renderCalendar();
 </script>
 </html>
