@@ -655,7 +655,7 @@ foreach ($clusters as $cluster) {
                                     >
 
                                     <label class="flex-1 text-sm text-zinc-300">
-                                        Schedule for
+                                       Schedule for date:
                                         <input
                                             type="date"
                                             name="cluster_date"
