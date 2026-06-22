@@ -299,7 +299,9 @@ function buildGeographicClusters(array $jobs)
         $clusters[$assignedClusterIndex] = $cluster;
     }
 
-    foreach ($clusters as $clusterIndex => $cluster) {
+    $processedClusters = [];
+
+    foreach ($clusters as $cluster) {
         usort($cluster['jobs'], 'compareJobsByPriority');
         $centroid = getClusterCentroid($cluster['jobs']);
         if ($centroid['latitude'] !== null && $centroid['longitude'] !== null) {
@@ -307,20 +309,23 @@ function buildGeographicClusters(array $jobs)
             $cluster['centroid_longitude'] = $centroid['longitude'];
         }
 
-        foreach ($cluster['jobs'] as $jobIndex => $clusterJob) {
-            $cluster['jobs'][$jobIndex]['distance_from_center_miles'] = haversineDistanceMiles(
+        $processedJobs = [];
+        foreach ($cluster['jobs'] as $clusterJob) {
+            $clusterJob['distance_from_center_miles'] = haversineDistanceMiles(
                 $clusterJob['latitude'],
                 $clusterJob['longitude'],
                 $cluster['centroid_latitude'],
                 $cluster['centroid_longitude']
             );
+            $processedJobs[] = $clusterJob;
         }
+        $cluster['jobs'] = $processedJobs;
 
         $cluster['max_distance_miles'] = getMaxSpreadMiles($cluster['jobs']);
-        $clusters[$clusterIndex] = $cluster;
+        $processedClusters[] = $cluster;
     }
 
-    usort($clusters, function ($leftCluster, $rightCluster) {
+    usort($processedClusters, function ($leftCluster, $rightCluster) {
         $priorityComparison = $leftCluster['highest_priority_order'] <=> $rightCluster['highest_priority_order'];
 
         if ($priorityComparison !== 0) {
@@ -330,8 +335,7 @@ function buildGeographicClusters(array $jobs)
         return $rightCluster['job_count'] <=> $leftCluster['job_count'];
     });
 
-    error_log("DEBUG: First cluster distance = " . ($clusters[0][0] ?? 'NOT SET'));
-    return $clusters;
+    return $processedClusters;
 }
 
 function ensureClusterSchedulingTables(PDO $pdo): void
