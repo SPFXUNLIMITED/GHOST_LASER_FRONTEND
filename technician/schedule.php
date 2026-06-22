@@ -829,6 +829,8 @@ $scheduledJobsStmt = $pdo->prepare("
         sr.problem_summary,
         sr.preferred_date_start,
         sr.preferred_date_end,
+        sr.latitude AS job_latitude,
+        sr.longitude AS job_longitude,
         c.first_name,
         c.last_name,
         c.email,
@@ -864,6 +866,19 @@ foreach ($scheduledJobs as $scheduledJob) {
     $scheduledJob['customer_name'] = $customerName !== '' ? $customerName : 'Unknown Customer';
     $scheduledJob['priority_meta'] = getPriorityScheduleWindow($scheduledJob['priority_level'] ?? 'standard');
     $scheduledJob['service_address'] = formatCustomerAddress($scheduledJob);
+    if (
+        hasValidCoordinates($scheduledJob['job_latitude'] ?? null, $scheduledJob['job_longitude'] ?? null) &&
+        hasValidCoordinates($scheduledJob['centroid_latitude'] ?? null, $scheduledJob['centroid_longitude'] ?? null)
+    ) {
+        $scheduledJob['distance_from_center_miles'] = haversineDistanceMiles(
+            (float) $scheduledJob['job_latitude'],
+            (float) $scheduledJob['job_longitude'],
+            (float) $scheduledJob['centroid_latitude'],
+            (float) $scheduledJob['centroid_longitude']
+        );
+    } else {
+        $scheduledJob['distance_from_center_miles'] = null;
+    }
     $scheduledJobsByDate[$dateKey][] = $scheduledJob;
 
     if (!isset($scheduledClustersByDate[$dateKey][$scheduledClusterId])) {
@@ -1100,7 +1115,7 @@ while ($calendarCursor <= $calendarEnd) {
                                                             class="scheduled-job-trigger block w-full truncate text-left text-[11px] text-zinc-100 transition hover:text-cyan-100"
                                                             data-job-details="<?= htmlspecialchars(json_encode($modalPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
                                                         >
-                                                            <?= htmlspecialchars($scheduledJob['customer_name']) ?>
+                                                            <?= htmlspecialchars($scheduledJob['customer_name']) ?><?php if ($scheduledJob['distance_from_center_miles'] !== null): ?> <span class="text-zinc-400">+<?= number_format((float) $scheduledJob['distance_from_center_miles'], 1) ?>mi</span><?php endif; ?>
                                                         </button>
                                                     <?php endforeach; ?>
                                                 </div>
