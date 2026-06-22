@@ -3,7 +3,6 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 const CLUSTER_DISTANCE_MILES = 20;
-const MAX_JOBS_PER_CLUSTER = 3;
 
 /**
  * Determine whether the provided coordinates can be used for geographic clustering.
@@ -146,15 +145,15 @@ function getClosestCityName(float $latitude, float $longitude): string
     return $closestCity;
 }
 
-function isBusinessDay(DateTimeImmutable $date)
+function isBusinessDay(DateTimeImmutable $date, array $settings)
 {
-    return (int) $date->format('N') < 6;
+    return in_array((int) $date->format('N'), getSchedulingWorkDayNumbers((string) $settings['work_days']), true);
 }
 
 /**
  * Add business days while skipping weekends.
  */
-function addBusinessDays(DateTimeImmutable $date, $businessDays)
+function addBusinessDays(DateTimeImmutable $date, $businessDays, array $settings)
 {
     $currentDate = $date;
     $daysAdded = 0;
@@ -162,7 +161,7 @@ function addBusinessDays(DateTimeImmutable $date, $businessDays)
     while ($daysAdded < $businessDays) {
         $currentDate = $currentDate->modify('+1 day');
 
-        if (isBusinessDay($currentDate)) {
+        if (isBusinessDay($currentDate, $settings)) {
             $daysAdded++;
         }
     }
@@ -201,10 +200,12 @@ function formatCustomerAddress(array $customer): string
 /**
  * Build the scheduling window each job should follow based on its priority.
  */
-function getPriorityScheduleWindow($priorityLevel)
+function getPriorityScheduleWindow($priorityLevel, array $settings)
 {
     $today = new DateTimeImmutable('today');
     $normalizedPriority = strtolower((string) $priorityLevel);
+    $timeWindowHours = max(1, (int) ($settings['default_time_window_size_hours'] ?? 2));
+    $timeWindowSummary = $timeWindowHours . ' hour' . ($timeWindowHours === 1 ? '' : 's') . ' per visit';
 
     switch ($normalizedPriority) {
         case 'emergency':
@@ -214,26 +215,26 @@ function getPriorityScheduleWindow($priorityLevel)
             return [
                 'label' => 'Emergency',
                 'order' => 1,
-                'window_summary' => $startDate->format('M j') . ' - ' . $endDate->format('M j') . ' (same/next day)',
+                'window_summary' => $startDate->format('M j') . ' - ' . $endDate->format('M j') . ' (same/next day, ' . $timeWindowSummary . ')',
             ];
 
         case 'vip':
-            $endDate = addBusinessDays($today, 2);
+            $endDate = addBusinessDays($today, 2, $settings);
 
             return [
                 'label' => 'VIP',
                 'order' => 2,
-                'window_summary' => 'Due by ' . $endDate->format('M j') . ' (within 2 business days)',
+                'window_summary' => 'Due by ' . $endDate->format('M j') . ' (within 2 business days, ' . $timeWindowSummary . ')',
             ];
 
         default:
-            $startDate = addBusinessDays($today, 3);
-            $endDate = addBusinessDays($today, 5);
+            $startDate = addBusinessDays($today, 3, $settings);
+            $endDate = addBusinessDays($today, 5, $settings);
 
             return [
                 'label' => 'Standard',
                 'order' => 3,
-                'window_summary' => $startDate->format('M j') . ' - ' . $endDate->format('M j') . ' (3-5 business days)',
+                'window_summary' => $startDate->format('M j') . ' - ' . $endDate->format('M j') . ' (3-5 business days, ' . $timeWindowSummary . ')',
             ];
     }
 }
@@ -251,9 +252,10 @@ function getPriorityScheduleWindow($priorityLevel)
  *   Recalculate the centroid from all member jobs, compute every job's
  *   distance_from_center_miles, and record the max_distance_miles spread.
  */
-function buildGeographicClusters(array $jobs)
+function buildGeographicClusters(array $jobs, array $settings)
 {
     usort($jobs, 'compareJobsByPriority');
+    $maxJobsPerCluster = calculateTechnicianDailyCapacity($settings);
 
     // ── Pass 1: greedy cluster assignment ────────────────────────────────────
 
@@ -281,7 +283,7 @@ function buildGeographicClusters(array $jobs)
                 $centroidLng
             );
 
-            if ($distanceToCenter <= CLUSTER_DISTANCE_MILES && $jobCount < MAX_JOBS_PER_CLUSTER) {
+            if ($distanceToCenter <= CLUSTER_DISTANCE_MILES && $jobCount < $maxJobsPerCluster) {
                 $clusters[$i]['jobs'][] = $job;
                 $placed = true;
                 break;
@@ -411,7 +413,11 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/../project/db.php';
+require_once __DIR__ . '/../scheduling_settings.php';
 ensureClusterSchedulingTables($pdo);
+$schedulingSettings = getSchedulingSettings($pdo);
+$dailyTechnicianCapacity = calculateTechnicianDailyCapacity($schedulingSettings);
+$disabledScheduleWeekdays = getDisabledJsWeekdayIndexes($schedulingSettings);
 
 $clusteringRequested = false;
 $testDataMessage = null;
@@ -660,11 +666,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
                 case 'vip':
                     $startDate = $today->format('Y-m-d');
-                    $endDate   = addBusinessDays($today, 2)->format('Y-m-d');
+                    $endDate   = addBusinessDays($today, 2, $schedulingSettings)->format('Y-m-d');
                     break;
                 default:
-                    $startDate = addBusinessDays($today, 3)->format('Y-m-d');
-                    $endDate   = addBusinessDays($today, 5)->format('Y-m-d');
+                    $startDate = addBusinessDays($today, 3, $schedulingSettings)->format('Y-m-d');
+                    $endDate   = addBusinessDays($today, 5, $schedulingSettings)->format('Y-m-d');
                     break;
             }
 
@@ -706,6 +712,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($clusterLabel === '' || !$isValidDate || $clusterJobIds === []) {
             $clusterAssignError = 'Select a valid date and cluster before assigning.';
+        } elseif (!isBusinessDay($parsedDate, $schedulingSettings)) {
+            $clusterAssignError = 'Selected date is outside the configured work days.';
         } else {
             try {
                 ensureClusterSchedulingTables($pdo);
@@ -722,6 +730,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($validJobIds === []) {
                     $clusterAssignError = 'No assignable jobs were found for this cluster.';
+                } elseif (count($validJobIds) > $dailyTechnicianCapacity) {
+                    $clusterAssignError = sprintf(
+                        'This cluster has %d jobs, but current technician-day capacity is %d based on your admin settings.',
+                        count($validJobIds),
+                        $dailyTechnicianCapacity
+                    );
                 } else {
                     $insertClusterStmt = $pdo->prepare("
                         INSERT INTO scheduled_clusters
@@ -799,7 +813,7 @@ $jobs = $pdo->query("
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 foreach ($jobs as &$job) {
-    $job['priority_meta'] = getPriorityScheduleWindow($job['priority_level'] ?? 'standard');
+    $job['priority_meta'] = getPriorityScheduleWindow($job['priority_level'] ?? 'standard', $schedulingSettings);
 }
 unset($job);
 
@@ -807,7 +821,7 @@ $clusterableJobs = array_values(array_filter($jobs, function ($job) {
     return hasValidCoordinates($job['latitude'] ?? null, $job['longitude'] ?? null);
 }));
 
-$clusters = $clusteringRequested ? buildGeographicClusters($clusterableJobs) : [];
+$clusters = $clusteringRequested ? buildGeographicClusters($clusterableJobs, $schedulingSettings) : [];
 $clusterLookup = [];
 
 foreach ($clusters as $cluster) {
@@ -864,7 +878,7 @@ foreach ($scheduledJobs as $scheduledJob) {
     $scheduledClusterId = (int) $scheduledJob['scheduled_cluster_id'];
     $customerName = trim((string) $scheduledJob['first_name'] . ' ' . (string) $scheduledJob['last_name']);
     $scheduledJob['customer_name'] = $customerName !== '' ? $customerName : 'Unknown Customer';
-    $scheduledJob['priority_meta'] = getPriorityScheduleWindow($scheduledJob['priority_level'] ?? 'standard');
+    $scheduledJob['priority_meta'] = getPriorityScheduleWindow($scheduledJob['priority_level'] ?? 'standard', $schedulingSettings);
     $scheduledJob['service_address'] = formatCustomerAddress($scheduledJob);
     if (
         hasValidCoordinates($scheduledJob['job_latitude'] ?? null, $scheduledJob['job_longitude'] ?? null) &&
@@ -944,6 +958,7 @@ while ($calendarCursor <= $calendarEnd) {
                 <p class="text-zinc-400">Pending service requests (<?= count($jobs) ?> found)</p>
                 <p class="mt-2 text-sm text-zinc-500">
                     Geographic clustering groups pending jobs with valid coordinates into route-friendly batches within <?= CLUSTER_DISTANCE_MILES ?> miles.
+                    Current work week: <?= htmlspecialchars(getSchedulingWorkDayLabel((string) $schedulingSettings['work_days'])) ?>, <?= htmlspecialchars($schedulingSettings['business_start_time']) ?>-<?= htmlspecialchars($schedulingSettings['business_end_time']) ?>, <?= (int) $schedulingSettings['default_time_window_size_hours'] ?>h windows, max <?= $dailyTechnicianCapacity ?> jobs/day.
                 </p>
             </div>
 
@@ -985,6 +1000,30 @@ while ($calendarCursor <= $calendarEnd) {
                         Run Geographic Clustering
                     </button>
                 </form>
+                <a
+                    href="../settings.php"
+                    class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:border-cyan-400 hover:text-white"
+                >
+                    Admin Settings
+                </a>
+            </div>
+        </div>
+
+        <div class="mb-8 grid gap-4 md:grid-cols-3">
+            <div class="rounded-2xl border border-zinc-700 bg-zinc-900/80 p-4">
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Service Hub</div>
+                <div class="mt-2 text-sm font-medium text-white"><?= htmlspecialchars($schedulingSettings['shop_address']) ?></div>
+                <div class="mt-1 text-xs text-zinc-400"><?= htmlspecialchars($schedulingSettings['shop_latitude']) ?>, <?= htmlspecialchars($schedulingSettings['shop_longitude']) ?></div>
+            </div>
+            <div class="rounded-2xl border border-zinc-700 bg-zinc-900/80 p-4">
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Route Defaults</div>
+                <div class="mt-2 text-sm font-medium text-white"><?= (int) $schedulingSettings['average_job_duration_minutes'] ?> min/job + <?= (int) $schedulingSettings['default_buffer_between_jobs_minutes'] ?> min buffer</div>
+                <div class="mt-1 text-xs text-zinc-400">Capacity auto-calculated from business hours and technician limit.</div>
+            </div>
+            <div class="rounded-2xl border border-zinc-700 bg-zinc-900/80 p-4">
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Dispatch Window</div>
+                <div class="mt-2 text-sm font-medium text-white"><?= (int) $schedulingSettings['default_time_window_size_hours'] ?> hour windows</div>
+                <div class="mt-1 text-xs text-zinc-400">Work days: <?= htmlspecialchars(getSchedulingWorkDayLabel((string) $schedulingSettings['work_days'])) ?></div>
             </div>
         </div>
 
@@ -1137,7 +1176,7 @@ while ($calendarCursor <= $calendarEnd) {
                         <h2 class="text-2xl font-semibold text-white">Clustering Results</h2>
                         <p class="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
                             Jobs are ranked by their priority response window first, then grouped by real-world distance using the Haversine formula.
-                            Emergency requests stay at the top of each suggested cluster, followed by VIP and Standard work.
+                            Emergency requests stay at the top of each suggested cluster, followed by VIP and Standard work, with up to <?= $dailyTechnicianCapacity ?> jobs per scheduled route.
                         </p>
                     </div>
 
@@ -1347,9 +1386,16 @@ while ($calendarCursor <= $calendarEnd) {
     </div>
     </div>
 <script>
+    const disabledScheduleWeekdays = <?= json_encode($disabledScheduleWeekdays, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+
     flatpickr('.cluster-date-picker', {
         minDate: 'today',
         dateFormat: 'Y-m-d',
+        disable: [
+            function (date) {
+                return disabledScheduleWeekdays.includes(date.getDay());
+            }
+        ],
         disableMobile: false
     });
 

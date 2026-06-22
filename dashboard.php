@@ -158,12 +158,18 @@ if ($adminUsername === '') {
                             You are signed in and ready to access the admin tools available in this portal.
                         </p>
 
-                        <div class="mt-6">
+                        <div class="mt-6 space-y-3">
                             <a
                                 href="technician/schedule.php"
                                 class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-cyan-500 px-4 py-3 text-sm font-semibold text-zinc-950 transition-all btn-glow hover:bg-cyan-400"
                             >
                                 Go to Technician Schedule
+                            </a>
+                            <a
+                                href="settings.php"
+                                class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition-all hover:border-cyan-400 hover:text-white"
+                            >
+                                Open Admin Settings
                             </a>
                         </div>
                     </div>
