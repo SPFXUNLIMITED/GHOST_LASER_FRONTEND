@@ -999,13 +999,10 @@ while ($calendarCursor <= $calendarEnd) {
 }
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scheduling Dashboard | Ghost Laser</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+<?php
+$pageTitle   = 'Scheduling Dashboard | Ghost Laser';
+$bodyClass   = 'px-8 pb-8 pt-24';
+$extraHead   = <<<'HTML'
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1017,9 +1014,10 @@ while ($calendarCursor <= $calendarEnd) {
             font-weight: 600;
         }
     </style>
-</head>
-<body class="bg-zinc-950 text-white px-8 pb-8 pt-24">
-    <?php require_once __DIR__ . '/schedule-header.php'; ?>
+HTML;
+$headerRight = '<a href="../dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Dashboard</a>';
+require_once __DIR__ . '/../templates/header.php';
+?>
     <div class="max-w-7xl mx-auto">
         <h1 class="text-5xl font-bold mb-2">Scheduling Dashboard</h1>
 
