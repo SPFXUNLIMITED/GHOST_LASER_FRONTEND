@@ -1041,6 +1041,7 @@ while ($calendarCursor <= $calendarEnd) {
                     </div>
                 <?php else: ?>
                     <div class="mt-6 grid gap-4 xl:grid-cols-2">
+                        <?php error_log("Rendering " . count($clusters) . " clusters. First cluster label: " . ($clusters[0] ?? 'missing')); ?>
                         <?php foreach ($clusters as $cluster): ?>
                             <section class="rounded-2xl border border-zinc-700 bg-zinc-950/70 p-5">
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
