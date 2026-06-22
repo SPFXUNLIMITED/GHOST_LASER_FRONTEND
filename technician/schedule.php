@@ -755,9 +755,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($clusterLabel === '' || !$isValidDate || $clusterJobIds === []) {
             $clusterAssignError = 'Select a valid date and cluster before assigning.';
-        } elseif (isset(getUsHolidays((int) $parsedDate->format('Y'))[$clusterDate])) {
-            $holidayName = getUsHolidays((int) $parsedDate->format('Y'))[$clusterDate];
-            $clusterAssignError = htmlspecialchars($clusterDate) . ' is a US holiday (' . htmlspecialchars($holidayName) . ') and cannot be used for scheduling.';
         } else {
             try {
                 ensureClusterSchedulingTables($pdo);
@@ -998,6 +995,14 @@ while ($calendarCursor <= $calendarEnd) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <style>
+        .flatpickr-day.holiday-date:not(.selected) {
+            border-color: rgba(245, 158, 11, 0.55);
+            background: rgba(245, 158, 11, 0.18);
+            color: #fbbf24;
+            font-weight: 600;
+        }
+    </style>
 </head>
 <body class="bg-zinc-950 text-white p-8">
     <div class="max-w-7xl mx-auto">
@@ -1437,7 +1442,7 @@ while ($calendarCursor <= $calendarEnd) {
     </div>
 <script>
     <?php
-    // Pre-compute holiday dates for the next 3 years for flatpickr disable.
+    // Pre-compute holiday dates for the next 3 years so flatpickr can mark them visually.
     $flatpickrHolidayYears = [(int) date('Y'), (int) date('Y') + 1, (int) date('Y') + 2];
     $flatpickrHolidays = [];
     foreach ($flatpickrHolidayYears as $fpYear) {
@@ -1450,12 +1455,11 @@ while ($calendarCursor <= $calendarEnd) {
         minDate: 'today',
         dateFormat: 'Y-m-d',
         disableMobile: false,
-        disable: usHolidayDates,
         onDayCreate: function(dObj, dStr, fp, dayElem) {
             const dateStr = dayElem.dateObj.toISOString().slice(0, 10);
             if (usHolidayDates.includes(dateStr)) {
-                dayElem.title = 'US Holiday — scheduling not available';
-                dayElem.style.opacity = '0.4';
+                dayElem.title = 'US Holiday';
+                dayElem.classList.add('holiday-date');
             }
         }
     });
