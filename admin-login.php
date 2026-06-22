@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$username]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($user && ($user['is_admin'] == 1 || $user['role'] === 'admin') && password_verify($password, $user['password_hash'])) {
+        if ($user && ($user['is_admin'] == 1 || in_array($user['role'], ['admin', 'moderator'], true)) && password_verify($password, $user['password_hash'])) {
             session_regenerate_id(true);
             $_SESSION['admin_id']       = $user['id'];
             $_SESSION['admin_username'] = $username;
