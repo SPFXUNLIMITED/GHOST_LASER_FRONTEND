@@ -139,6 +139,34 @@ function addBusinessDays(DateTimeImmutable $date, $businessDays)
 }
 
 /**
+ * Build a one-line service address for scheduled job detail views.
+ */
+function formatCustomerAddress(array $customer): string
+{
+    $lineOne = trim((string) ($customer['address'] ?? ''));
+    $lineTwoParts = array_values(array_filter([
+        trim((string) ($customer['city'] ?? '')),
+        trim((string) ($customer['state'] ?? '')),
+        trim((string) ($customer['zip'] ?? '')),
+    ], static fn($value) => $value !== ''));
+
+    $lineTwo = '';
+    if ($lineTwoParts !== []) {
+        $lineTwo = implode(', ', array_slice($lineTwoParts, 0, 2));
+        if (isset($lineTwoParts[2])) {
+            $lineTwo .= ' ' . $lineTwoParts[2];
+        }
+    }
+
+    $parts = array_filter([
+        $lineOne,
+        $lineTwo,
+    ], static fn($value) => $value !== '');
+
+    return $parts === [] ? 'Address unavailable' : implode(' • ', $parts);
+}
+
+/**
  * Build the scheduling window each job should follow based on its priority.
  */
 function getPriorityScheduleWindow($priorityLevel)
@@ -291,12 +319,15 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 require_once '../project/db.php';
+ensureClusterSchedulingTables($pdo);
 
 $clusteringRequested = false;
 $testDataMessage = null;
 $testDataError = null;
 $clusterAssignMessage = null;
 $clusterAssignError = null;
+$currentMonth = new DateTimeImmutable('first day of this month');
+$currentMonthEnd = $currentMonth->modify('last day of this month');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $deleteId = filter_input(
@@ -321,7 +352,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    if (isset($_POST['insert_test_data'])) {
+    $unassignScheduledJobId = filter_input(
+        INPUT_POST,
+        'unassign_scheduled_job_id',
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1]]
+    );
+
+    if ($unassignScheduledJobId) {
+        try {
+            $scheduledJobLookupStmt = $pdo->prepare("
+                SELECT
+                    scj.id,
+                    scj.scheduled_cluster_id,
+                    c.first_name,
+                    c.last_name
+                FROM scheduled_cluster_jobs scj
+                JOIN service_requests sr ON sr.id = scj.service_request_id
+                JOIN customers c ON c.id = sr.customer_id
+                WHERE scj.id = :id
+                LIMIT 1
+            ");
+            $scheduledJobLookupStmt->execute([':id' => $unassignScheduledJobId]);
+            $scheduledJob = $scheduledJobLookupStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($scheduledJob === false) {
+                $clusterAssignError = 'That scheduled job could not be found.';
+            } else {
+                $deleteScheduledJobStmt = $pdo->prepare("
+                    DELETE FROM scheduled_cluster_jobs
+                    WHERE id = :id
+                ");
+                $deleteEmptyClusterStmt = $pdo->prepare("
+                    DELETE FROM scheduled_clusters
+                    WHERE id = ?
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM scheduled_cluster_jobs
+                          WHERE scheduled_cluster_id = ?
+                      )
+                ");
+
+                $pdo->beginTransaction();
+                $deleteScheduledJobStmt->execute([':id' => $unassignScheduledJobId]);
+                $deleteEmptyClusterStmt->execute([
+                    (int) $scheduledJob['scheduled_cluster_id'],
+                    (int) $scheduledJob['scheduled_cluster_id'],
+                ]);
+                $pdo->commit();
+
+                $clusterAssignMessage = sprintf(
+                    '%s returned to the clustering pool.',
+                    trim((string) $scheduledJob['first_name'] . ' ' . (string) $scheduledJob['last_name'])
+                );
+            }
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            $clusterAssignError = 'Unable to unassign that job right now.';
+        }
+    }
+
+    if (isset($_POST['insert_test_data']) && !$unassignScheduledJobId) {
         $ts = time(); // unique timestamp per button press
 
         $testCustomers = [
@@ -397,7 +491,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $testDataMessage = "Inserted {$inserted} new customer(s) and service request(s).";
-    } elseif (isset($_POST['assign_cluster'])) {
+    } elseif (isset($_POST['assign_cluster']) && !$unassignScheduledJobId) {
         $clusteringRequested = true;
         $clusterLabel = trim((string) ($_POST['cluster_label'] ?? ''));
         $clusterDate = trim((string) ($_POST['cluster_date'] ?? ''));
@@ -477,11 +571,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $clusterAssignError = 'Unable to assign this cluster right now.';
             }
         }
-    } else {
+    } elseif (!$unassignScheduledJobId) {
         $clusteringRequested = isset($_POST['run_clustering']);
     }
 
-    if (!$clusteringRequested) {
+    if (!$clusteringRequested && !$unassignScheduledJobId) {
         $clusteringRequested = isset($_POST['run_clustering']);
     }
 }
@@ -523,6 +617,70 @@ foreach ($clusters as $cluster) {
     foreach ($cluster['jobs'] as $job) {
         $clusterLookup[(int) $job['id']] = $cluster['cluster_label'];
     }
+}
+
+$scheduledJobsStmt = $pdo->prepare("
+    SELECT
+        sc.id AS scheduled_cluster_id,
+        sc.cluster_label,
+        sc.scheduled_date,
+        scj.id AS scheduled_cluster_job_id,
+        sr.id AS service_request_id,
+        sr.priority_level,
+        sr.problem_summary,
+        sr.preferred_date_start,
+        sr.preferred_date_end,
+        c.first_name,
+        c.last_name,
+        c.email,
+        c.phone,
+        c.address,
+        c.city,
+        c.state,
+        c.zip
+    FROM scheduled_clusters sc
+    JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
+    JOIN service_requests sr ON sr.id = scj.service_request_id
+    JOIN customers c ON c.id = sr.customer_id
+    WHERE sc.scheduled_date BETWEEN :month_start AND :month_end
+    ORDER BY
+        sc.scheduled_date ASC,
+        FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
+        sc.cluster_label ASC,
+        c.last_name ASC,
+        c.first_name ASC
+");
+$scheduledJobsStmt->execute([
+    ':month_start' => $currentMonth->format('Y-m-d'),
+    ':month_end' => $currentMonthEnd->format('Y-m-d'),
+]);
+$scheduledJobs = $scheduledJobsStmt->fetchAll(PDO::FETCH_ASSOC);
+$scheduledJobsByDate = [];
+
+foreach ($scheduledJobs as $scheduledJob) {
+    $dateKey = (string) $scheduledJob['scheduled_date'];
+    $customerName = trim((string) $scheduledJob['first_name'] . ' ' . (string) $scheduledJob['last_name']);
+    $scheduledJob['customer_name'] = $customerName !== '' ? $customerName : 'Unknown Customer';
+    $scheduledJob['priority_meta'] = getPriorityScheduleWindow($scheduledJob['priority_level'] ?? 'standard');
+    $scheduledJob['service_address'] = formatCustomerAddress($scheduledJob);
+    $scheduledJobsByDate[$dateKey][] = $scheduledJob;
+}
+
+$calendarStart = $currentMonth->modify('-' . $currentMonth->format('w') . ' days');
+$calendarEnd = $currentMonthEnd->modify('+' . (6 - (int) $currentMonthEnd->format('w')) . ' days');
+$calendarDays = [];
+$calendarCursor = $calendarStart;
+
+while ($calendarCursor <= $calendarEnd) {
+    $calendarDateKey = $calendarCursor->format('Y-m-d');
+    $calendarDays[] = [
+        'date' => $calendarCursor,
+        'date_key' => $calendarDateKey,
+        'is_current_month' => $calendarCursor->format('Y-m') === $currentMonth->format('Y-m'),
+        'is_today' => $calendarDateKey === (new DateTimeImmutable('today'))->format('Y-m-d'),
+        'jobs' => $scheduledJobsByDate[$calendarDateKey] ?? [],
+    ];
+    $calendarCursor = $calendarCursor->modify('+1 day');
 }
 ?>
 
@@ -598,6 +756,104 @@ foreach ($clusters as $cluster) {
                 <?= htmlspecialchars($clusterAssignError) ?>
             </div>
         <?php endif; ?>
+
+        <section class="mb-8 rounded-3xl border border-zinc-700 bg-zinc-900/80 p-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <h2 class="text-2xl font-semibold text-white"><?= htmlspecialchars($currentMonth->format('F Y')) ?></h2>
+                    <p class="mt-2 text-sm text-zinc-400">
+                        Monthly technician calendar for assigned jobs. Click a customer to view full details or unassign them back into the clustering pool.
+                    </p>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-2xl border border-zinc-700 bg-zinc-950/80 px-4 py-3">
+                        <div class="text-xs uppercase tracking-wide text-zinc-500">Scheduled Jobs</div>
+                        <div class="mt-2 text-2xl font-semibold text-white"><?= count($scheduledJobs) ?></div>
+                    </div>
+                    <div class="rounded-2xl border border-zinc-700 bg-zinc-950/80 px-4 py-3">
+                        <div class="text-xs uppercase tracking-wide text-zinc-500">Active Days</div>
+                        <div class="mt-2 text-2xl font-semibold text-white"><?= count(array_filter($scheduledJobsByDate)) ?></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 overflow-x-auto pb-2">
+                <div class="min-w-[980px]">
+                    <div class="grid grid-cols-7 gap-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                        <?php foreach (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as $weekday): ?>
+                            <div><?= htmlspecialchars($weekday) ?></div>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-7 gap-3">
+                        <?php foreach ($calendarDays as $calendarDay): ?>
+                            <div class="min-h-[13rem] rounded-2xl border p-4 <?= $calendarDay['is_current_month'] ? 'border-zinc-700 bg-zinc-950/80' : 'border-zinc-800 bg-zinc-950/40 text-zinc-600' ?>">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm font-semibold <?= $calendarDay['is_today'] ? 'rounded-full bg-cyan-500 px-2 py-1 text-zinc-950' : ($calendarDay['is_current_month'] ? 'text-white' : 'text-zinc-600') ?>">
+                                        <?= htmlspecialchars($calendarDay['date']->format('j')) ?>
+                                    </span>
+                                    <?php if ($calendarDay['jobs'] !== []): ?>
+                                        <span class="rounded-full bg-cyan-500/15 px-2 py-1 text-xs font-medium text-cyan-300">
+                                            <?= count($calendarDay['jobs']) ?> job<?= count($calendarDay['jobs']) === 1 ? '' : 's' ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+
+                                <div class="mt-4 space-y-2">
+                                    <?php if ($calendarDay['jobs'] === []): ?>
+                                        <?php if ($calendarDay['is_current_month']): ?>
+                                            <div class="rounded-xl border border-dashed border-zinc-800 px-3 py-4 text-sm text-zinc-500">
+                                                No jobs scheduled
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <?php foreach ($calendarDay['jobs'] as $scheduledJob): ?>
+                                            <?php
+                                            $modalPayload = [
+                                                'customer_name' => $scheduledJob['customer_name'],
+                                                'service_address' => $scheduledJob['service_address'],
+                                                'city' => $scheduledJob['city'] ?? 'N/A',
+                                                'email' => $scheduledJob['email'] ?? 'N/A',
+                                                'phone' => $scheduledJob['phone'] ?? 'N/A',
+                                                'priority' => $scheduledJob['priority_meta']['label'],
+                                                'window_summary' => $scheduledJob['priority_meta']['window_summary'],
+                                                'problem_summary' => $scheduledJob['problem_summary'] ?? 'No summary provided',
+                                                'scheduled_date' => $scheduledJob['scheduled_date'],
+                                                'cluster_label' => $scheduledJob['cluster_label'],
+                                            ];
+                                            ?>
+                                            <div class="flex items-start gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2">
+                                                <button
+                                                    type="button"
+                                                    class="scheduled-job-trigger flex-1 text-left"
+                                                    data-job-details="<?= htmlspecialchars(json_encode($modalPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
+                                                >
+                                                    <div class="text-sm font-medium text-white hover:text-cyan-300 transition"><?= htmlspecialchars($scheduledJob['customer_name']) ?></div>
+                                                    <div class="mt-1 text-xs text-zinc-500">
+                                                        <?= htmlspecialchars($scheduledJob['cluster_label']) ?> &bull; <?= htmlspecialchars($scheduledJob['priority_meta']['label']) ?>
+                                                    </div>
+                                                </button>
+
+                                                <form method="POST" onsubmit="return confirm('Return this job to the clustering pool?');">
+                                                    <input type="hidden" name="unassign_scheduled_job_id" value="<?= (int) $scheduledJob['scheduled_cluster_job_id'] ?>">
+                                                    <button
+                                                        type="submit"
+                                                        class="inline-flex h-6 w-6 items-center justify-center rounded-full text-sm text-zinc-500 transition hover:bg-zinc-700 hover:text-red-300"
+                                                        title="Unassign job"
+                                                        aria-label="Unassign <?= htmlspecialchars($scheduledJob['customer_name']) ?>"
+                                                    >&times;</button>
+                                                </form>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <?php if ($clusteringRequested): ?>
             <div class="mb-8 rounded-3xl border border-cyan-500/30 bg-zinc-900/80 p-6">
@@ -774,7 +1030,46 @@ foreach ($clusters as $cluster) {
             </table>
         </div>
     </div>
-</body>
+    <div id="scheduled-job-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-zinc-950/80 px-4">
+    <div class="absolute inset-0 modal-overlay"></div>
+    <div class="relative z-10 w-full max-w-2xl rounded-3xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl shadow-black/40">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <p class="text-sm uppercase tracking-[0.2em] text-cyan-300">Scheduled Job</p>
+                <h3 id="modal-customer-name" class="mt-2 text-2xl font-semibold text-white">Customer</h3>
+            </div>
+            <button type="button" id="modal-close-button" class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-800 hover:text-white" aria-label="Close modal">&times;</button>
+        </div>
+
+        <div class="mt-6 grid gap-4 sm:grid-cols-2">
+            <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Service address</div>
+                <div id="modal-address" class="mt-2 text-sm leading-6 text-zinc-200">Address unavailable</div>
+            </div>
+            <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Contact</div>
+                <div class="mt-2 space-y-2 text-sm text-zinc-200">
+                    <div><span class="text-zinc-500">Phone:</span> <span id="modal-phone">N/A</span></div>
+                    <div><span class="text-zinc-500">Email:</span> <span id="modal-email">N/A</span></div>
+                    <div><span class="text-zinc-500">City:</span> <span id="modal-city">N/A</span></div>
+                </div>
+            </div>
+            <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Scheduling</div>
+                <div class="mt-2 space-y-2 text-sm text-zinc-200">
+                    <div><span class="text-zinc-500">Cluster:</span> <span id="modal-cluster-label">N/A</span></div>
+                    <div><span class="text-zinc-500">Scheduled date:</span> <span id="modal-scheduled-date">N/A</span></div>
+                    <div><span class="text-zinc-500">Priority:</span> <span id="modal-priority">N/A</span></div>
+                    <div><span class="text-zinc-500">Target window:</span> <span id="modal-window-summary">N/A</span></div>
+                </div>
+            </div>
+            <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Problem summary</div>
+                <div id="modal-problem-summary" class="mt-2 text-sm leading-6 text-zinc-200">No summary provided</div>
+            </div>
+        </div>
+    </div>
+    </div>
 <script>
     flatpickr('.cluster-date-picker', {
         minDate: 'today',
@@ -802,5 +1097,57 @@ foreach ($clusters as $cluster) {
 
         card.remove();
     });
+
+    const scheduledJobModal = document.getElementById('scheduled-job-modal');
+    const modalOverlay = scheduledJobModal.querySelector('.modal-overlay');
+    const modalCloseButton = document.getElementById('modal-close-button');
+    const modalFields = {
+        customer_name: document.getElementById('modal-customer-name'),
+        service_address: document.getElementById('modal-address'),
+        city: document.getElementById('modal-city'),
+        email: document.getElementById('modal-email'),
+        phone: document.getElementById('modal-phone'),
+        cluster_label: document.getElementById('modal-cluster-label'),
+        scheduled_date: document.getElementById('modal-scheduled-date'),
+        priority: document.getElementById('modal-priority'),
+        window_summary: document.getElementById('modal-window-summary'),
+        problem_summary: document.getElementById('modal-problem-summary')
+    };
+
+    function closeScheduledJobModal() {
+        scheduledJobModal.classList.add('hidden');
+        scheduledJobModal.classList.remove('flex');
+    }
+
+    function openScheduledJobModal(payload) {
+        Object.entries(modalFields).forEach(([key, element]) => {
+            element.textContent = payload[key] || 'N/A';
+        });
+
+        scheduledJobModal.classList.remove('hidden');
+        scheduledJobModal.classList.add('flex');
+    }
+
+    document.addEventListener('click', function (event) {
+        const trigger = event.target.closest('.scheduled-job-trigger');
+        if (!trigger) {
+            return;
+        }
+
+        try {
+            openScheduledJobModal(JSON.parse(trigger.dataset.jobDetails || '{}'));
+        } catch (error) {
+            console.error('Unable to open scheduled job modal.', error);
+        }
+    });
+
+    modalOverlay.addEventListener('click', closeScheduledJobModal);
+    modalCloseButton.addEventListener('click', closeScheduledJobModal);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !scheduledJobModal.classList.contains('hidden')) {
+            closeScheduledJobModal();
+        }
+    });
 </script>
+</body>
 </html>
