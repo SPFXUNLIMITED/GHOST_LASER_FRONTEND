@@ -378,7 +378,16 @@ $testDataMessage = null;
 $testDataError = null;
 $clusterAssignMessage = null;
 $clusterAssignError = null;
-$currentMonth = new DateTimeImmutable('first day of this month');
+$calendarMonthParam = trim((string) ($_GET['month'] ?? $_POST['month'] ?? ''));
+$parsedCalendarMonth = $calendarMonthParam !== ''
+    ? DateTimeImmutable::createFromFormat('Y-m', $calendarMonthParam)
+    : false;
+if ($parsedCalendarMonth !== false && $parsedCalendarMonth->format('Y-m') === $calendarMonthParam) {
+    $currentMonth = $parsedCalendarMonth->modify('first day of this month');
+} else {
+    $currentMonth = new DateTimeImmutable('first day of this month');
+}
+$calendarMonthParam = $currentMonth->format('Y-m');
 $currentMonthEnd = $currentMonth->modify('last day of this month');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -400,7 +409,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':id' => $deleteId
         ]);
 
-        header('Location: schedule.php');
+        header('Location: schedule.php?month=' . urlencode($calendarMonthParam));
         exit;
     }
 
@@ -859,6 +868,7 @@ while ($calendarCursor <= $calendarEnd) {
 
             <div class="flex flex-wrap gap-3">
                 <form method="POST">
+                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
                     <button
                         type="submit"
                         name="insert_test_data"
@@ -871,6 +881,7 @@ while ($calendarCursor <= $calendarEnd) {
                 </form>
 
                 <form method="POST">
+                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
                     <button
                         type="submit"
                         name="run_clustering"
@@ -908,9 +919,25 @@ while ($calendarCursor <= $calendarEnd) {
         <?php endif; ?>
 
         <section class="mb-8 rounded-3xl border border-zinc-700 bg-zinc-900/80 p-6">
+            <?php
+            $prevMonthParam = $currentMonth->modify('-1 month')->format('Y-m');
+            $nextMonthParam = $currentMonth->modify('+1 month')->format('Y-m');
+            ?>
             <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                    <h2 class="text-2xl font-semibold text-white"><?= htmlspecialchars($currentMonth->format('F Y')) ?></h2>
+                    <div class="flex items-center gap-3">
+                        <a
+                            href="?month=<?= urlencode($prevMonthParam) ?>"
+                            class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-700 hover:text-white"
+                            aria-label="Previous month"
+                        >&larr; Prev</a>
+                        <h2 class="text-2xl font-semibold text-white"><?= htmlspecialchars($currentMonth->format('F Y')) ?></h2>
+                        <a
+                            href="?month=<?= urlencode($nextMonthParam) ?>"
+                            class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-700 hover:text-white"
+                            aria-label="Next month"
+                        >Next &rarr;</a>
+                    </div>
                     <p class="mt-2 text-sm text-zinc-400">
                         Monthly technician calendar for assigned jobs. Click a customer to view full details, or use the X on a cluster card to return that full cluster to the pooling queue.
                     </p>
@@ -963,6 +990,7 @@ while ($calendarCursor <= $calendarEnd) {
                                                         <div class="truncate text-[10px] font-semibold uppercase tracking-wide text-cyan-200"><?= htmlspecialchars($scheduledCluster['center_city']) ?></div>
                                                     </div>
                                                     <form method="POST" onsubmit="return confirm('Unassign this entire cluster? This returns all jobs in the cluster to the clustering pool.');">
+                                                        <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
                                                         <input type="hidden" name="unassign_scheduled_cluster_id" value="<?= (int) $scheduledCluster['scheduled_cluster_id'] ?>">
                                                         <button
                                                             type="submit"
@@ -1060,6 +1088,7 @@ while ($calendarCursor <= $calendarEnd) {
                                 <form method="POST" class="mt-4 flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 sm:flex-row sm:items-end">
                                     <input type="hidden" name="assign_cluster" value="1">
                                     <input type="hidden" name="run_clustering" value="1">
+                                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="cluster_label" value="<?= htmlspecialchars($cluster['cluster_label'], ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="cluster_centroid_latitude" value="<?= htmlspecialchars((string) $cluster['centroid_latitude'], ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="cluster_centroid_longitude" value="<?= htmlspecialchars((string) $cluster['centroid_longitude'], ENT_QUOTES, 'UTF-8') ?>">
