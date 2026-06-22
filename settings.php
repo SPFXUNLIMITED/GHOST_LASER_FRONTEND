@@ -266,7 +266,7 @@ $calculatedCapacity = calculateTechnicianDailyCapacity($settings);
                     </div>
 
                     <div class="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">
-                        Current calculated technician-day capacity: <span class="font-semibold"><?= $calculatedCapacity ?></span>
+                        Current technician-day capacity: <span class="font-semibold"><?= $calculatedCapacity ?></span>
                     </div>
 
                     <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400">

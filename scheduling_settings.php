@@ -191,37 +191,7 @@ function updateSchedulingSettings(PDO $pdo, array $settings): void
 
 function calculateTechnicianDailyCapacity(array $settings): int
 {
-    $start = DateTimeImmutable::createFromFormat('H:i', (string) $settings['business_start_time']);
-    $end = DateTimeImmutable::createFromFormat('H:i', (string) $settings['business_end_time']);
-
-    if ($start === false || $end === false || $end <= $start) {
-        return (int) $settings['maximum_jobs_per_technician_per_day'];
-    }
-
-    $businessMinutes = ((int) $end->format('H') * 60 + (int) $end->format('i'))
-        - ((int) $start->format('H') * 60 + (int) $start->format('i'));
-
-    $durationMinutes = max(1, (int) $settings['average_job_duration_minutes']);
-    $bufferMinutes = max(0, (int) $settings['default_buffer_between_jobs_minutes']);
-    $maxJobs = max(1, (int) $settings['maximum_jobs_per_technician_per_day']);
-    $capacity = 0;
-    $usedMinutes = 0;
-
-    while ($capacity < $maxJobs) {
-        $nextUsedMinutes = $usedMinutes + $durationMinutes;
-        if ($capacity > 0) {
-            $nextUsedMinutes += $bufferMinutes;
-        }
-
-        if ($nextUsedMinutes > $businessMinutes) {
-            break;
-        }
-
-        $usedMinutes = $nextUsedMinutes;
-        $capacity++;
-    }
-
-    return max(1, min($capacity, $maxJobs));
+    return max(1, (int) $settings['maximum_jobs_per_technician_per_day']);
 }
 
 function getDisabledJsWeekdayIndexes(array $settings): array
