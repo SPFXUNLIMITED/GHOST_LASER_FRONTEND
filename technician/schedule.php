@@ -330,6 +330,7 @@ function buildGeographicClusters(array $jobs)
         return $rightCluster['job_count'] <=> $leftCluster['job_count'];
     });
 
+    error_log("DEBUG: First cluster distance = " . ($clusters[0][0] ?? 'NOT SET'));
     return $clusters;
 }
 
