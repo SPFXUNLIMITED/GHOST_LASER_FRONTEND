@@ -1301,10 +1301,28 @@ require_once __DIR__ . '/../templates/header.php';
                                 <?php if ($dayHasAssignments): ?>
                                     <div class="mt-2 space-y-2">
                                         <?php foreach ($calendarDay['clusters'] as $scheduledCluster): ?>
+                                            <?php
+                                            $clusterModalJobs = array_map(static function (array $clusterJob): array {
+                                                return [
+                                                    'customer_name' => $clusterJob['customer_name'] ?? 'Unknown Customer',
+                                                    'time_window_label' => $clusterJob['time_window_label'] ?? 'Not assigned',
+                                                ];
+                                            }, $scheduledCluster['jobs']);
+                                            $clusterModalPayload = [
+                                                'center_city' => $scheduledCluster['center_city'],
+                                                'cluster_label' => $scheduledCluster['cluster_label'],
+                                                'scheduled_date' => $scheduledCluster['scheduled_date'],
+                                                'jobs' => $clusterModalJobs,
+                                            ];
+                                            ?>
                                             <div class="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2 py-1.5 shadow-[inset_0_0_0_1px_rgba(6,182,212,0.12)]">
                                                 <div class="flex items-start justify-between gap-2">
                                                     <div class="min-w-0">
-                                                        <div class="truncate text-[10px] font-semibold uppercase tracking-wide text-cyan-200"><?= htmlspecialchars($scheduledCluster['center_city']) ?></div>
+                                                        <button
+                                                            type="button"
+                                                            class="cluster-header-trigger w-full truncate text-left text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:text-cyan-100"
+                                                            data-cluster-details="<?= htmlspecialchars(json_encode($clusterModalPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
+                                                        ><?= htmlspecialchars($scheduledCluster['center_city']) ?></button>
                                                     </div>
                                                     <form method="POST" onsubmit="return confirm('Unassign this entire cluster? This returns all jobs in the cluster to the clustering pool.');">
                                                         <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
@@ -1642,6 +1660,34 @@ require_once __DIR__ . '/../templates/header.php';
         </div>
     </div>
     </div>
+    <div id="cluster-summary-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-zinc-950/80 px-4">
+        <div class="absolute inset-0 cluster-modal-overlay"></div>
+        <div class="relative z-10 w-full max-w-3xl rounded-3xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl shadow-black/40">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-sm uppercase tracking-[0.2em] text-cyan-300">Scheduled Cluster</p>
+                    <h3 id="cluster-modal-name" class="mt-2 text-2xl font-semibold text-white">Cluster</h3>
+                    <p id="cluster-modal-location" class="mt-2 text-sm text-zinc-300">Location unavailable</p>
+                    <p id="cluster-modal-date" class="mt-1 text-xs uppercase tracking-wide text-zinc-500">Date unavailable</p>
+                </div>
+                <button type="button" id="cluster-modal-close-button" class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-800 hover:text-white" aria-label="Close modal">&times;</button>
+            </div>
+
+            <div class="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Jobs in this cluster</div>
+                <div id="cluster-modal-jobs-empty" class="mt-3 hidden text-sm text-zinc-400">No jobs found for this cluster.</div>
+                <ul id="cluster-modal-jobs-list" class="mt-3 space-y-2"></ul>
+            </div>
+
+            <button
+                type="button"
+                id="cluster-notify-all-button"
+                class="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-cyan-500 px-6 py-4 text-base font-semibold text-zinc-950 transition hover:bg-cyan-400"
+            >
+                Notify All Customers in This Cluster
+            </button>
+        </div>
+    </div>
 <script>
     <?php
     // Pre-compute holiday dates for visual display
@@ -1718,7 +1764,60 @@ require_once __DIR__ . '/../templates/header.php';
         scheduledJobModal.classList.add('flex');
     }
 
+    const clusterSummaryModal = document.getElementById('cluster-summary-modal');
+    const clusterModalOverlay = clusterSummaryModal.querySelector('.cluster-modal-overlay');
+    const clusterModalCloseButton = document.getElementById('cluster-modal-close-button');
+    const clusterModalName = document.getElementById('cluster-modal-name');
+    const clusterModalLocation = document.getElementById('cluster-modal-location');
+    const clusterModalDate = document.getElementById('cluster-modal-date');
+    const clusterModalJobsList = document.getElementById('cluster-modal-jobs-list');
+    const clusterModalJobsEmpty = document.getElementById('cluster-modal-jobs-empty');
+
+    function closeClusterSummaryModal() {
+        clusterSummaryModal.classList.add('hidden');
+        clusterSummaryModal.classList.remove('flex');
+    }
+
+    function openClusterSummaryModal(payload) {
+        clusterModalName.textContent = payload.cluster_label || 'Cluster';
+        clusterModalLocation.textContent = payload.center_city
+            ? `Center location: ${payload.center_city}`
+            : 'Center location unavailable';
+        clusterModalDate.textContent = payload.scheduled_date || 'Date unavailable';
+
+        clusterModalJobsList.innerHTML = '';
+        const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+        clusterModalJobsEmpty.classList.toggle('hidden', jobs.length > 0);
+
+        jobs.forEach((job) => {
+            const item = document.createElement('li');
+            item.className = 'flex items-start justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2';
+            const customerName = document.createElement('span');
+            customerName.className = 'text-sm font-medium text-zinc-100';
+            customerName.textContent = job.customer_name || 'Unknown Customer';
+            const timeWindow = document.createElement('span');
+            timeWindow.className = 'shrink-0 text-xs font-medium text-cyan-300';
+            timeWindow.textContent = job.time_window_label || 'Not assigned';
+            item.appendChild(customerName);
+            item.appendChild(timeWindow);
+            clusterModalJobsList.appendChild(item);
+        });
+
+        clusterSummaryModal.classList.remove('hidden');
+        clusterSummaryModal.classList.add('flex');
+    }
+
     document.addEventListener('click', function (event) {
+        const clusterTrigger = event.target.closest('.cluster-header-trigger');
+        if (clusterTrigger) {
+            try {
+                openClusterSummaryModal(JSON.parse(clusterTrigger.dataset.clusterDetails || '{}'));
+            } catch (error) {
+                console.error('Unable to open cluster modal.', error);
+            }
+            return;
+        }
+
         const trigger = event.target.closest('.scheduled-job-trigger');
         if (!trigger) {
             return;
@@ -1733,9 +1832,14 @@ require_once __DIR__ . '/../templates/header.php';
 
     modalOverlay.addEventListener('click', closeScheduledJobModal);
     modalCloseButton.addEventListener('click', closeScheduledJobModal);
+    clusterModalOverlay.addEventListener('click', closeClusterSummaryModal);
+    clusterModalCloseButton.addEventListener('click', closeClusterSummaryModal);
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape' && !scheduledJobModal.classList.contains('hidden')) {
             closeScheduledJobModal();
+        }
+        if (event.key === 'Escape' && !clusterSummaryModal.classList.contains('hidden')) {
+            closeClusterSummaryModal();
         }
     });
 </script>
