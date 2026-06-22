@@ -299,39 +299,46 @@ function buildGeographicClusters(array $jobs)
         $clusters[$assignedClusterIndex] = $cluster;
     }
 
-    $processedClusters = [];
+    $processedClusters = array_reduce($clusters, function (array $accumulator, array $cluster): array {
+        $sortedJobs = $cluster['jobs'];
+        usort($sortedJobs, 'compareJobsByPriority');
 
-    foreach ($clusters as $cluster) {
-        usort($cluster['jobs'], 'compareJobsByPriority');
-        $centroid = getClusterCentroid($cluster['jobs']);
+        $centroid = getClusterCentroid($sortedJobs);
+        $centroidLatitude = $cluster['centroid_latitude'];
+        $centroidLongitude = $cluster['centroid_longitude'];
+
         if ($centroid['latitude'] !== null && $centroid['longitude'] !== null) {
-            $cluster['centroid_latitude'] = $centroid['latitude'];
-            $cluster['centroid_longitude'] = $centroid['longitude'];
+            $centroidLatitude = $centroid['latitude'];
+            $centroidLongitude = $centroid['longitude'];
         }
 
         error_log(sprintf(
             '[CENTROID DEBUG] %s => centroid_latitude=%s, centroid_longitude=%s',
             $cluster['cluster_label'] ?? 'Unknown',
-            $cluster['centroid_latitude'] ?? 'NULL',
-            $cluster['centroid_longitude'] ?? 'NULL'
+            $centroidLatitude ?? 'NULL',
+            $centroidLongitude ?? 'NULL'
         ));
 
-        $processedJobs = [];
-        foreach ($cluster['jobs'] as $clusterJob) {
-            $calculatedDistance = haversineDistanceMiles(
+        $processedJobs = array_map(function (array $clusterJob) use ($centroidLatitude, $centroidLongitude): array {
+            $clusterJob['distance_from_center_miles'] = haversineDistanceMiles(
                 $clusterJob['latitude'],
                 $clusterJob['longitude'],
-                $cluster['centroid_latitude'],
-                $cluster['centroid_longitude']
+                $centroidLatitude,
+                $centroidLongitude
             );
-            $clusterJob['distance_from_center_miles'] = $calculatedDistance;
-            $processedJobs[] = $clusterJob;
-        }
-        $cluster['jobs'] = $processedJobs;
 
-        $cluster['max_distance_miles'] = getMaxSpreadMiles($cluster['jobs']);
-        $processedClusters[] = $cluster;
-    }
+            return $clusterJob;
+        }, $sortedJobs);
+
+        $accumulator[] = array_merge($cluster, [
+            'centroid_latitude' => $centroidLatitude,
+            'centroid_longitude' => $centroidLongitude,
+            'jobs' => $processedJobs,
+            'max_distance_miles' => getMaxSpreadMiles($processedJobs),
+        ]);
+
+        return $accumulator;
+    }, []);
 
     usort($processedClusters, function ($leftCluster, $rightCluster) {
         $priorityComparison = $leftCluster['highest_priority_order'] <=> $rightCluster['highest_priority_order'];
