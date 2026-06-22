@@ -3,6 +3,7 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 const CLUSTER_DISTANCE_MILES = 20;
+const MAX_JOBS_PER_CLUSTER = 4;
 
 /**
  * Determine whether the provided coordinates can be used for geographic clustering.
@@ -136,6 +137,9 @@ function getPriorityScheduleWindow($priorityLevel)
 
 /**
  * Group jobs by proximity so dispatch can review nearby work together.
+ * Jobs are sorted by priority first, then assigned to the nearest existing
+ * cluster whose anchor is within CLUSTER_DISTANCE_MILES. If all nearby
+ * clusters are already at MAX_JOBS_PER_CLUSTER, a new cluster is started.
  */
 function buildGeographicClusters(array $jobs)
 {
@@ -147,6 +151,10 @@ function buildGeographicClusters(array $jobs)
         $assignedClusterIndex = null;
 
         foreach ($clusters as $clusterIndex => $cluster) {
+            if ($cluster['job_count'] >= MAX_JOBS_PER_CLUSTER) {
+                continue;
+            }
+
             $anchorDistance = haversineDistanceMiles(
                 $job['latitude'],
                 $job['longitude'],
@@ -380,7 +388,7 @@ foreach ($clusters as $cluster) {
             <div>
                 <p class="text-zinc-400">Pending service requests (<?= count($jobs) ?> found)</p>
                 <p class="mt-2 text-sm text-zinc-500">
-                    Geographic clustering groups pending jobs with valid coordinates into route-friendly batches within <?= CLUSTER_DISTANCE_MILES ?> miles.
+                    Geographic clustering groups pending jobs with valid coordinates into route-friendly batches within <?= CLUSTER_DISTANCE_MILES ?> miles, with a maximum of <?= MAX_JOBS_PER_CLUSTER ?> jobs per cluster.
                 </p>
             </div>
 
