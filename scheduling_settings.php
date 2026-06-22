@@ -13,6 +13,12 @@ function getSchedulingSettingsDefaults(): array
         'maximum_jobs_per_technician_per_day' => 4,
         'default_time_window_size_hours' => 2,
         'work_days' => 'mon-fri',
+        'initial_appointment_confirmation_subject' => 'Your Ghost Laser appointment is confirmed',
+        'initial_appointment_confirmation_body' => "Hi {{customer_name}},\n\nYour appointment with Ghost Laser is confirmed for {{appointment_date}} at {{appointment_time}}.\n\nReply to this message if you need to make any changes.\n\n- Ghost Laser Team",
+        'day_before_reminder_subject' => 'Reminder: Your Ghost Laser appointment is tomorrow',
+        'day_before_reminder_body' => "Hi {{customer_name}},\n\nThis is a reminder that your Ghost Laser appointment is tomorrow ({{appointment_date}}).\n\nIf you need to reschedule, please contact us as soon as possible.\n\n- Ghost Laser Team",
+        'one_hour_arrival_notification_subject' => 'Ghost Laser arrival notice: 1 hour away',
+        'one_hour_arrival_notification_body' => "Hi {{customer_name}},\n\nYour Ghost Laser technician is about 1 hour away and heading to {{appointment_address}}.\n\nWe will see you soon!\n\n- Ghost Laser Team",
     ];
 }
 
@@ -71,10 +77,39 @@ function ensureSchedulingSettingsTable(PDO $pdo): void
             maximum_jobs_per_technician_per_day SMALLINT UNSIGNED NOT NULL,
             default_time_window_size_hours SMALLINT UNSIGNED NOT NULL,
             work_days VARCHAR(20) NOT NULL,
+            initial_appointment_confirmation_subject VARCHAR(255) NOT NULL,
+            initial_appointment_confirmation_body TEXT NOT NULL,
+            day_before_reminder_subject VARCHAR(255) NOT NULL,
+            day_before_reminder_body TEXT NOT NULL,
+            one_hour_arrival_notification_subject VARCHAR(255) NOT NULL,
+            one_hour_arrival_notification_body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
     ");
+
+    $columnDefinitions = [
+        'initial_appointment_confirmation_subject' => "VARCHAR(255) NOT NULL DEFAULT ''",
+        'initial_appointment_confirmation_body' => "TEXT NOT NULL",
+        'day_before_reminder_subject' => "VARCHAR(255) NOT NULL DEFAULT ''",
+        'day_before_reminder_body' => "TEXT NOT NULL",
+        'one_hour_arrival_notification_subject' => "VARCHAR(255) NOT NULL DEFAULT ''",
+        'one_hour_arrival_notification_body' => "TEXT NOT NULL",
+    ];
+
+    foreach ($columnDefinitions as $columnName => $columnDefinition) {
+        $colExists = (int) $pdo->query("
+            SELECT COUNT(*)
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'scheduling_settings'
+              AND COLUMN_NAME = " . $pdo->quote($columnName) . "
+        ")->fetchColumn();
+
+        if ($colExists === 0) {
+            $pdo->exec("ALTER TABLE scheduling_settings ADD COLUMN {$columnName} {$columnDefinition}");
+        }
+    }
 }
 
 function seedSchedulingSettings(PDO $pdo): void
@@ -93,7 +128,13 @@ function seedSchedulingSettings(PDO $pdo): void
             average_job_duration_minutes,
             maximum_jobs_per_technician_per_day,
             default_time_window_size_hours,
-            work_days
+            work_days,
+            initial_appointment_confirmation_subject,
+            initial_appointment_confirmation_body,
+            day_before_reminder_subject,
+            day_before_reminder_body,
+            one_hour_arrival_notification_subject,
+            one_hour_arrival_notification_body
         ) VALUES (
             1,
             :shop_address,
@@ -105,7 +146,13 @@ function seedSchedulingSettings(PDO $pdo): void
             :average_job_duration_minutes,
             :maximum_jobs_per_technician_per_day,
             :default_time_window_size_hours,
-            :work_days
+            :work_days,
+            :initial_appointment_confirmation_subject,
+            :initial_appointment_confirmation_body,
+            :day_before_reminder_subject,
+            :day_before_reminder_body,
+            :one_hour_arrival_notification_subject,
+            :one_hour_arrival_notification_body
         )
     ");
     $stmt->execute([
@@ -119,6 +166,12 @@ function seedSchedulingSettings(PDO $pdo): void
         ':maximum_jobs_per_technician_per_day' => $defaults['maximum_jobs_per_technician_per_day'],
         ':default_time_window_size_hours' => $defaults['default_time_window_size_hours'],
         ':work_days' => $defaults['work_days'],
+        ':initial_appointment_confirmation_subject' => $defaults['initial_appointment_confirmation_subject'],
+        ':initial_appointment_confirmation_body' => $defaults['initial_appointment_confirmation_body'],
+        ':day_before_reminder_subject' => $defaults['day_before_reminder_subject'],
+        ':day_before_reminder_body' => $defaults['day_before_reminder_body'],
+        ':one_hour_arrival_notification_subject' => $defaults['one_hour_arrival_notification_subject'],
+        ':one_hour_arrival_notification_body' => $defaults['one_hour_arrival_notification_body'],
     ]);
 }
 
@@ -139,6 +192,12 @@ function normalizeSchedulingSettings(array $settings): array
     $merged['work_days'] = array_key_exists($merged['work_days'], getSchedulingWorkDayOptions())
         ? $merged['work_days']
         : $defaults['work_days'];
+    $merged['initial_appointment_confirmation_subject'] = trim((string) $merged['initial_appointment_confirmation_subject']);
+    $merged['initial_appointment_confirmation_body'] = trim((string) $merged['initial_appointment_confirmation_body']);
+    $merged['day_before_reminder_subject'] = trim((string) $merged['day_before_reminder_subject']);
+    $merged['day_before_reminder_body'] = trim((string) $merged['day_before_reminder_body']);
+    $merged['one_hour_arrival_notification_subject'] = trim((string) $merged['one_hour_arrival_notification_subject']);
+    $merged['one_hour_arrival_notification_body'] = trim((string) $merged['one_hour_arrival_notification_body']);
 
     return $merged;
 }
@@ -172,7 +231,13 @@ function updateSchedulingSettings(PDO $pdo, array $settings): void
             average_job_duration_minutes = :average_job_duration_minutes,
             maximum_jobs_per_technician_per_day = :maximum_jobs_per_technician_per_day,
             default_time_window_size_hours = :default_time_window_size_hours,
-            work_days = :work_days
+            work_days = :work_days,
+            initial_appointment_confirmation_subject = :initial_appointment_confirmation_subject,
+            initial_appointment_confirmation_body = :initial_appointment_confirmation_body,
+            day_before_reminder_subject = :day_before_reminder_subject,
+            day_before_reminder_body = :day_before_reminder_body,
+            one_hour_arrival_notification_subject = :one_hour_arrival_notification_subject,
+            one_hour_arrival_notification_body = :one_hour_arrival_notification_body
         WHERE id = 1
     ");
     $stmt->execute([
@@ -186,6 +251,12 @@ function updateSchedulingSettings(PDO $pdo, array $settings): void
         ':maximum_jobs_per_technician_per_day' => $settings['maximum_jobs_per_technician_per_day'],
         ':default_time_window_size_hours' => $settings['default_time_window_size_hours'],
         ':work_days' => $settings['work_days'],
+        ':initial_appointment_confirmation_subject' => $settings['initial_appointment_confirmation_subject'],
+        ':initial_appointment_confirmation_body' => $settings['initial_appointment_confirmation_body'],
+        ':day_before_reminder_subject' => $settings['day_before_reminder_subject'],
+        ':day_before_reminder_body' => $settings['day_before_reminder_body'],
+        ':one_hour_arrival_notification_subject' => $settings['one_hour_arrival_notification_subject'],
+        ':one_hour_arrival_notification_body' => $settings['one_hour_arrival_notification_body'],
     ]);
 }
 
