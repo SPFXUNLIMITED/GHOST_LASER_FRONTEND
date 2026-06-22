@@ -318,12 +318,12 @@ function buildGeographicClusters(array $jobs)
                 $cluster['centroid_longitude']
             );
             $clusterJob['distance_from_center_miles'] = $calculatedDistance;
-            error_log(sprintf(
-                '[cluster-debug] %s job_id=%d distance_from_center_miles=%.6f',
-                (string) ($cluster['cluster_label'] ?? 'Unknown Cluster'),
-                (int) ($clusterJob['id'] ?? 0),
-                (float) $calculatedDistance
-            ));
+            var_dump([
+                'cluster_label' => (string) ($cluster['cluster_label'] ?? 'Unknown Cluster'),
+                'job_id' => (int) ($clusterJob['id'] ?? 0),
+                'distance_from_center_miles' => (float) $calculatedDistance,
+            ]);
+            echo "\n";
             $processedJobs[] = $clusterJob;
         }
         $cluster['jobs'] = $processedJobs;
