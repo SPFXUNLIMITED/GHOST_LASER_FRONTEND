@@ -586,7 +586,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (isset($_POST['insert_test_data']) && !$unassignScheduledJobId && !$unassignScheduledClusterId) {
+    if (isset($_POST['clear_test_data']) && !$unassignScheduledJobId && !$unassignScheduledClusterId) {
+        try {
+            $clearTestDataStmt = $pdo->prepare("
+                UPDATE service_requests sr
+                JOIN customers c ON c.id = sr.customer_id
+                SET sr.request_status = 'deleted'
+                WHERE (
+                    LOWER(COALESCE(sr.problem_summary, '')) LIKE :test_keyword
+                    OR LOWER(COALESCE(c.address, '')) LIKE :test_keyword
+                )
+                  AND sr.request_status <> 'deleted'
+            ");
+            $clearTestDataStmt->execute([
+                ':test_keyword' => '%test%',
+            ]);
+            $cleared = $clearTestDataStmt->rowCount();
+            $testDataMessage = "Cleared {$cleared} test job(s).";
+        } catch (Throwable $e) {
+            $testDataError = 'Unable to clear test jobs right now.';
+        }
+    } elseif (isset($_POST['insert_test_data']) && !$unassignScheduledJobId && !$unassignScheduledClusterId) {
         $ts = time(); // unique timestamp per button press
 
         $testCustomers = [
@@ -923,6 +943,19 @@ while ($calendarCursor <= $calendarEnd) {
                         onclick="return confirm('Insert 8 test customers and service requests?');"
                     >
                         Insert Test Data
+                    </button>
+                </form>
+
+                <form method="POST">
+                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                    <button
+                        type="submit"
+                        name="clear_test_data"
+                        value="1"
+                        class="inline-flex items-center justify-center rounded-lg bg-rose-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-400"
+                        onclick="return confirm('Delete all jobs with notes or address containing \"Test\"?');"
+                    >
+                        Clear Test Data
                     </button>
                 </form>
 
