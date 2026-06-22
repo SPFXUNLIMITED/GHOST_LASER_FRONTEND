@@ -780,34 +780,28 @@ while ($calendarCursor <= $calendarEnd) {
 
             <div class="mt-6 overflow-x-auto pb-2">
                 <div class="min-w-[980px]">
-                    <div class="grid grid-cols-7 gap-3 text-center text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                    <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
                         <?php foreach (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as $weekday): ?>
                             <div><?= htmlspecialchars($weekday) ?></div>
                         <?php endforeach; ?>
                     </div>
 
-                    <div class="mt-3 grid grid-cols-7 gap-3">
+                    <div class="mt-2 grid grid-cols-7 gap-1">
                         <?php foreach ($calendarDays as $calendarDay): ?>
-                            <div class="min-h-[13rem] rounded-2xl border p-4 <?= $calendarDay['is_current_month'] ? 'border-zinc-700 bg-zinc-950/80' : 'border-zinc-800 bg-zinc-950/40 text-zinc-600' ?>">
+                            <div class="rounded-lg border px-2 py-1 <?= $calendarDay['is_current_month'] ? 'border-zinc-700 bg-zinc-950/80' : 'border-zinc-800 bg-zinc-950/40 text-zinc-600' ?> <?= $calendarDay['jobs'] !== [] ? 'pb-2' : '' ?>">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-sm font-semibold <?= $calendarDay['is_today'] ? 'rounded-full bg-cyan-500 px-2 py-1 text-zinc-950' : ($calendarDay['is_current_month'] ? 'text-white' : 'text-zinc-600') ?>">
+                                    <span class="text-xs font-semibold <?= $calendarDay['is_today'] ? 'rounded-full bg-cyan-500 px-1.5 py-0.5 text-zinc-950' : ($calendarDay['is_current_month'] ? 'text-white' : 'text-zinc-600') ?>">
                                         <?= htmlspecialchars($calendarDay['date']->format('j')) ?>
                                     </span>
                                     <?php if ($calendarDay['jobs'] !== []): ?>
-                                        <span class="rounded-full bg-cyan-500/15 px-2 py-1 text-xs font-medium text-cyan-300">
-                                            <?= count($calendarDay['jobs']) ?> job<?= count($calendarDay['jobs']) === 1 ? '' : 's' ?>
+                                        <span class="rounded-full bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-medium text-cyan-300">
+                                            <?= count($calendarDay['jobs']) ?>
                                         </span>
                                     <?php endif; ?>
                                 </div>
 
-                                <div class="mt-4 space-y-2">
-                                    <?php if ($calendarDay['jobs'] === []): ?>
-                                        <?php if ($calendarDay['is_current_month']): ?>
-                                            <div class="rounded-xl border border-dashed border-zinc-800 px-3 py-4 text-sm text-zinc-500">
-                                                No jobs scheduled
-                                            </div>
-                                        <?php endif; ?>
-                                    <?php else: ?>
+                                <?php if ($calendarDay['jobs'] !== []): ?>
+                                    <div class="mt-1 space-y-1">
                                         <?php foreach ($calendarDay['jobs'] as $scheduledJob): ?>
                                             <?php
                                             $modalPayload = [
@@ -823,31 +817,29 @@ while ($calendarCursor <= $calendarEnd) {
                                                 'cluster_label' => $scheduledJob['cluster_label'],
                                             ];
                                             ?>
-                                            <div class="flex items-start gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2">
+                                            <div class="flex items-center gap-1 rounded border border-zinc-800 bg-zinc-900/80 px-1.5 py-0.5">
                                                 <button
                                                     type="button"
-                                                    class="scheduled-job-trigger flex-1 text-left"
+                                                    class="scheduled-job-trigger min-w-0 flex-1 text-left"
                                                     data-job-details="<?= htmlspecialchars(json_encode($modalPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
                                                 >
-                                                    <div class="text-sm font-medium text-white hover:text-cyan-300 transition"><?= htmlspecialchars($scheduledJob['customer_name']) ?></div>
-                                                    <div class="mt-1 text-xs text-zinc-500">
-                                                        <?= htmlspecialchars($scheduledJob['cluster_label']) ?> &bull; <?= htmlspecialchars($scheduledJob['priority_meta']['label']) ?>
-                                                    </div>
+                                                    <div class="truncate text-[11px] font-medium leading-tight text-white hover:text-cyan-300 transition"><?= htmlspecialchars($scheduledJob['customer_name']) ?></div>
+                                                    <div class="truncate text-[10px] leading-tight text-zinc-500"><?= htmlspecialchars($scheduledJob['priority_meta']['label']) ?></div>
                                                 </button>
 
                                                 <form method="POST" onsubmit="return confirm('Return this job to the clustering pool?');">
                                                     <input type="hidden" name="unassign_scheduled_job_id" value="<?= (int) $scheduledJob['scheduled_cluster_job_id'] ?>">
                                                     <button
                                                         type="submit"
-                                                        class="inline-flex h-6 w-6 items-center justify-center rounded-full text-sm text-zinc-500 transition hover:bg-zinc-700 hover:text-red-300"
+                                                        class="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-xs text-zinc-500 transition hover:bg-zinc-700 hover:text-red-300"
                                                         title="Unassign job"
                                                         aria-label="Unassign <?= htmlspecialchars($scheduledJob['customer_name']) ?>"
                                                     >&times;</button>
                                                 </form>
                                             </div>
                                         <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </div>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
