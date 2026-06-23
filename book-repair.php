@@ -211,7 +211,7 @@ require_once __DIR__ . '/templates/header.php';
                                     <span class="priority-dot bg-zinc-400"></span>
                                     <span>
                                         <span class="block font-semibold text-sm">Standard</span>
-                                        <span class="block text-zinc-500 text-xs">3–5 business days</span>
+                                        <span class="block text-zinc-500 text-xs">3–5 Business Days</span>
                                     </span>
                                 </label>
                             </div>
@@ -222,7 +222,7 @@ require_once __DIR__ . '/templates/header.php';
                                     <span class="priority-dot bg-cyan-400"></span>
                                     <span>
                                         <span class="block font-semibold text-sm">VIP</span>
-                                        <span class="block text-zinc-500 text-xs">1–2 business days</span>
+                                        <span class="block text-zinc-500 text-xs">1–2 Business Days</span>
                                     </span>
                                 </label>
                             </div>
@@ -233,7 +233,7 @@ require_once __DIR__ . '/templates/header.php';
                                     <span class="priority-dot bg-red-400"></span>
                                     <span>
                                         <span class="block font-semibold text-sm">Emergency</span>
-                                        <span class="block text-zinc-500 text-xs">Same or next day response, including weekends</span>
+                                        <span class="block text-zinc-500 text-xs">Same or Next day</span>
                                     </span>
                                 </label>
                             </div>
