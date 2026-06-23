@@ -222,7 +222,7 @@ require_once __DIR__ . '/templates/header.php';
                                     <span class="priority-dot bg-cyan-400"></span>
                                     <span>
                                         <span class="block font-semibold text-sm">VIP</span>
-                                        <span class="block text-zinc-500 text-xs">Next business day</span>
+                                        <span class="block text-zinc-500 text-xs">1–2 business days</span>
                                     </span>
                                 </label>
                             </div>
@@ -233,7 +233,7 @@ require_once __DIR__ . '/templates/header.php';
                                     <span class="priority-dot bg-red-400"></span>
                                     <span>
                                         <span class="block font-semibold text-sm">Emergency</span>
-                                        <span class="block text-zinc-500 text-xs">Same-day response</span>
+                                        <span class="block text-zinc-500 text-xs">Same or next day response, including weekends</span>
                                     </span>
                                 </label>
                             </div>
@@ -375,13 +375,13 @@ require_once __DIR__ . '/templates/header.php';
                     priorityEl.classList.add(...activePriority.badgeClasses);
 
                     // Update heading and subtext to reflect priority
-                    headingEl.textContent = 'Thank you! Your repair request has been received.';
+                    headingEl.textContent = 'Thank you. We\'ve received your request.';
                     if (priority === 'emergency') {
-                        subtextEl.textContent = 'Your Emergency request has been flagged for urgent attention — our team will contact you as soon as possible.';
+                        subtextEl.textContent = 'Your Emergency request has been received and flagged. Our team will contact you as soon as possible — even on weekends.';
                     } else if (priority === 'vip') {
-                        subtextEl.textContent = 'Your VIP request is being prioritised — we\'ll be in touch shortly to confirm the details.';
+                        subtextEl.textContent = 'Your VIP request has been received. We\'ll contact you shortly to schedule your repair. VIP jobs are typically seen within 1–2 business days.';
                     } else {
-                        subtextEl.textContent = 'We\'ve received your request and will be in touch shortly to confirm the details.';
+                        subtextEl.textContent = 'We\'ll contact you shortly to schedule your repair. Standard priority jobs are typically seen within 3–5 business days.';
                     }
 
                     // Update dates label to reference the priority
