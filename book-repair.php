@@ -1,6 +1,6 @@
 <?php
-$config = require __DIR__ . '/project/config.php';
-define('RECAPTCHA_SITE_KEY', $config['RECAPTCHA_SITE_KEY'] ?? $config['recaptcha'] ?? '');
+$config = require __DIR__ . '/config.php';
+define('RECAPTCHA_SITE_KEY', $config['recaptcha']['site_key'] ?? $config['RECAPTCHA_SITE_KEY'] ?? '');
 
 $pageTitle       = 'Book a Repair | Ghost Laser';
 $pageDescription = 'Book a laser machine repair with Ghost Laser. Fast, professional service for all major laser cutting and engraving machines.';
