@@ -47,37 +47,6 @@ $extraHead       = <<<'HTML'
     </style>
     <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 HTML;
-$headerRight     = <<<'HTML'
-                <nav class="hidden md:flex items-center gap-8">
-                    <a href="/#services" class="text-sm text-zinc-400 hover:text-white transition-colors">Services</a>
-                    <a href="/#why-us" class="text-sm text-zinc-400 hover:text-white transition-colors">Why Us</a>
-                    <a href="/#process" class="text-sm text-zinc-400 hover:text-white transition-colors">Process</a>
-                    <a href="/#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a>
-                </nav>
-                <a href="/" class="hidden md:inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-sm px-4 py-2 rounded-md transition-colors border border-zinc-700">
-                    ← Back to Home
-                </a>
-                <!-- Mobile menu button -->
-                <button id="mobile-menu-btn" class="md:hidden text-zinc-400 hover:text-white p-1" aria-label="Open menu">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                    </svg>
-                </button>
-HTML;
-$headerMobileMenu = <<<'HTML'
-        <!-- Mobile menu -->
-        <div id="mobile-menu" class="hidden md:hidden border-t border-zinc-800/60 bg-zinc-950/95">
-            <div class="px-6 py-4 flex flex-col gap-4">
-                <a href="/#services" class="text-sm text-zinc-400 hover:text-white transition-colors">Services</a>
-                <a href="/#why-us" class="text-sm text-zinc-400 hover:text-white transition-colors">Why Us</a>
-                <a href="/#process" class="text-sm text-zinc-400 hover:text-white transition-colors">Process</a>
-                <a href="/#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a>
-                <a href="/" class="inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-sm px-4 py-2 rounded-md transition-colors border border-zinc-700 w-full">
-                    ← Back to Home
-                </a>
-            </div>
-        </div>
-HTML;
 require_once __DIR__ . '/templates/header.php';
 ?>
 
@@ -297,12 +266,6 @@ require_once __DIR__ . '/templates/header.php';
     </section>
 
     <script>
-        // Mobile menu toggle
-        const btn = document.getElementById('mobile-menu-btn');
-        const menu = document.getElementById('mobile-menu');
-        btn.addEventListener('click', () => menu.classList.toggle('hidden'));
-        menu.querySelectorAll('a').forEach(link => link.addEventListener('click', () => menu.classList.add('hidden')));
-
         // Format a YYYY-MM-DD date string as "June 24th, 2026"
         function formatDate(dateStr) {
             const [year, month, day] = dateStr.split('-').map(Number);
