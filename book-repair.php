@@ -1,6 +1,15 @@
 <?php
-$config = require __DIR__ . '/config.php';
-define('RECAPTCHA_SITE_KEY', $config['recaptcha']['site_key'] ?? $config['RECAPTCHA_SITE_KEY'] ?? '');
+$isHoneypotSpam = false;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $website = trim((string) ($_POST['website'] ?? ''));
+    if ($website !== '') {
+        $isHoneypotSpam = true;
+    }
+}
+if ($isHoneypotSpam) {
+    http_response_code(204);
+    exit;
+}
 
 $pageTitle       = 'Book a Repair | Ghost Laser';
 $pageDescription = 'Book a laser machine repair with Ghost Laser. Fast, professional service for all major laser cutting and engraving machines.';
@@ -45,7 +54,6 @@ $extraHead       = <<<'HTML'
         .priority-radio label:hover { border-color: rgb(113,113,122); }
         .priority-dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; flex-shrink: 0; }
     </style>
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 HTML;
 require_once __DIR__ . '/templates/header.php';
 ?>
@@ -242,9 +250,9 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                 </div>
 
-                <!-- reCAPTCHA -->
-                <div class="flex justify-center">
-                    <div class="g-recaptcha" data-sitekey="<?= htmlspecialchars(RECAPTCHA_SITE_KEY) ?>"></div>
+                <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+                    <label for="website">Website</label>
+                    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
                 </div>
 
                 <!-- Submit -->
@@ -294,15 +302,6 @@ require_once __DIR__ . '/templates/header.php';
                 return;
             }
 
-            // Validate reCAPTCHA
-            const recaptchaResponse = grecaptcha.getResponse();
-            if (!recaptchaResponse) {
-                msgErrorText.textContent = 'Please complete the reCAPTCHA verification.';
-                msgError.classList.remove('hidden');
-                msgError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                return;
-            }
-
             // Hide previous messages
             msgSuccess.classList.add('hidden');
             msgError.classList.add('hidden');
@@ -326,7 +325,7 @@ require_once __DIR__ . '/templates/header.php';
                 zip:      form.zip.value.trim(),
                 problem:  form.problem.value.trim(),
                 priority: form.priority.value,
-                recaptcha_token: recaptchaResponse,
+                website:  form.website.value.trim(),
             };
 
             try {
@@ -340,7 +339,6 @@ require_once __DIR__ . '/templates/header.php';
 
                 if (res.ok) {
                     form.reset();
-                    grecaptcha.reset();
                     // Re-check the default radio after reset
                     document.getElementById('priority-standard').checked = true;
 
@@ -409,13 +407,11 @@ require_once __DIR__ . '/templates/header.php';
                     msgErrorText.textContent = json.message || 'Please check your details and try again.';
                     msgError.classList.remove('hidden');
                     msgError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    grecaptcha.reset();
                 }
             } catch {
                 msgErrorText.textContent = 'Network error — please check your connection and try again.';
                 msgError.classList.remove('hidden');
                 msgError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                grecaptcha.reset();
             } finally {
                 submitBtn.disabled = false;
                 submitLabel.textContent = 'Book My Repair →';
