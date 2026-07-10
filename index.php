@@ -277,11 +277,11 @@ require_once __DIR__ . '/templates/header.php';
             </div>
             <?php endif; ?>
 
-            <form action="contact-submit.php" method="POST" class="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 sm:p-8 text-left glow-box space-y-5">
+            <form action="send-contact-email.php" method="POST" class="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 sm:p-8 text-left glow-box space-y-5">
                 <!-- Honeypot: hidden from real users, bots fill it in -->
-                <div style="display:none" aria-hidden="true">
+                <div aria-hidden="true">
                     <label for="website">Website</label>
-                    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                    <input type="text" id="website" name="website" style="display:none" tabindex="-1" autocomplete="off">
                 </div>
                 <div class="grid sm:grid-cols-2 gap-5">
                     <div>
