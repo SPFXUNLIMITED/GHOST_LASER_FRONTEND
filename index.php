@@ -1,6 +1,7 @@
 <?php
 // Contact form submission feedback
 $contactStatus = isset($_GET['status']) ? $_GET['status'] : '';
+$contactMessage = isset($_GET['contact_message']) ? trim((string) $_GET['contact_message']) : '';
 
 $pageTitle       = 'Ghost Laser | Expert Laser Machine Repair';
 $pageDescription = 'Ghost Laser — precision laser cutting machine repair, calibration, and maintenance. Fast turnaround, trusted by professionals.';
@@ -266,14 +267,14 @@ require_once __DIR__ . '/templates/header.php';
                 <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-                <span>Thanks! Your message has been sent. We'll get back to you within 2 hours.</span>
+                <span><?= htmlspecialchars($contactMessage !== '' ? $contactMessage : "Thanks! Your message has been sent. We'll get back to you within 2 hours.", ENT_QUOTES, 'UTF-8') ?></span>
             </div>
             <?php elseif ($contactStatus === 'error'): ?>
             <div class="mb-8 flex items-start gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-4 text-left text-sm text-red-300">
                 <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-                <span>Something went wrong. Please check all fields and try again, or email us directly.</span>
+                <span><?= htmlspecialchars($contactMessage !== '' ? $contactMessage : 'Something went wrong. Please check all fields and try again, or email us directly.', ENT_QUOTES, 'UTF-8') ?></span>
             </div>
             <?php endif; ?>
 
