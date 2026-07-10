@@ -1,4 +1,7 @@
 <?php
+// Contact form submission feedback
+$contactStatus = isset($_GET['status']) ? $_GET['status'] : '';
+
 $pageTitle       = 'Ghost Laser | Expert Laser Machine Repair';
 $pageDescription = 'Ghost Laser — precision laser cutting machine repair, calibration, and maintenance. Fast turnaround, trusted by professionals.';
 $logoHref        = '#';
@@ -258,7 +261,28 @@ require_once __DIR__ . '/templates/header.php';
                 Send us the details. We'll get back to you with a diagnosis plan and quote — fast, transparent, no pressure.
             </p>
 
-            <form action="#" method="POST" class="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 sm:p-8 text-left glow-box space-y-5">
+            <?php if ($contactStatus === 'success'): ?>
+            <div class="mb-8 flex items-start gap-3 rounded-xl border border-green-500/40 bg-green-500/10 px-5 py-4 text-left text-sm text-green-300">
+                <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>Thanks! Your message has been sent. We'll get back to you within 2 hours.</span>
+            </div>
+            <?php elseif ($contactStatus === 'error'): ?>
+            <div class="mb-8 flex items-start gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-4 text-left text-sm text-red-300">
+                <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>Something went wrong. Please check all fields and try again, or email us directly.</span>
+            </div>
+            <?php endif; ?>
+
+            <form action="send-contact-email.php" method="POST" class="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 sm:p-8 text-left glow-box space-y-5">
+                <!-- Honeypot: hidden from real users, bots fill it in -->
+                <div aria-hidden="true">
+                    <label for="website">Website</label>
+                    <input type="text" id="website" name="website" style="display:none" tabindex="-1" autocomplete="off">
+                </div>
                 <div class="grid sm:grid-cols-2 gap-5">
                     <div>
                         <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="name">Your Name</label>
