@@ -5,7 +5,7 @@ session_start();
 $sessionCustomer = null;
 if (!empty($_SESSION['customer_id'])) {
     require_once __DIR__ . '/project/db.php';
-    $stmt = $pdo->prepare('SELECT first_name, last_name, email, phone, street, city, state, zip FROM customers WHERE id = ? LIMIT 1');
+    $stmt = $pdo->prepare('SELECT first_name, last_name, email, phone, address, city, state, zip FROM customers WHERE id = ? LIMIT 1');
     $stmt->execute([$_SESSION['customer_id']]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($row) {
@@ -284,9 +284,15 @@ require_once __DIR__ . '/templates/header.php';
                         <p class="text-xs text-cyan-400 font-semibold tracking-widest uppercase mb-4">Contact Information</p>
                         <div class="grid sm:grid-cols-2 gap-5">
                             <div>
-                                <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="name">Full Name <span class="text-red-400">*</span></label>
-                                <input type="text" id="name" name="name" placeholder="Jane Smith" required
-                                    value="<?= $sessionCustomer ? hv(trim($sessionCustomer['first_name'] . ' ' . $sessionCustomer['last_name'])) : '' ?>"
+                                <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="first_name">First Name <span class="text-red-400">*</span></label>
+                                <input type="text" id="first_name" name="first_name" placeholder="Jane" required
+                                    value="<?= $sessionCustomer ? hv($sessionCustomer['first_name']) : '' ?>"
+                                    class="input-base">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="last_name">Last Name <span class="text-red-400">*</span></label>
+                                <input type="text" id="last_name" name="last_name" placeholder="Smith" required
+                                    value="<?= $sessionCustomer ? hv($sessionCustomer['last_name']) : '' ?>"
                                     class="input-base">
                             </div>
                             <div>
@@ -352,9 +358,9 @@ require_once __DIR__ . '/templates/header.php';
                         <p class="text-xs text-cyan-400 font-semibold tracking-widest uppercase mb-4">Service Address</p>
                         <div class="space-y-5">
                             <div>
-                                <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="street">Street Address <span class="text-red-400">*</span></label>
-                                <input type="text" id="street" name="street" placeholder="123 Workshop Lane" required
-                                    value="<?= $sessionCustomer ? hv($sessionCustomer['street']) : '' ?>"
+                                <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="address">Address <span class="text-red-400">*</span></label>
+                                <input type="text" id="address" name="address" placeholder="123 Workshop Lane" required
+                                    value="<?= $sessionCustomer ? hv($sessionCustomer['address']) : '' ?>"
                                     class="input-base">
                             </div>
                             <div class="grid sm:grid-cols-3 gap-5">
@@ -566,14 +572,14 @@ require_once __DIR__ . '/templates/header.php';
         }
 
         function prefillForm(data) {
-            const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ');
-            setField('name',   fullName);
-            setField('phone',  data.phone  || '');
-            setField('email',  data.email  || '');
-            setField('street', data.street || '');
-            setField('city',   data.city   || '');
-            setField('state',  data.state  || '');
-            setField('zip',    data.zip    || '');
+            setField('first_name', data.first_name || '');
+            setField('last_name',  data.last_name  || '');
+            setField('phone',      data.phone      || '');
+            setField('email',      data.email      || '');
+            setField('address',    data.address    || '');
+            setField('city',       data.city       || '');
+            setField('state',      data.state      || '');
+            setField('zip',        data.zip        || '');
 
             // Lock email for logged-in users
             const emailInput = document.getElementById('email');
@@ -625,14 +631,15 @@ require_once __DIR__ . '/templates/header.php';
                 submitSpinner.classList.remove('hidden');
 
                 const data = {
-                    name:          form.name.value.trim(),
+                    first_name:    form.first_name.value.trim(),
+                    last_name:     form.last_name.value.trim(),
                     phone:         form.phone.value.trim(),
                     email:         form.email.value.trim(),
                     machine_brand: document.getElementById('machine_brand').value.trim(),
                     machine_model: document.getElementById('machine_model').value.trim(),
                     watts:         document.getElementById('watts').value.trim() || null,
                     age:           document.getElementById('age').value.trim() || null,
-                    street:        form.street.value.trim(),
+                    address:       form.address.value.trim(),
                     city:          form.city.value.trim(),
                     state:         form.state.value.trim().toUpperCase(),
                     zip:           form.zip.value.trim(),
