@@ -1,0 +1,28 @@
+[19-Jun-2026 04:25:40 America/Los_Angeles] api/book-repair-api.php DB error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'contact_name' in 'field list'
+[19-Jun-2026 04:26:30 America/Los_Angeles] api/book-repair-api.php DB error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'contact_name' in 'field list'
+[19-Jun-2026 04:26:35 America/Los_Angeles] api/book-repair-api.php DB error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'contact_name' in 'field list'
+[19-Jun-2026 04:27:13 America/Los_Angeles] api/book-repair-api.php DB error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'contact_name' in 'field list'
+[19-Jun-2026 04:27:28 America/Los_Angeles] api/book-repair-api.php DB error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'contact_name' in 'field list'
+[19-Jun-2026 04:27:45 America/Los_Angeles] api/book-repair-api.php DB error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'contact_name' in 'field list'
+[19-Jun-2026 06:19:25 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 92802
+[19-Jun-2026 06:20:11 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 92802
+[19-Jun-2026 06:22:13 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 92802
+[19-Jun-2026 06:27:59 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 92802
+[19-Jun-2026 06:29:50 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 035473
+[19-Jun-2026 06:31:11 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 035473
+[19-Jun-2026 06:33:55 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 035473
+[19-Jun-2026 06:35:59 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 035473
+[20-Jun-2026 11:51:40 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 92802, USA
+[20-Jun-2026 12:53:45 America/Los_Angeles] api/book-repair-api.php geocode_address failed: status=REQUEST_DENIED address=1564 West Brande Ave, Anaheim, CA, 92802, USA
+[23-Jun-2026 08:21:32 America/Los_Angeles] PHP Warning:  Trying to access array offset on int in /home3/spfx/public_html/website_a844b2f2/project/db.php on line 7
+[23-Jun-2026 08:21:32 America/Los_Angeles] PHP Warning:  Trying to access array offset on null in /home3/spfx/public_html/website_a844b2f2/project/db.php on line 9
+[23-Jun-2026 08:21:32 America/Los_Angeles] PHP Warning:  Trying to access array offset on null in /home3/spfx/public_html/website_a844b2f2/project/db.php on line 9
+[23-Jun-2026 08:21:32 America/Los_Angeles] PHP Warning:  Trying to access array offset on null in /home3/spfx/public_html/website_a844b2f2/project/db.php on line 9
+[23-Jun-2026 08:21:32 America/Los_Angeles] PHP Warning:  Trying to access array offset on null in /home3/spfx/public_html/website_a844b2f2/project/db.php on line 16
+[23-Jun-2026 08:21:32 America/Los_Angeles] PHP Warning:  Trying to access array offset on null in /home3/spfx/public_html/website_a844b2f2/project/db.php on line 16
+[23-Jun-2026 08:21:32 America/Los_Angeles] PHP Fatal error:  Uncaught PDOException: SQLSTATE[HY000] [2019] Unknown character set in /home3/spfx/public_html/website_a844b2f2/project/db.php:16
+Stack trace:
+#0 /home3/spfx/public_html/website_a844b2f2/project/db.php(16): PDO->__construct('mysql:host=;dbn...', NULL, Object(SensitiveParameterValue), Array)
+#1 /home3/spfx/public_html/website_a844b2f2/project/api/book-repair-api.php(28): require('/home3/spfx/pub...')
+#2 {main}
+  thrown in /home3/spfx/public_html/website_a844b2f2/project/db.php on line 16
