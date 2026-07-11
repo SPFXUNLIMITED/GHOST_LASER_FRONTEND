@@ -182,9 +182,14 @@ require_once __DIR__ . '/templates/header.php';
                 <div>
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
                     <div class="grid gap-5 sm:grid-cols-2">
-                        <input class="input-base" name="name" placeholder="Full Name *" required value="<?= h($_POST['name'] ?? '') ?>">
                         <div>
-                            <label class="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="phone">
+                            <label class="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400" for="name">
+                                Full Name <span class="text-red-400">*</span>
+                            </label>
+                            <input class="input-base" id="name" name="name" placeholder="Enter your full name" required value="<?= h($_POST['name'] ?? '') ?>">
+                        </div>
+                        <div>
+                            <label class="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400" for="phone">
                                 Phone Number <span class="text-red-400">*</span>
                                 <span class="relative group inline-flex items-center">
                                     <svg class="w-4 h-4 text-zinc-500 hover:text-cyan-400 cursor-pointer transition-colors duration-150 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
