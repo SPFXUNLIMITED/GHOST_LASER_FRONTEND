@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         $errors[] = 'Please select at least one service.';
     }
 
-    $required = ['name', 'phone', 'email', 'machine_brand', 'machine_model', 'street', 'city', 'state', 'zip', 'problem'];
+    $required = ['first_name', 'last_name', 'phone', 'email', 'machine_brand', 'machine_model', 'address', 'city', 'state', 'zip', 'problem'];
     foreach ($required as $field) {
         if (trim((string) ($_POST[$field] ?? '')) === '') {
             $errors[] = 'Please complete all required fields.';
@@ -139,7 +139,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
 
     if (!$errors && !$emailAlreadyRegistered) {
         $_SESSION['book_dash_repair'] = [
-            'name' => trim((string) ($_POST['name'] ?? '')),
+            'first_name' => trim((string) ($_POST['first_name'] ?? '')),
+            'last_name' => trim((string) ($_POST['last_name'] ?? '')),
             'phone' => formatUsPhoneDisplay($normalizedPhone),
             'phone_e164' => formatUsPhoneE164($normalizedPhone),
             'email' => trim((string) ($_POST['email'] ?? '')),
@@ -147,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'machine_model' => trim((string) ($_POST['machine_model'] ?? '')),
             'watts' => trim((string) ($_POST['watts'] ?? '')),
             'age' => trim((string) ($_POST['age'] ?? '')),
-            'street' => trim((string) ($_POST['street'] ?? '')),
+            'address' => trim((string) ($_POST['address'] ?? '')),
             'city' => trim((string) ($_POST['city'] ?? '')),
             'state' => strtoupper(trim((string) ($_POST['state'] ?? ''))),
             'zip' => trim((string) ($_POST['zip'] ?? '')),
@@ -170,7 +171,8 @@ if ($step === 2 && !$booking) {
 $stepTwoPayload = null;
 if ($step === 2 && $booking) {
     $stepTwoPayload = [
-        'name' => (string) ($booking['name'] ?? ''),
+        'first_name' => (string) ($booking['first_name'] ?? ''),
+        'last_name' => (string) ($booking['last_name'] ?? ''),
         'phone' => (string) ($booking['phone'] ?? ''),
         'phone_e164' => (string) ($booking['phone_e164'] ?? ''),
         'email' => (string) ($booking['email'] ?? ''),
@@ -178,7 +180,7 @@ if ($step === 2 && $booking) {
         'machine_model' => (string) ($booking['machine_model'] ?? ''),
         'watts' => (string) ($booking['watts'] ?? ''),
         'age' => (string) ($booking['age'] ?? ''),
-        'street' => (string) ($booking['street'] ?? ''),
+        'address' => (string) ($booking['address'] ?? ''),
         'city' => (string) ($booking['city'] ?? ''),
         'state' => (string) ($booking['state'] ?? ''),
         'zip' => (string) ($booking['zip'] ?? ''),
@@ -226,10 +228,16 @@ require_once __DIR__ . '/templates/header.php';
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
                     <div class="grid gap-5 sm:grid-cols-2">
                         <div>
-                            <label class="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400" for="name">
-                                Full Name <span class="text-red-400">*</span>
+                            <label class="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400" for="first_name">
+                                First Name <span class="text-red-400">*</span>
                             </label>
-                            <input class="input-base" id="name" name="name" placeholder="Enter your full name" required value="<?= h($_POST['name'] ?? '') ?>">
+                            <input class="input-base" id="first_name" name="first_name" placeholder="First Name *" required value="<?= h($_POST['first_name'] ?? '') ?>">
+                        </div>
+                        <div>
+                            <label class="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400" for="last_name">
+                                Last Name <span class="text-red-400">*</span>
+                            </label>
+                            <input class="input-base" id="last_name" name="last_name" placeholder="Last Name *" required value="<?= h($_POST['last_name'] ?? '') ?>">
                         </div>
                         <div>
                             <label class="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-400" for="phone">
@@ -270,7 +278,7 @@ require_once __DIR__ . '/templates/header.php';
                 <div>
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Service Address</p>
                     <div class="space-y-5">
-                        <input class="input-base" name="street" placeholder="Street Address *" required value="<?= h($_POST['street'] ?? '') ?>">
+                        <input class="input-base" name="address" placeholder="address *" required value="<?= h($_POST['address'] ?? '') ?>">
                         <div class="grid gap-5 sm:grid-cols-3">
                             <input class="input-base" name="city" placeholder="City *" required value="<?= h($_POST['city'] ?? '') ?>">
                             <input class="input-base uppercase" name="state" maxlength="2" placeholder="State *" required value="<?= h($_POST['state'] ?? '') ?>">
@@ -562,14 +570,15 @@ require_once __DIR__ . '/templates/header.php';
             ].filter(Boolean);
 
             const requestBody = {
-                name: bookingPayload.name,
+                first_name: bookingPayload.first_name,
+                last_name: bookingPayload.last_name,
                 phone: bookingPayload.phone_e164 || `+1${(bookingPayload.phone || '').replace(/\D/g, '').slice(-10)}`,
                 email: bookingPayload.email,
                 machine_brand: bookingPayload.machine_brand,
                 machine_model: bookingPayload.machine_model,
                 watts: bookingPayload.watts || null,
                 age: bookingPayload.age || null,
-                street: bookingPayload.street,
+                address: bookingPayload.address,
                 city: bookingPayload.city,
                 state: (bookingPayload.state || '').toUpperCase(),
                 zip: bookingPayload.zip,
