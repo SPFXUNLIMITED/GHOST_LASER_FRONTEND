@@ -622,7 +622,7 @@ require_once __DIR__ . '/templates/header.php';
             };
 
             try {
-                const response = await fetch('/project/api/book-repair-api.php', {
+                const response = await fetch('/api/book-repair-api.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody),
