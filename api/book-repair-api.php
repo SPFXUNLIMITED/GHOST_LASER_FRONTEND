@@ -237,7 +237,8 @@ function get_suggested_dates(string $priority, PDO $pdo): array {
 
 function resolve_customer_id(
     PDO $pdo,
-    string $name,
+    string $first_name,
+    string $last_name,
     string $phone,
     string $email,
     string $street,
@@ -246,7 +247,6 @@ function resolve_customer_id(
     string $zip,
     string $country
 ): int {
-    [$first_name, $last_name] = split_name_parts($name);
 
     if ($email !== '') {
         $stmt = $pdo->prepare("SELECT id FROM customers WHERE email = ? ORDER BY id ASC LIMIT 1");
@@ -299,7 +299,8 @@ function resolve_customer_id(
 }
 
 // ── Collect fields ────────────────────────────────────────────────────────────
-$name          = str_field($body, 'name');
+$first_name    = str_field($body, 'first_name');
+$last_name     = str_field($body, 'last_name');
 $phone         = str_field($body, 'phone');
 $email         = str_field($body, 'email');
 $machine_brand = str_field($body, 'machine_brand');
@@ -318,12 +319,20 @@ $priority      = str_field($body, 'priority') ?: 'standard';
 $errors       = [];
 $field_errors = [];
 
-if ($name === '') {
-    $msg = 'Name is required.';
-    $errors[] = $msg; $field_errors['name'] = $msg;
-} elseif (strlen($name) > 255) {
-    $msg = 'Name must be 255 characters or fewer.';
-    $errors[] = $msg; $field_errors['name'] = $msg;
+if ($first_name === '') {
+    $msg = 'First name is required.';
+    $errors[] = $msg; $field_errors['first_name'] = $msg;
+} elseif (strlen($first_name) > 255) {
+    $msg = 'First name must be 255 characters or fewer.';
+    $errors[] = $msg; $field_errors['first_name'] = $msg;
+}
+
+if ($last_name === '') {
+    $msg = 'Last name is required.';
+    $errors[] = $msg; $field_errors['last_name'] = $msg;
+} elseif (strlen($last_name) > 255) {
+    $msg = 'Last name must be 255 characters or fewer.';
+    $errors[] = $msg; $field_errors['last_name'] = $msg;
 }
 
 if ($phone === '') {
@@ -423,7 +432,8 @@ if ($errors) {
         'errors'       => $errors,
         'field_errors' => $field_errors,
         'received'     => [
-            'name'          => $name,
+            'first_name'    => $first_name,
+            'last_name'     => $last_name,
             'phone'         => $phone,
             'email'         => $email,
             'machine_brand' => $machine_brand,
@@ -449,7 +459,8 @@ $problem_summary = mb_substr($problem, 0, 255);
 try {
     $customer_id = resolve_customer_id(
         $pdo,
-        $name,
+        $first_name,
+        $last_name,
         $phone,
         $email,
         $street,
