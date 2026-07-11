@@ -21,11 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($mode === 'login')) {
     if ($email === '' || $password === '') {
         $error = 'Please enter your email and password.';
     } else {
-        $stmt = $pdo->prepare('SELECT id, first_name, password FROM customers WHERE email = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id, first_name, password_hash FROM customers WHERE email = ? LIMIT 1');
         $stmt->execute([$email]);
         $customer = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($customer && !empty($customer['password']) && password_verify($password, $customer['password'])) {
+        if ($customer && !empty($customer['password_hash']) && password_verify($password, $customer['password_hash'])) {
             session_regenerate_id(true);
             $_SESSION['customer_id']         = $customer['id'];
             $_SESSION['customer_first_name'] = $customer['first_name'];
