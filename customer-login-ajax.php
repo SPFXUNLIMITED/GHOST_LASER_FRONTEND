@@ -21,7 +21,7 @@ if ($email === '' || $password === '') {
 require_once __DIR__ . '/project/db.php';
 
 $stmt = $pdo->prepare(
-    'SELECT id, first_name, last_name, email, password_hash, phone, street, city, state, zip FROM customers WHERE email = ? LIMIT 1'
+    'SELECT id, first_name, last_name, email, password_hash, phone, address, city, state, zip FROM customers WHERE email = ? LIMIT 1'
 );
 $stmt->execute([$email]);
 $customer = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -39,7 +39,7 @@ if ($customer && !empty($customer['password_hash']) && password_verify($password
         'last_name'  => $customer['last_name'],
         'email'      => $customer['email'],
         'phone'      => $customer['phone'] ?? '',
-        'street'     => $customer['street'] ?? '',
+        'address'     => $customer['address'] ?? '',
         'city'       => $customer['city'] ?? '',
         'state'      => $customer['state'] ?? '',
         'zip'        => $customer['zip'] ?? '',
