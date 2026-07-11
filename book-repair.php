@@ -1,4 +1,22 @@
 <?php
+session_start();
+
+// Pre-fill form with logged-in customer data
+$sessionCustomer = null;
+if (!empty($_SESSION['customer_id'])) {
+    require_once __DIR__ . '/project/db.php';
+    $stmt = $pdo->prepare('SELECT first_name, last_name, email, phone, street, city, state, zip FROM customers WHERE id = ? LIMIT 1');
+    $stmt->execute([$_SESSION['customer_id']]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $sessionCustomer = $row;
+    }
+}
+
+function hv($value) {
+    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
 $isHoneypotSpam = false;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $website = trim((string) ($_POST['website'] ?? ''));
@@ -78,6 +96,19 @@ require_once __DIR__ . '/templates/header.php';
     <section class="pb-24 lg:pb-32 bg-zinc-950">
         <div class="max-w-3xl mx-auto px-6 lg:px-8">
 
+            <?php if ($sessionCustomer): ?>
+            <!-- Logged-in customer banner -->
+            <div class="mb-6 flex items-center justify-between gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-sm text-cyan-300">
+                <span>
+                    <svg class="inline w-4 h-4 mr-1.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                    </svg>
+                    Logged in as <strong class="text-cyan-200"><?= hv($sessionCustomer['email']) ?></strong> — your details have been pre-filled.
+                </span>
+                <a href="customer-logout.php" class="text-xs text-zinc-400 hover:text-white transition-colors whitespace-nowrap">Log out</a>
+            </div>
+            <?php endif; ?>
+
             <!-- Success message (hidden by default, populated dynamically from API response) -->
             <div id="msg-success" class="hidden mb-8 rounded-2xl border border-emerald-500/30 bg-emerald-950/60 px-5 py-5 shadow-lg shadow-emerald-950/20 sm:px-6">
                 <div class="flex items-start gap-3.5">
@@ -123,18 +154,22 @@ require_once __DIR__ . '/templates/header.php';
                         <div>
                             <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="name">Full Name <span class="text-red-400">*</span></label>
                             <input type="text" id="name" name="name" placeholder="Jane Smith" required
+                                value="<?= $sessionCustomer ? hv(trim($sessionCustomer['first_name'] . ' ' . $sessionCustomer['last_name'])) : '' ?>"
                                 class="input-base">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="phone">Phone Number <span class="text-red-400">*</span></label>
                             <input type="tel" id="phone" name="phone" placeholder="+1 (555) 000-0000" required
+                                value="<?= $sessionCustomer ? hv($sessionCustomer['phone']) : '' ?>"
                                 class="input-base">
                         </div>
                     </div>
                     <div class="mt-5">
                         <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="email">Email Address <span class="text-red-400">*</span></label>
                         <input type="email" id="email" name="email" placeholder="jane@company.com" required
-                            class="input-base">
+                            value="<?= $sessionCustomer ? hv($sessionCustomer['email']) : '' ?>"
+                            <?= $sessionCustomer ? 'readonly' : '' ?>
+                            class="input-base<?= $sessionCustomer ? ' opacity-70 cursor-not-allowed' : '' ?>">
                     </div>
                 </div>
 
@@ -176,22 +211,26 @@ require_once __DIR__ . '/templates/header.php';
                         <div>
                             <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="street">Street Address <span class="text-red-400">*</span></label>
                             <input type="text" id="street" name="street" placeholder="123 Workshop Lane" required
+                                value="<?= $sessionCustomer ? hv($sessionCustomer['street']) : '' ?>"
                                 class="input-base">
                         </div>
                         <div class="grid sm:grid-cols-3 gap-5">
                             <div class="sm:col-span-1">
                                 <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="city">City <span class="text-red-400">*</span></label>
                                 <input type="text" id="city" name="city" placeholder="Austin" required
+                                    value="<?= $sessionCustomer ? hv($sessionCustomer['city']) : '' ?>"
                                     class="input-base">
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="state">State <span class="text-red-400">*</span></label>
                                 <input type="text" id="state" name="state" placeholder="TX" required maxlength="2"
+                                    value="<?= $sessionCustomer ? hv($sessionCustomer['state']) : '' ?>"
                                     class="input-base uppercase">
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="zip">ZIP Code <span class="text-red-400">*</span></label>
                                 <input type="text" id="zip" name="zip" placeholder="78701" required
+                                    value="<?= $sessionCustomer ? hv($sessionCustomer['zip']) : '' ?>"
                                     class="input-base">
                             </div>
                         </div>
@@ -274,6 +313,9 @@ require_once __DIR__ . '/templates/header.php';
     </section>
 
     <script>
+        // Logged-in customer ID (null if not logged in)
+        const CUSTOMER_ID = <?= isset($_SESSION['customer_id']) ? (int) $_SESSION['customer_id'] : 'null' ?>;
+
         // Format a YYYY-MM-DD date string as "June 24th, 2026"
         function formatDate(dateStr) {
             const [year, month, day] = dateStr.split('-').map(Number);
@@ -327,6 +369,10 @@ require_once __DIR__ . '/templates/header.php';
                 priority: form.priority.value,
                 website:  form.website.value.trim(),
             };
+
+            if (CUSTOMER_ID) {
+                data.customer_id = CUSTOMER_ID;
+            }
 
             try {
                 const res = await fetch('/project/api/book-repair-api.php', {

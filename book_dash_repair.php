@@ -1,6 +1,12 @@
 <?php
 session_start();
 
+// Redirect already-logged-in customers to the booking form
+if (!empty($_SESSION['customer_id'])) {
+    header('Location: book-repair.php');
+    exit;
+}
+
 require_once __DIR__ . '/project/db.php';
 
 // Ensure password_hash column exists
