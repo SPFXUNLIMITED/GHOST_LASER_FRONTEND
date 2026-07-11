@@ -9,6 +9,17 @@ if (!empty($_SESSION['customer_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 
+// Ensure password_hash column exists for customer authentication
+try {
+    $columnCheck = $pdo->query("SHOW COLUMNS FROM customers LIKE 'password_hash'");
+    $passwordHashExists = $columnCheck && $columnCheck->fetch(PDO::FETCH_ASSOC);
+    if (!$passwordHashExists) {
+        $pdo->exec("ALTER TABLE customers ADD COLUMN password_hash VARCHAR(255) DEFAULT NULL");
+    }
+} catch (PDOException $e) {
+    // Avoid hard failures on schema checks; login will fail gracefully if unavailable.
+}
+
 $mode   = $_GET['mode'] ?? 'landing'; // 'landing' | 'login'
 $error  = '';
 $notice = '';
