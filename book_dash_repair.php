@@ -119,29 +119,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '2')) {
-    $booking = $_SESSION['book_dash_repair'] ?? null;
-    if (!$booking) {
-        header('Location: book_dash_repair.php');
-        exit;
-    }
-    $speed = (string) ($_POST['service_speed'] ?? 'standard');
-    if (!isset($speedOptions[$speed])) {
-        $speed = 'standard';
-    }
-    $baseTotal = 0;
-    foreach ($booking['services'] as $serviceKey) {
-        $baseTotal += $serviceBasePrices[$serviceKey] ?? 0;
-    }
-    $_SESSION['book_dash_repair']['service_speed'] = $speed;
-    $_SESSION['book_dash_repair']['total_price'] = round($baseTotal * $speedOptions[$speed]['multiplier'], 2);
-    $success = 'Service speed selected. Total has been updated.';
-}
-
 $booking = $_SESSION['book_dash_repair'] ?? null;
 if ($step === 2 && !$booking) {
     header('Location: book_dash_repair.php');
     exit;
+}
+
+$stepTwoPayload = null;
+if ($step === 2 && $booking) {
+    $stepTwoPayload = [
+        'name' => (string) ($booking['name'] ?? ''),
+        'phone' => (string) ($booking['phone'] ?? ''),
+        'email' => (string) ($booking['email'] ?? ''),
+        'machine_brand' => (string) ($booking['machine_brand'] ?? ''),
+        'machine_model' => (string) ($booking['machine_model'] ?? ''),
+        'watts' => (string) ($booking['watts'] ?? ''),
+        'age' => (string) ($booking['age'] ?? ''),
+        'street' => (string) ($booking['street'] ?? ''),
+        'city' => (string) ($booking['city'] ?? ''),
+        'state' => (string) ($booking['state'] ?? ''),
+        'zip' => (string) ($booking['zip'] ?? ''),
+        'problem' => (string) ($booking['problem'] ?? ''),
+        'services' => array_values(array_intersect(array_keys($serviceLabels), (array) ($booking['services'] ?? []))),
+        'other_service' => (string) ($booking['other_service'] ?? ''),
+        'service_speed' => isset($speedOptions[$booking['service_speed'] ?? '']) ? (string) $booking['service_speed'] : 'standard',
+    ];
 }
 
 require_once __DIR__ . '/templates/header.php';
@@ -273,6 +275,17 @@ require_once __DIR__ . '/templates/header.php';
                 $total = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
             ?>
             <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+                <div id="step-2-success" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-4 text-sm text-emerald-200">
+                    <p class="font-semibold text-emerald-300">Thank you. We’ve received your repair request.</p>
+                    <p id="step-2-success-text" class="mt-1 text-emerald-100/80">We’ll contact you shortly to schedule your repair.</p>
+                    <ul id="step-2-success-dates" class="mt-3 space-y-2 text-emerald-100/80"></ul>
+                </div>
+
+                <div id="step-2-error" class="hidden rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-4 text-sm text-red-200">
+                    <p class="font-semibold text-red-300">Something went wrong</p>
+                    <p id="step-2-error-text" class="mt-1 text-red-100/80">Please check your details and try again.</p>
+                </div>
+
                 <div>
                     <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-cyan-400">Selected Services</p>
                     <ul class="space-y-2 text-sm text-zinc-200">
@@ -288,8 +301,7 @@ require_once __DIR__ . '/templates/header.php';
                     </ul>
                 </div>
 
-                <form method="post" action="book_dash_repair.php?step=2" class="space-y-4">
-                    <input type="hidden" name="form_step" value="2">
+                <form id="step-2-booking-form" class="space-y-4" novalidate>
                     <p class="text-xs font-semibold uppercase tracking-widest text-cyan-400">Choose Service Speed</p>
                     <?php foreach ($speedOptions as $speedKey => $speed): ?>
                         <?php $speedTotal = round($baseTotal * $speed['multiplier'], 2); ?>
@@ -302,14 +314,21 @@ require_once __DIR__ . '/templates/header.php';
                         </label>
                     <?php endforeach; ?>
 
+                    <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+                        <label for="step-2-website">Website</label>
+                        <input type="text" id="step-2-website" name="website" tabindex="-1" autocomplete="off">
+                    </div>
+
                     <div class="rounded-lg border border-cyan-500/30 bg-cyan-950/30 px-4 py-3 text-sm">
                         <span class="text-zinc-300">Current Total:</span>
-                        <span class="font-semibold text-cyan-300">$<?= number_format($total, 2) ?></span>
+                        <span id="current-total" class="font-semibold text-cyan-300">$<?= number_format($total, 2) ?></span>
                     </div>
 
                     <div class="flex gap-3">
                         <a href="book_dash_repair.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200">Start Over</a>
-                        <button type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400">Update Total</button>
+                        <button id="step-2-submit-btn" type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400">
+                            <span id="step-2-submit-label">Book My Repair</span>
+                        </button>
                     </div>
                 </form>
             </div>
@@ -330,6 +349,143 @@ require_once __DIR__ . '/templates/header.php';
         };
         otherServiceCheckbox.addEventListener('change', syncOtherVisibility);
         syncOtherVisibility();
+    }
+
+    const stepTwoForm = document.getElementById('step-2-booking-form');
+    const bookingPayload = <?= $stepTwoPayload ? json_encode($stepTwoPayload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) : 'null' ?>;
+    const serviceLabels = <?= json_encode($serviceLabels, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const serviceBasePrices = <?= json_encode($serviceBasePrices, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const speedOptions = <?= json_encode($speedOptions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const speedPriorityMap = { standard: 'standard', rush: 'vip', emergency: 'emergency' };
+
+    if (stepTwoForm && bookingPayload) {
+        const totalEl = document.getElementById('current-total');
+        const submitBtn = document.getElementById('step-2-submit-btn');
+        const submitLabel = document.getElementById('step-2-submit-label');
+        const successBox = document.getElementById('step-2-success');
+        const successText = document.getElementById('step-2-success-text');
+        const successDates = document.getElementById('step-2-success-dates');
+        const errorBox = document.getElementById('step-2-error');
+        const errorText = document.getElementById('step-2-error-text');
+        const speedInputs = stepTwoForm.querySelectorAll('input[name="service_speed"]');
+
+        const updateDisplayedTotal = () => {
+            const selectedSpeed = stepTwoForm.querySelector('input[name="service_speed"]:checked')?.value || 'standard';
+            bookingPayload.service_speed = selectedSpeed;
+
+            const baseTotal = (bookingPayload.services || []).reduce((sum, serviceKey) => {
+                return sum + (serviceBasePrices[serviceKey] || 0);
+            }, 0);
+
+            bookingPayload.total_price = Number((baseTotal * (speedOptions[selectedSpeed]?.multiplier || 1)).toFixed(2));
+            totalEl.textContent = `$${bookingPayload.total_price.toFixed(2)}`;
+        };
+
+        const formatDate = (dateStr) => {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            const date = new Date(year, month - 1, day);
+            const monthName = date.toLocaleString('en-US', { month: 'long' });
+            const suffix = day === 1 || day === 21 || day === 31 ? 'st'
+                : day === 2 || day === 22 ? 'nd'
+                : day === 3 || day === 23 ? 'rd'
+                : 'th';
+            return `${monthName} ${day}${suffix}, ${year}`;
+        };
+
+        speedInputs.forEach((input) => {
+            input.addEventListener('change', updateDisplayedTotal);
+        });
+        updateDisplayedTotal();
+
+        stepTwoForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            successBox.classList.add('hidden');
+            errorBox.classList.add('hidden');
+            submitBtn.disabled = true;
+            submitLabel.textContent = 'Submitting…';
+
+            updateDisplayedTotal();
+
+            const selectedSpeed = bookingPayload.service_speed || 'standard';
+            const selectedSpeedLabel = speedOptions[selectedSpeed]?.label || 'Standard';
+            const selectedServices = (bookingPayload.services || []).map((serviceKey) => serviceLabels[serviceKey] || serviceKey);
+            const problemSections = [
+                bookingPayload.problem,
+                '--- Booking Summary ---',
+                `Selected services: ${selectedServices.join(', ')}`,
+                bookingPayload.other_service ? `Other service details: ${bookingPayload.other_service}` : null,
+                `Service speed: ${selectedSpeedLabel}`,
+                `Quoted total: $${bookingPayload.total_price.toFixed(2)}`,
+            ].filter(Boolean);
+
+            const requestBody = {
+                name: bookingPayload.name,
+                phone: bookingPayload.phone,
+                email: bookingPayload.email,
+                machine_brand: bookingPayload.machine_brand,
+                machine_model: bookingPayload.machine_model,
+                watts: bookingPayload.watts || null,
+                age: bookingPayload.age || null,
+                street: bookingPayload.street,
+                city: bookingPayload.city,
+                state: (bookingPayload.state || '').toUpperCase(),
+                zip: bookingPayload.zip,
+                problem: problemSections.join('\n\n'),
+                priority: speedPriorityMap[selectedSpeed] || 'standard',
+                website: stepTwoForm.website.value.trim(),
+                services: bookingPayload.services || [],
+                other_service: bookingPayload.other_service || '',
+                service_speed: selectedSpeed,
+                total_price: bookingPayload.total_price,
+            };
+
+            try {
+                const response = await fetch('/project/api/book-repair-api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                });
+
+                const json = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(json.message || 'Please check your details and try again.');
+                }
+
+                successText.textContent = requestBody.priority === 'emergency'
+                    ? 'Your Emergency request has been received and flagged. Our team will contact you as soon as possible.'
+                    : (requestBody.priority === 'vip'
+                        ? 'Your Rush request has been received. We’ll contact you shortly to schedule your repair.'
+                        : 'We’ll contact you shortly to schedule your repair.');
+
+                successDates.innerHTML = '';
+                const suggestedDates = Array.isArray(json.suggested_dates) ? json.suggested_dates : [];
+                if (suggestedDates.length > 0) {
+                    suggestedDates.forEach((dateStr) => {
+                        const item = document.createElement('li');
+                        item.className = 'rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2';
+                        item.textContent = formatDate(dateStr);
+                        successDates.appendChild(item);
+                    });
+                } else {
+                    const item = document.createElement('li');
+                    item.className = 'rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2';
+                    item.textContent = 'We’ll be in touch shortly to arrange a date.';
+                    successDates.appendChild(item);
+                }
+
+                successBox.classList.remove('hidden');
+                successBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch (error) {
+                errorText.textContent = error instanceof Error ? error.message : 'Network error — please check your connection and try again.';
+                errorBox.classList.remove('hidden');
+                errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } finally {
+                submitBtn.disabled = false;
+                submitLabel.textContent = 'Book My Repair';
+            }
+        });
     }
 </script>
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
