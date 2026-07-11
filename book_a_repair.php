@@ -74,6 +74,19 @@ $extraHead = <<<'HTML'
     .speed-option { transition: border-color 0.15s, background 0.15s; }
     .speed-option:has(input[type="radio"]:checked) { border-color: #06b6d4; background: rgba(6,182,212,0.08); color: #22d3ee; }
     .speed-option:hover { border-color: rgb(113,113,122); }
+    .confirmation-grid {
+        background-image:
+            linear-gradient(rgba(34,211,238,0.08) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(34,211,238,0.08) 1px, transparent 1px);
+        background-size: 42px 42px;
+        background-position: center;
+    }
+    .confirmation-orb {
+        position: absolute;
+        border-radius: 9999px;
+        filter: blur(70px);
+        pointer-events: none;
+    }
 </style>
 HTML;
 
@@ -130,7 +143,7 @@ $serviceBasePrices = [
 ];
 $speedOptions = [
     'standard' => ['label' => 'Standard', 'multiplier' => 1.00],
-    'rush' => ['label' => 'Rush', 'multiplier' => 1.35],
+    'rush' => ['label' => 'VIP', 'multiplier' => 1.35],
     'emergency' => ['label' => 'Emergency', 'multiplier' => 1.75],
 ];
 
@@ -523,10 +536,49 @@ require_once __DIR__ . '/templates/header.php';
                 $total = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
             ?>
             <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
-                <div id="step-2-success" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-4 text-sm text-emerald-200">
-                    <p class="font-semibold text-emerald-300">Thank you. We’ve received your repair request.</p>
-                    <p id="step-2-success-text" class="mt-1 text-emerald-100/80">We’ll contact you shortly to schedule your repair.</p>
-                    <ul id="step-2-success-dates" class="mt-3 space-y-2 text-emerald-100/80"></ul>
+                <div id="step-2-success" class="hidden relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-zinc-950 px-6 py-8 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_0_70px_rgba(8,145,178,0.12)] sm:px-8 sm:py-10">
+                    <div class="confirmation-orb -top-16 right-0 h-40 w-40 bg-cyan-500/20"></div>
+                    <div class="confirmation-orb bottom-0 left-0 h-36 w-36 bg-emerald-500/10"></div>
+                    <div class="confirmation-grid absolute inset-0 opacity-40"></div>
+                    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent"></div>
+                    <div class="relative">
+                        <div class="flex flex-col items-center text-center">
+                            <span class="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200">
+                                <span class="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(103,232,249,0.9)]"></span>
+                                Transmission Received
+                            </span>
+                            <div class="mt-6 flex items-center gap-4 rounded-2xl border border-cyan-400/15 bg-zinc-900/80 px-5 py-4 shadow-[0_0_35px_rgba(6,182,212,0.12)]">
+                                <span class="flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10">
+                                    <img src="<?= h(asset('ghost-logo2-32x32.png')) ?>" alt="Ghost Laser logo" class="h-10 w-10">
+                                </span>
+                                <div class="text-left">
+                                    <p class="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500">Ghost Laser</p>
+                                    <p class="text-lg font-black tracking-[0.18em] text-white">REPAIR DESK</p>
+                                </div>
+                            </div>
+                            <h2 id="step-2-success-heading" class="mt-8 text-3xl font-black tracking-tight text-white sm:text-4xl">Your Repair Has Been Booked</h2>
+                            <p id="step-2-success-text" class="mt-3 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base">We’ve received your request and our team will reach out soon with the next steps.</p>
+                        </div>
+
+                        <div class="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                            <div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <span class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">Chosen Priority</span>
+                                    <span id="step-2-success-priority" class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-wide"></span>
+                                </div>
+                                <p id="step-2-success-priority-text" class="mt-4 text-sm leading-7 text-zinc-300">Your booking has been placed in our queue and we’ll contact you based on the priority you selected.</p>
+                            </div>
+                            <div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+                                <p id="step-2-success-dates-label" class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">Suggested Service Dates</p>
+                                <ul id="step-2-success-dates" class="mt-4 space-y-3 text-sm text-zinc-100"></ul>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                            <a href="book_a_repair.php" class="inline-flex items-center justify-center rounded-lg border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-900">Book Another Repair</a>
+                            <a href="/" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-cyan-400 btn-glow">Return Home</a>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="step-2-error" class="hidden rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-4 text-sm text-red-200">
@@ -534,6 +586,7 @@ require_once __DIR__ . '/templates/header.php';
                     <p id="step-2-error-text" class="mt-1 text-red-100/80">Please check your details and try again.</p>
                 </div>
 
+                <div id="step-2-booking-shell">
                 <div>
                     <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-cyan-400">Selected Services</p>
                     <ul class="space-y-2 text-sm text-zinc-200">
@@ -594,6 +647,7 @@ require_once __DIR__ . '/templates/header.php';
                         </button>
                     </div>
                 </form>
+                </div>
             </div>
         <?php endif; ?>
         <?php endif; /* end $view === 'new' */ ?>
@@ -690,12 +744,40 @@ require_once __DIR__ . '/templates/header.php';
         const totalEl = document.getElementById('current-total');
         const submitBtn = document.getElementById('step-2-submit-btn');
         const submitLabel = document.getElementById('step-2-submit-label');
+        const bookingShell = document.getElementById('step-2-booking-shell');
         const successBox = document.getElementById('step-2-success');
+        const successHeading = document.getElementById('step-2-success-heading');
         const successText = document.getElementById('step-2-success-text');
+        const successPriority = document.getElementById('step-2-success-priority');
+        const successPriorityText = document.getElementById('step-2-success-priority-text');
+        const successDatesLabel = document.getElementById('step-2-success-dates-label');
         const successDates = document.getElementById('step-2-success-dates');
         const errorBox = document.getElementById('step-2-error');
         const errorText = document.getElementById('step-2-error-text');
         const speedInputs = stepTwoForm.querySelectorAll('input[name="service_speed"]');
+        const priorityConfig = {
+            standard: {
+                label: 'Standard',
+                badgeClasses: ['border-zinc-500/40', 'bg-zinc-500/15', 'text-zinc-100'],
+                headline: 'Your Repair Has Been Booked',
+                message: 'We’ve received your request and will contact you soon to confirm the next steps. Standard bookings are typically scheduled within 3–5 business days.',
+                detail: 'Your request is queued under Standard priority, and our team will follow up as soon as the next available scheduling window opens.'
+            },
+            vip: {
+                label: 'VIP',
+                badgeClasses: ['border-cyan-400/40', 'bg-cyan-400/15', 'text-cyan-100'],
+                headline: 'VIP Repair Request Confirmed',
+                message: 'Thank you — your VIP booking is locked in. We’ve received your request and will contact you soon with expedited scheduling details.',
+                detail: 'Your request has been elevated to VIP priority so our team can move quickly and keep your downtime to a minimum.'
+            },
+            emergency: {
+                label: 'Emergency',
+                badgeClasses: ['border-red-400/40', 'bg-red-500/15', 'text-red-100'],
+                headline: 'Emergency Repair Request Received',
+                message: 'Your emergency request has been received and flagged for urgent attention. Our team will contact you as soon as possible.',
+                detail: 'Your booking is marked Emergency, and we’ll prioritize outreach immediately based on your urgent service needs.'
+            }
+        };
 
         const updateDisplayedTotal = () => {
             const selectedSpeed = stepTwoForm.querySelector('input[name="service_speed"]:checked')?.value || 'standard';
@@ -782,28 +864,32 @@ require_once __DIR__ . '/templates/header.php';
                     throw new Error(json.message || 'Please check your details and try again.');
                 }
 
-                successText.textContent = requestBody.priority === 'emergency'
-                    ? 'Your Emergency request has been received and flagged. Our team will contact you as soon as possible.'
-                    : (requestBody.priority === 'vip'
-                        ? 'Your Rush request has been received. We’ll contact you shortly to schedule your repair.'
-                        : 'We’ll contact you shortly to schedule your repair.');
+                const activePriority = priorityConfig[requestBody.priority] || priorityConfig.standard;
+                successHeading.textContent = activePriority.headline;
+                successText.textContent = activePriority.message;
+                successPriorityText.textContent = activePriority.detail;
+                successPriority.textContent = activePriority.label;
+                successPriority.className = 'inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-wide';
+                successPriority.classList.add(...activePriority.badgeClasses);
+                successDatesLabel.textContent = `Based on your ${activePriority.label} priority, here are your suggested service dates:`;
 
                 successDates.innerHTML = '';
                 const suggestedDates = Array.isArray(json.suggested_dates) ? json.suggested_dates : [];
                 if (suggestedDates.length > 0) {
                     suggestedDates.forEach((dateStr) => {
                         const item = document.createElement('li');
-                        item.className = 'rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2';
-                        item.textContent = formatDate(dateStr);
+                        item.className = 'flex items-center gap-3 rounded-xl border border-cyan-400/15 bg-cyan-400/5 px-4 py-3';
+                        item.innerHTML = `<span class="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-200"><svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg></span><span>${formatDate(dateStr)}</span>`;
                         successDates.appendChild(item);
                     });
                 } else {
                     const item = document.createElement('li');
-                    item.className = 'rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2';
+                    item.className = 'rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-300';
                     item.textContent = 'We’ll be in touch shortly to arrange a date.';
                     successDates.appendChild(item);
                 }
 
+                bookingShell.classList.add('hidden');
                 successBox.classList.remove('hidden');
                 successBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             } catch (error) {
