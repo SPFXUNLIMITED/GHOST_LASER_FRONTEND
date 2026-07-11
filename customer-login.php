@@ -9,37 +9,30 @@ if (!empty($_SESSION['customer_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 
-// Ensure password_hash column exists for customer authentication
-try {
-    $columnCheck = $pdo->query("SHOW COLUMNS FROM customers LIKE 'password_hash'");
-    $passwordHashExists = $columnCheck && $columnCheck->fetch(PDO::FETCH_ASSOC);
-    if (!$passwordHashExists) {
-        $pdo->exec("ALTER TABLE customers ADD COLUMN password_hash VARCHAR(255) DEFAULT NULL");
-    }
-} catch (PDOException $e) {
-    // Avoid hard failures on schema checks; login will fail gracefully if unavailable.
-}
-
 $mode   = $_GET['mode'] ?? 'landing'; // 'landing' | 'login'
 $error  = '';
 $notice = '';
 
 // Handle login form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($mode === 'login')) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $mode === 'login') {
     $email    = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
     if ($email === '' || $password === '') {
         $error = 'Please enter your email and password.';
     } else {
-        $stmt = $pdo->prepare('SELECT id, first_name, password_hash FROM customers WHERE email = ? LIMIT 1');
+        $stmt = $pdo->prepare(
+            'SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1'
+        );
         $stmt->execute([$email]);
         $customer = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($customer && !empty($customer['password_hash']) && password_verify($password, $customer['password_hash'])) {
             session_regenerate_id(true);
-            $_SESSION['customer_id']         = $customer['id'];
+            $_SESSION['customer_id']         = (int) $customer['id'];
             $_SESSION['customer_first_name'] = $customer['first_name'];
+            $_SESSION['customer_last_name']  = $customer['last_name'];
+            $_SESSION['customer_email']      = $customer['email'];
             header('Location: book-repair.php');
             exit;
         } else {
