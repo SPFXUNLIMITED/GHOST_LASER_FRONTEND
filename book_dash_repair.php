@@ -20,13 +20,33 @@ $pageTitle = 'Book a Repair | Ghost Laser';
 $pageDescription = 'Book a laser machine repair with Ghost Laser.';
 $extraHead = <<<'HTML'
 <style>
-    .input-base{width:100%;background:rgba(39,39,42,0.6);border:1px solid rgb(63,63,70);color:white;border-radius:.5rem;padding:.625rem 1rem;font-size:.875rem;outline:none}
-    .input-base:focus{border-color:#06b6d4;box-shadow:0 0 0 1px rgba(6,182,212,.5)}
-    .input-base.input-invalid{border-color:rgba(248,113,113,.95)!important;box-shadow:0 0 0 1px rgba(248,113,113,.35)!important}
-    .field-error{margin-top:.5rem;color:rgb(248 113 113);font-size:.75rem;line-height:1rem}
-    .choice-card input{display:none}
-    .choice-card label{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;border:1px solid rgb(63,63,70);border-radius:.5rem;background:rgba(39,39,42,.6);cursor:pointer}
-    .choice-card input:checked+label{border-color:#06b6d4;background:rgba(6,182,212,.08);color:#22d3ee}
+    .glow-cyan { text-shadow: 0 0 30px rgba(6,182,212,0.6), 0 0 60px rgba(6,182,212,0.3); }
+    .glow-box { box-shadow: 0 0 0 1px rgba(6,182,212,0.2), 0 0 40px rgba(6,182,212,0.05); }
+    .btn-glow { box-shadow: 0 0 20px rgba(6,182,212,0.4); }
+    .btn-glow:hover { box-shadow: 0 0 30px rgba(6,182,212,0.7); }
+    .card-glow { box-shadow: 0 0 0 1px rgba(6,182,212,0.15), 0 0 60px rgba(6,182,212,0.06); }
+    .input-base {
+        width: 100%;
+        background: rgba(39,39,42,0.6);
+        border: 1px solid rgb(63,63,70);
+        color: white;
+        border-radius: 0.5rem;
+        padding: 0.625rem 1rem;
+        font-size: 0.875rem;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        outline: none;
+    }
+    .input-base::placeholder { color: rgb(82,82,91); }
+    .input-base:focus { border-color: #06b6d4; box-shadow: 0 0 0 1px rgba(6,182,212,0.5); }
+    .input-base.input-invalid { border-color: rgba(248,113,113,.95) !important; box-shadow: 0 0 0 1px rgba(248,113,113,.35) !important; }
+    .field-error { margin-top: .5rem; color: rgb(248 113 113); font-size: .75rem; line-height: 1rem; }
+    .choice-card input { display: none; }
+    .choice-card label { display: flex; align-items: center; gap: .6rem; padding: .7rem 1rem; border: 1px solid rgb(63,63,70); border-radius: .5rem; background: rgba(39,39,42,.6); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+    .choice-card input:checked + label { border-color: #06b6d4; background: rgba(6,182,212,.08); color: #22d3ee; }
+    .choice-card label:hover { border-color: rgb(113,113,122); }
+    .speed-option { transition: border-color 0.15s, background 0.15s; }
+    .speed-option:has(input[type="radio"]:checked) { border-color: #06b6d4; background: rgba(6,182,212,0.08); color: #22d3ee; }
+    .speed-option:hover { border-color: rgb(113,113,122); }
 </style>
 HTML;
 
@@ -193,13 +213,23 @@ if ($step === 2 && $booking) {
 
 require_once __DIR__ . '/templates/header.php';
 ?>
-<section class="pt-28 pb-10 bg-zinc-950">
-    <div class="max-w-3xl mx-auto px-6 text-center">
-        <h1 class="text-4xl font-black tracking-tight">Book Your <span class="text-cyan-400">Repair</span></h1>
+<!-- PAGE HEADER -->
+<section class="pt-32 pb-12 lg:pb-16 bg-zinc-950">
+    <div class="max-w-3xl mx-auto px-6 lg:px-8 text-center">
+        <div class="inline-flex items-center gap-2 bg-zinc-900 border border-cyan-500/30 rounded-full px-4 py-1.5 mb-8">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+            <span class="text-xs text-cyan-400 font-medium tracking-wider uppercase">Book a Service</span>
+        </div>
+        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight mb-5">
+            Book Your <span class="text-cyan-400 glow-cyan">Repair</span>
+        </h1>
+        <p class="text-zinc-400 text-lg leading-relaxed max-w-xl mx-auto">
+            Fill in the details below and our team will follow up within 2 hours with a diagnosis plan and transparent quote.
+        </p>
     </div>
 </section>
 
-<section class="pb-20 bg-zinc-950">
+<section class="pb-24 lg:pb-32 bg-zinc-950">
     <div class="max-w-3xl mx-auto px-6">
         <?php if ($errors): ?>
             <div class="mb-6 rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200">
@@ -222,7 +252,7 @@ require_once __DIR__ . '/templates/header.php';
         <?php endif; ?>
 
         <?php if ($step === 1): ?>
-            <form method="post" action="book_dash_repair.php" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+            <form method="post" action="book_dash_repair.php" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
                 <input type="hidden" name="form_step" value="1">
                 <div>
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
@@ -331,7 +361,7 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                 </div>
 
-                <button type="submit" class="w-full rounded-lg bg-cyan-500 py-3.5 text-sm font-bold text-zinc-950 hover:bg-cyan-400">
+                <button type="submit" class="w-full rounded-lg bg-cyan-500 py-3.5 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
                     Continue to Service Speed →
                 </button>
             </form>
@@ -345,7 +375,7 @@ require_once __DIR__ . '/templates/header.php';
                 }
                 $total = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
             ?>
-            <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+            <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
                 <div id="step-2-success" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-4 text-sm text-emerald-200">
                     <p class="font-semibold text-emerald-300">Thank you. We’ve received your repair request.</p>
                     <p id="step-2-success-text" class="mt-1 text-emerald-100/80">We’ll contact you shortly to schedule your repair.</p>
@@ -391,7 +421,7 @@ require_once __DIR__ . '/templates/header.php';
                     <p class="text-xs font-semibold uppercase tracking-widest text-cyan-400">Choose Service Speed</p>
                     <?php foreach ($speedOptions as $speedKey => $speed): ?>
                         <?php $speedTotal = round($baseTotal * $speed['multiplier'], 2); ?>
-                        <label class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
+                        <label class="speed-option flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 cursor-pointer">
                             <span class="flex items-center gap-2">
                                 <input type="radio" name="service_speed" value="<?= h($speedKey) ?>" <?= $currentSpeed === $speedKey ? 'checked' : '' ?>>
                                 <span><?= h($speed['label']) ?></span>
@@ -411,8 +441,8 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
 
                     <div class="flex gap-3">
-                        <a href="book_dash_repair.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200">Start Over</a>
-                        <button id="step-2-submit-btn" type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400">
+                        <a href="book_dash_repair.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
+                        <button id="step-2-submit-btn" type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
                             <span id="step-2-submit-label">Book My Repair</span>
                         </button>
                     </div>
