@@ -3,7 +3,7 @@ session_start();
 
 // Redirect already-logged-in customers
 if (!empty($_SESSION['customer_id'])) {
-    header('Location: book_dash_repair.php');
+    header('Location: book-repair.php');
     exit;
 }
 
@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($mode === 'login')) {
             session_regenerate_id(true);
             $_SESSION['customer_id']         = $customer['id'];
             $_SESSION['customer_first_name'] = $customer['first_name'];
-            header('Location: book_dash_repair.php');
+            header('Location: book-repair.php');
             exit;
         } else {
             $error = 'Invalid email or password. Please try again.';
