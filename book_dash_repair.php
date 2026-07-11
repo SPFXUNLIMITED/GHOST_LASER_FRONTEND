@@ -1,6 +1,15 @@
 <?php
 session_start();
 
+require_once __DIR__ . '/project/db.php';
+
+// Ensure password_hash column exists
+try {
+    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT NULL");
+} catch (PDOException $e) {
+    // Column may already exist — ignore
+}
+
 $pageTitle = 'Book a Repair | Ghost Laser';
 $pageDescription = 'Book a laser machine repair with Ghost Laser.';
 $extraHead = <<<'HTML'
@@ -40,6 +49,7 @@ $speedOptions = [
 $step = isset($_GET['step']) && $_GET['step'] === '2' ? 2 : 1;
 $errors = [];
 $success = '';
+$emailAlreadyRegistered = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1')) {
     $services = array_values(array_intersect(array_keys($serviceLabels), (array) ($_POST['services'] ?? [])));
@@ -59,7 +69,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         }
     }
 
+    // Validate password fields
+    $password        = $_POST['password'] ?? '';
+    $passwordConfirm = $_POST['password_confirm'] ?? '';
     if (!$errors) {
+        if (strlen($password) < 8) {
+            $errors[] = 'Password must be at least 8 characters.';
+        } elseif ($password !== $passwordConfirm) {
+            $errors[] = 'Passwords do not match.';
+        }
+    }
+
+    // Check for existing email in customers table
+    if (!$errors) {
+        $emailCheck = trim((string) ($_POST['email'] ?? ''));
+        $stmtCheck = $pdo->prepare('SELECT id FROM customers WHERE email = ? LIMIT 1');
+        $stmtCheck->execute([$emailCheck]);
+        if ($stmtCheck->fetch()) {
+            $emailAlreadyRegistered = true;
+        }
+    }
+
+    if (!$errors && !$emailAlreadyRegistered) {
         $_SESSION['book_dash_repair'] = [
             'name' => trim((string) ($_POST['name'] ?? '')),
             'phone' => trim((string) ($_POST['phone'] ?? '')),
@@ -75,6 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'problem' => trim((string) ($_POST['problem'] ?? '')),
             'services' => $services,
             'other_service' => $otherService,
+            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
         ];
         header('Location: book_dash_repair.php?step=2');
         exit;
@@ -119,6 +151,15 @@ require_once __DIR__ . '/templates/header.php';
         <?php if ($errors): ?>
             <div class="mb-6 rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200">
                 <?= h($errors[0]) ?>
+            </div>
+        <?php endif; ?>
+        <?php if ($emailAlreadyRegistered): ?>
+            <div class="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-4 text-sm text-amber-200">
+                <p class="font-semibold mb-2">This email is already registered. Please log in instead.</p>
+                <a href="customer-login.php?mode=login"
+                   class="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs px-3 py-1.5 rounded-md transition-colors">
+                    Go to Login Page &rarr;
+                </a>
             </div>
         <?php endif; ?>
         <?php if ($success): ?>
@@ -193,6 +234,22 @@ require_once __DIR__ . '/templates/header.php';
                 <div>
                     <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-zinc-400" for="problem">Problem Description *</label>
                     <textarea class="input-base resize-none" id="problem" name="problem" rows="4" required><?= h($_POST['problem'] ?? '') ?></textarea>
+                </div>
+
+                <div class="border-t border-zinc-800"></div>
+
+                <div>
+                    <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Create Account Password</p>
+                    <div class="grid gap-5 sm:grid-cols-2">
+                        <div>
+                            <label class="mb-1.5 block text-xs text-zinc-400" for="password">Password *</label>
+                            <input class="input-base" id="password" type="password" name="password" placeholder="Min. 8 characters" autocomplete="new-password" required minlength="8">
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-xs text-zinc-400" for="password_confirm">Confirm Password *</label>
+                            <input class="input-base" id="password_confirm" type="password" name="password_confirm" placeholder="Repeat password" autocomplete="new-password" required minlength="8">
+                        </div>
+                    </div>
                 </div>
 
                 <button type="submit" class="w-full rounded-lg bg-cyan-500 py-3.5 text-sm font-bold text-zinc-950 hover:bg-cyan-400">
