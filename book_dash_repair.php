@@ -22,6 +22,8 @@ $extraHead = <<<'HTML'
 <style>
     .input-base{width:100%;background:rgba(39,39,42,0.6);border:1px solid rgb(63,63,70);color:white;border-radius:.5rem;padding:.625rem 1rem;font-size:.875rem;outline:none}
     .input-base:focus{border-color:#06b6d4;box-shadow:0 0 0 1px rgba(6,182,212,.5)}
+    .input-base.input-invalid{border-color:rgba(248,113,113,.95)!important;box-shadow:0 0 0 1px rgba(248,113,113,.35)!important}
+    .field-error{margin-top:.5rem;color:rgb(248 113 113);font-size:.75rem;line-height:1rem}
     .choice-card input{display:none}
     .choice-card label{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;border:1px solid rgb(63,63,70);border-radius:.5rem;background:rgba(39,39,42,.6);cursor:pointer}
     .choice-card input:checked+label{border-color:#06b6d4;background:rgba(6,182,212,.08);color:#22d3ee}
@@ -30,6 +32,39 @@ HTML;
 
 function h($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function normalizeUsPhone($value) {
+    $digits = preg_replace('/\D+/', '', (string) $value);
+    if (strlen($digits) === 11 && strpos($digits, '1') === 0) {
+        $digits = substr($digits, 1);
+    }
+
+    return strlen($digits) === 10 ? $digits : null;
+}
+
+function formatUsPhoneDisplay($value) {
+    $digits = preg_replace('/\D+/', '', (string) $value);
+    if (strlen($digits) === 11 && strpos($digits, '1') === 0) {
+        $digits = substr($digits, 1);
+    }
+    $digits = substr($digits, 0, 10);
+
+    if ($digits === '') {
+        return '';
+    }
+    if (strlen($digits) < 4) {
+        return '(' . $digits;
+    }
+    if (strlen($digits) < 7) {
+        return sprintf('(%s) %s', substr($digits, 0, 3), substr($digits, 3));
+    }
+
+    return sprintf('(%s) %s-%s', substr($digits, 0, 3), substr($digits, 3, 3), substr($digits, 6));
+}
+
+function formatUsPhoneE164($digits) {
+    return $digits === null ? null : '+1' . $digits;
 }
 
 $serviceLabels = [
@@ -56,10 +91,12 @@ $step = isset($_GET['step']) && $_GET['step'] === '2' ? 2 : 1;
 $errors = [];
 $success = '';
 $emailAlreadyRegistered = false;
+$phoneError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1')) {
     $services = array_values(array_intersect(array_keys($serviceLabels), (array) ($_POST['services'] ?? [])));
     $otherService = trim((string) ($_POST['other_service'] ?? ''));
+    $normalizedPhone = normalizeUsPhone($_POST['phone'] ?? '');
     if (in_array('other', $services, true) && $otherService === '') {
         $errors[] = 'Please describe the "Other" service.';
     }
@@ -73,6 +110,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             $errors[] = 'Please complete all required fields.';
             break;
         }
+    }
+    if (!$errors && $normalizedPhone === null) {
+        $phoneError = 'Please enter a valid 10-digit US phone number.';
+        $errors[] = $phoneError;
     }
 
     // Validate password fields
@@ -99,7 +140,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
     if (!$errors && !$emailAlreadyRegistered) {
         $_SESSION['book_dash_repair'] = [
             'name' => trim((string) ($_POST['name'] ?? '')),
-            'phone' => trim((string) ($_POST['phone'] ?? '')),
+            'phone' => formatUsPhoneDisplay($normalizedPhone),
+            'phone_e164' => formatUsPhoneE164($normalizedPhone),
             'email' => trim((string) ($_POST['email'] ?? '')),
             'machine_brand' => trim((string) ($_POST['machine_brand'] ?? '')),
             'machine_model' => trim((string) ($_POST['machine_model'] ?? '')),
@@ -130,6 +172,7 @@ if ($step === 2 && $booking) {
     $stepTwoPayload = [
         'name' => (string) ($booking['name'] ?? ''),
         'phone' => (string) ($booking['phone'] ?? ''),
+        'phone_e164' => (string) ($booking['phone_e164'] ?? ''),
         'email' => (string) ($booking['email'] ?? ''),
         'machine_brand' => (string) ($booking['machine_brand'] ?? ''),
         'machine_model' => (string) ($booking['machine_model'] ?? ''),
@@ -201,7 +244,8 @@ require_once __DIR__ . '/templates/header.php';
                                     </span>
                                 </span>
                             </label>
-                            <input class="input-base" id="phone" name="phone" placeholder="+1 (555) 000-0000" required value="<?= h($_POST['phone'] ?? '') ?>">
+                            <input class="input-base<?= $phoneError !== '' ? ' input-invalid' : '' ?>" type="tel" inputmode="tel" id="phone" name="phone" placeholder="(555) 000-0000" required value="<?= h(formatUsPhoneDisplay($_POST['phone'] ?? '')) ?>" aria-describedby="phone-error" aria-invalid="<?= $phoneError !== '' ? 'true' : 'false' ?>">
+                            <p id="phone-error" class="field-error<?= $phoneError === '' ? ' hidden' : '' ?>"><?= h($phoneError) ?></p>
                         </div>
                     </div>
                     <div class="mt-5">
@@ -374,6 +418,70 @@ require_once __DIR__ . '/templates/header.php';
     const otherServiceCheckbox = document.getElementById('service-other');
     const otherServiceWrap = document.getElementById('other-service-wrap');
     const otherServiceInput = document.getElementById('other-service-input');
+    const stepOneForm = document.querySelector('form[action="book_dash_repair.php"]');
+    const phoneInput = document.getElementById('phone');
+    const phoneErrorEl = document.getElementById('phone-error');
+
+    const normalizeUsPhone = (value) => {
+        let digits = String(value || '').replace(/\D/g, '');
+        if (digits.length === 11 && digits.startsWith('1')) {
+            digits = digits.slice(1);
+        }
+        return digits.length === 10 ? digits : null;
+    };
+
+    const formatUsPhoneDisplay = (value) => {
+        let digits = String(value || '').replace(/\D/g, '');
+        if (digits.startsWith('1') && digits.length > 10) {
+            digits = digits.slice(1);
+        }
+        digits = digits.slice(0, 10);
+
+        if (!digits) return '';
+        if (digits.length < 4) return `(${digits}`;
+        if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+        return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    };
+
+    const syncPhoneValidationState = () => {
+        if (!phoneInput || !phoneErrorEl) return true;
+        const digits = normalizeUsPhone(phoneInput.value);
+        const hasValue = phoneInput.value.trim() !== '';
+        const isValid = !hasValue || digits !== null;
+
+        phoneInput.classList.toggle('input-invalid', !isValid);
+        phoneInput.setAttribute('aria-invalid', isValid ? 'false' : 'true');
+        phoneErrorEl.textContent = isValid ? '' : 'Please enter a valid 10-digit US phone number.';
+        phoneErrorEl.classList.toggle('hidden', isValid);
+        return isValid;
+    };
+
+    if (phoneInput) {
+        phoneInput.addEventListener('input', () => {
+            const cursorAtEnd = phoneInput.selectionStart === phoneInput.value.length;
+            phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
+            if (cursorAtEnd) {
+                phoneInput.setSelectionRange(phoneInput.value.length, phoneInput.value.length);
+            }
+            syncPhoneValidationState();
+        });
+        phoneInput.addEventListener('blur', syncPhoneValidationState);
+        phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
+        syncPhoneValidationState();
+    }
+
+    if (stepOneForm) {
+        stepOneForm.addEventListener('submit', (event) => {
+            if (phoneInput) {
+                phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
+            }
+            if (!syncPhoneValidationState()) {
+                event.preventDefault();
+                phoneInput?.focus();
+            }
+        });
+    }
+
     if (otherServiceCheckbox && otherServiceWrap && otherServiceInput) {
         const syncOtherVisibility = () => {
             const enabled = otherServiceCheckbox.checked;
@@ -455,7 +563,7 @@ require_once __DIR__ . '/templates/header.php';
 
             const requestBody = {
                 name: bookingPayload.name,
-                phone: bookingPayload.phone,
+                phone: bookingPayload.phone_e164 || `+1${(bookingPayload.phone || '').replace(/\D/g, '').slice(-10)}`,
                 email: bookingPayload.email,
                 machine_brand: bookingPayload.machine_brand,
                 machine_model: bookingPayload.machine_model,
