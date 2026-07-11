@@ -16,6 +16,33 @@ try {
     // Column may already exist — ignore
 }
 
+// Handle "I have an account" login POST
+$loginError = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'login') {
+    $loginEmail    = trim($_POST['login_email'] ?? '');
+    $loginPassword = $_POST['login_password'] ?? '';
+    if ($loginEmail === '' || $loginPassword === '') {
+        $loginError = 'Please enter your email and password.';
+    } else {
+        $stmtLogin = $pdo->prepare(
+            'SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1'
+        );
+        $stmtLogin->execute([$loginEmail]);
+        $customerLogin = $stmtLogin->fetch(PDO::FETCH_ASSOC);
+        if ($customerLogin && !empty($customerLogin['password_hash']) && password_verify($loginPassword, $customerLogin['password_hash'])) {
+            session_regenerate_id(true);
+            $_SESSION['customer_id']         = (int) $customerLogin['id'];
+            $_SESSION['customer_first_name'] = $customerLogin['first_name'];
+            $_SESSION['customer_last_name']  = $customerLogin['last_name'];
+            $_SESSION['customer_email']      = $customerLogin['email'];
+            header('Location: book-repair.php');
+            exit;
+        } else {
+            $loginError = 'Invalid email or password. Please try again.';
+        }
+    }
+}
+
 $pageTitle = 'Book a Repair | Ghost Laser';
 $pageDescription = 'Book a laser machine repair with Ghost Laser.';
 $extraHead = <<<'HTML'
@@ -177,14 +204,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'other_service' => $otherService,
             'password_hash' => password_hash($password, PASSWORD_DEFAULT),
         ];
-        header('Location: book_dash_repair.php?step=2');
+        header('Location: book_a_repair.php?step=2');
         exit;
     }
 }
 
 $booking = $_SESSION['book_dash_repair'] ?? null;
 if ($step === 2 && !$booking) {
-    header('Location: book_dash_repair.php');
+    header('Location: book_a_repair.php');
     exit;
 }
 
@@ -211,6 +238,22 @@ if ($step === 2 && $booking) {
     ];
 }
 
+// Determine which section to render:
+//   gate  – default landing (choose account type)
+//   login – inline login form for returning customers
+//   new   – full booking form for new customers (steps 1 & 2)
+if ($loginError !== '' || (isset($_GET['mode']) && $_GET['mode'] === 'login')) {
+    $view = 'login';
+} elseif (
+    $_SERVER['REQUEST_METHOD'] === 'POST' ||
+    isset($_GET['type']) ||
+    $step === 2
+) {
+    $view = 'new';
+} else {
+    $view = 'gate';
+}
+
 require_once __DIR__ . '/templates/header.php';
 ?>
 <!-- PAGE HEADER -->
@@ -231,6 +274,125 @@ require_once __DIR__ . '/templates/header.php';
 
 <section class="pb-24 lg:pb-32 bg-zinc-950">
     <div class="max-w-3xl mx-auto px-6">
+
+        <?php if ($view === 'gate'): ?>
+        <!-- ── GATE: Choose account type ── -->
+        <div class="max-w-md mx-auto">
+            <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 sm:p-10 glow-box text-center">
+                <div class="flex flex-col items-center">
+                    <span class="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                        </svg>
+                    </span>
+                    <h2 class="text-xl font-bold tracking-tight">Get Started</h2>
+                    <p class="text-sm text-zinc-400 mt-1">Are you a new or returning customer?</p>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-4 pt-2">
+                    <a href="book_a_repair.php?mode=login"
+                       class="flex-1 inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold text-sm px-4 py-3.5 rounded-lg transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+                        </svg>
+                        I have an account
+                    </a>
+                    <a href="book_a_repair.php?type=new"
+                       class="flex-1 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-3.5 rounded-lg transition-all btn-glow">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                        </svg>
+                        I'm a new customer
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <?php elseif ($view === 'login'): ?>
+        <!-- ── LOGIN: Inline form for returning customers ── -->
+        <div class="max-w-md mx-auto">
+            <div class="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 sm:p-10 glow-box">
+                <div class="flex flex-col items-center mb-8">
+                    <span class="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+                        </svg>
+                    </span>
+                    <h2 class="text-xl font-bold tracking-tight">Welcome Back</h2>
+                    <p class="text-sm text-zinc-500 mt-1">Log in to book your repair</p>
+                </div>
+
+                <?php if ($loginError !== ''): ?>
+                <div class="mb-5 flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-lg">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <span><?= h($loginError) ?></span>
+                </div>
+                <?php endif; ?>
+
+                <form method="POST" action="book_a_repair.php?mode=login">
+                    <input type="hidden" name="form_step" value="login">
+                    <div class="flex flex-col gap-5">
+                        <div>
+                            <label for="login_email" class="block text-sm font-medium text-zinc-300 mb-1.5">Email Address</label>
+                            <input
+                                id="login_email"
+                                name="login_email"
+                                type="email"
+                                autocomplete="email"
+                                placeholder="you@example.com"
+                                value="<?= h($_POST['login_email'] ?? '') ?>"
+                                class="input-base"
+                                required
+                            >
+                        </div>
+                        <div>
+                            <label for="login_password" class="block text-sm font-medium text-zinc-300 mb-1.5">Password</label>
+                            <div class="relative">
+                                <input
+                                    id="login_password"
+                                    name="login_password"
+                                    type="password"
+                                    autocomplete="current-password"
+                                    placeholder="Enter your password"
+                                    class="input-base pr-10"
+                                    required
+                                >
+                                <button type="button" id="toggle-login-password"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                                    aria-label="Toggle password visibility">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <button
+                            type="submit"
+                            class="w-full inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2.5 rounded-md transition-all btn-glow mt-1">
+                            Sign In &amp; Continue
+                        </button>
+                    </div>
+                </form>
+
+                <div class="mt-6 flex flex-col gap-2 text-center text-sm text-zinc-500">
+                    <span>New customer?
+                        <a href="book_a_repair.php?type=new" class="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">Register here</a>
+                    </span>
+                    <a href="book_a_repair.php" class="text-zinc-600 hover:text-zinc-400 transition-colors text-xs">&larr; Back</a>
+                </div>
+            </div>
+        </div>
+
+        <?php else: /* $view === 'new' */ ?>
+        <!-- ── NEW CUSTOMER: Full booking form (steps 1 & 2) ── -->
         <?php if ($errors): ?>
             <div class="mb-6 rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200">
                 <?= h($errors[0]) ?>
@@ -239,9 +401,9 @@ require_once __DIR__ . '/templates/header.php';
         <?php if ($emailAlreadyRegistered): ?>
             <div class="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-4 text-sm text-amber-200">
                 <p class="font-semibold mb-2">This email is already registered. Please log in instead.</p>
-                <a href="customer-login.php?mode=login"
+                <a href="book_a_repair.php?mode=login"
                    class="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs px-3 py-1.5 rounded-md transition-colors">
-                    Go to Login Page &rarr;
+                    Log In to Book &rarr;
                 </a>
             </div>
         <?php endif; ?>
@@ -252,7 +414,7 @@ require_once __DIR__ . '/templates/header.php';
         <?php endif; ?>
 
         <?php if ($step === 1): ?>
-            <form method="post" action="book_dash_repair.php" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
+            <form method="post" action="book_a_repair.php?type=new" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
                 <input type="hidden" name="form_step" value="1">
                 <div>
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
@@ -426,7 +588,7 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
 
                     <div class="flex gap-3">
-                        <a href="book_dash_repair.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
+                        <a href="book_a_repair.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
                         <button id="step-2-submit-btn" type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
                             <span id="step-2-submit-label">Book My Repair</span>
                         </button>
@@ -434,6 +596,7 @@ require_once __DIR__ . '/templates/header.php';
                 </form>
             </div>
         <?php endif; ?>
+        <?php endif; /* end $view === 'new' */ ?>
     </div>
 </section>
 
@@ -441,7 +604,7 @@ require_once __DIR__ . '/templates/header.php';
     const otherServiceCheckbox = document.getElementById('service-other');
     const otherServiceWrap = document.getElementById('other-service-wrap');
     const otherServiceInput = document.getElementById('other-service-input');
-    const stepOneForm = document.querySelector('form[action="book_dash_repair.php"]');
+    const stepOneForm = document.querySelector('form[action="book_a_repair.php?type=new"]');
     const phoneInput = document.getElementById('phone');
     const phoneErrorEl = document.getElementById('phone-error');
 
@@ -651,6 +814,17 @@ require_once __DIR__ . '/templates/header.php';
                 submitBtn.disabled = false;
                 submitLabel.textContent = 'Book My Repair';
             }
+        });
+    }
+
+    // Login view: password visibility toggle
+    const toggleLoginBtn   = document.getElementById('toggle-login-password');
+    const loginPasswordInput = document.getElementById('login_password');
+    if (toggleLoginBtn && loginPasswordInput) {
+        toggleLoginBtn.addEventListener('click', () => {
+            const isPassword = loginPasswordInput.type === 'password';
+            loginPasswordInput.type = isPassword ? 'text' : 'password';
+            toggleLoginBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
         });
     }
 </script>
