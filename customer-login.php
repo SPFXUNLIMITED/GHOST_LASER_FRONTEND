@@ -9,13 +9,6 @@ if (!empty($_SESSION['customer_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 
-// Ensure customers table has a password_hash column
-try {
-    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT NULL");
-} catch (PDOException $e) {
-    // Column may already exist or DB doesn't support IF NOT EXISTS — ignore
-}
-
 $mode   = $_GET['mode'] ?? 'landing'; // 'landing' | 'login'
 $error  = '';
 $notice = '';
@@ -28,11 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($mode === 'login')) {
     if ($email === '' || $password === '') {
         $error = 'Please enter your email and password.';
     } else {
-        $stmt = $pdo->prepare('SELECT id, first_name, password_hash FROM customers WHERE email = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id, first_name, password FROM customers WHERE email = ? LIMIT 1');
         $stmt->execute([$email]);
         $customer = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($customer && !empty($customer['password_hash']) && password_verify($password, $customer['password_hash'])) {
+        if ($customer && !empty($customer['password']) && password_verify($password, $customer['password'])) {
             session_regenerate_id(true);
             $_SESSION['customer_id']         = $customer['id'];
             $_SESSION['customer_first_name'] = $customer['first_name'];
