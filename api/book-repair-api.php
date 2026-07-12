@@ -82,7 +82,7 @@ function load_env_value(string $key): string {
 
     if ($dotenv_values === null) {
         $dotenv_values = [];
-        $dotenv_path = dirname(__DIR__) . '/.env';
+        $dotenv_path = __DIR__ . '/.env';
         if (is_file($dotenv_path) && is_readable($dotenv_path)) {
             $lines = file($dotenv_path, FILE_IGNORE_NEW_LINES);
             if (is_array($lines)) {
@@ -133,11 +133,9 @@ function load_env_value(string $key): string {
  *   ['lat' => float|null, 'lng' => float|null, 'status' => 'ok'|'failed']
  */
 function geocode_address(string $full_address): array {
+	
     $api_key = load_env_value('GOOGLE_MAPS_API_KEY');
-    if ($api_key === '') {
-        $config = @(require __DIR__ . '/../config.php');
-        $api_key = is_array($config) ? (string)($config['google_maps']['api_key'] ?? '') : '';
-    }
+
     if ($api_key === '') {
         return ['lat' => null, 'lng' => null, 'status' => 'failed'];
     }
@@ -302,7 +300,7 @@ function resolve_customer_id(
         $state,
         $zip,
         $country,
-        $password !== '' ? password_hash($password, PASSWORD_DEFAULT) : null,
+        password_hash($password, PASSWORD_DEFAULT),
         null,
     ]);
 
@@ -365,6 +363,24 @@ if ($email === '') {
 } elseif (strlen($email) > 255) {
     $msg = 'Email address must be 255 characters or fewer.';
     $errors[] = $msg; $field_errors['email'] = $msg;
+}
+
+if (empty($_SESSION['customer_id'])) {
+    if ($password === '') {
+        $msg = 'Password is required.';
+        $errors[] = $msg; $field_errors['password'] = $msg;
+    } elseif (strlen($password) < 8) {
+        $msg = 'Password must be at least 8 characters.';
+        $errors[] = $msg; $field_errors['password'] = $msg;
+    }
+
+    if ($confirm_password === '') {
+        $msg = 'Confirm password is required.';
+        $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+    } elseif ($password !== '' && $password !== $confirm_password) {
+        $msg = 'Passwords do not match.';
+        $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+    }
 }
 
 if ($machine_brand === '') {
