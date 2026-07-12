@@ -2,5 +2,5 @@
 session_start();
 session_unset();
 session_destroy();
-header('Location: book_a_repair.php');
+header('Location: book_a_technician.php');
 exit;
