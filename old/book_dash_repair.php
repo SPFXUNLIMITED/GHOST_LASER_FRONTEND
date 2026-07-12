@@ -1,6 +1,12 @@
 <?php
 session_start();
 
+// Redirect already-logged-in customers to the booking form
+if (!empty($_SESSION['customer_id'])) {
+    header('Location: book-repair.php');
+    exit;
+}
+
 require_once __DIR__ . '/project/db.php';
 
 // Ensure password_hash column exists
@@ -8,72 +14,6 @@ try {
     $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT NULL");
 } catch (PDOException $e) {
     // Column may already exist — ignore
-}
-
-// Handle "I have an account" login POST
-$loginError = '';
-$inlineLoginError = '';
-$showInlineStepOneLogin = false;
-$inlineLoginEmail = '';
-$pendingStepOneSessionKey = 'book_a_repair_pending_booking';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'login') {
-    $loginContext = trim((string) ($_POST['login_context'] ?? ''));
-    $loginEmail    = trim($_POST['login_email'] ?? '');
-    $loginPassword = $_POST['login_password'] ?? '';
-
-    if ($loginContext === 'step1_existing_account') {
-        $showInlineStepOneLogin = true;
-        $inlineLoginEmail = $loginEmail;
-        $pendingStepOne = $_SESSION[$pendingStepOneSessionKey] ?? null;
-        if (is_array($pendingStepOne)) {
-            foreach ($pendingStepOne as $pendingKey => $pendingValue) {
-                $_POST[$pendingKey] = $pendingValue;
-            }
-        }
-    }
-
-    if ($loginEmail === '' || $loginPassword === '') {
-        if ($loginContext === 'step1_existing_account') {
-            $inlineLoginError = 'Please enter your email and password.';
-        } else {
-            $loginError = 'Please enter your email and password.';
-        }
-    } else {
-        $stmtLogin = $pdo->prepare(
-            'SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1'
-        );
-        $stmtLogin->execute([$loginEmail]);
-        $customerLogin = $stmtLogin->fetch(PDO::FETCH_ASSOC);
-        if ($customerLogin && !empty($customerLogin['password_hash']) && password_verify($loginPassword, $customerLogin['password_hash'])) {
-            session_regenerate_id(true);
-            $_SESSION['customer_id']         = (int) $customerLogin['id'];
-            $_SESSION['customer_first_name'] = $customerLogin['first_name'];
-            $_SESSION['customer_last_name']  = $customerLogin['last_name'];
-            $_SESSION['customer_email']      = $customerLogin['email'];
-
-            if ($loginContext === 'step1_existing_account') {
-                $pendingStepOne = $_SESSION[$pendingStepOneSessionKey] ?? null;
-                if (is_array($pendingStepOne)) {
-                    $pendingStepOne['password'] = $loginPassword;
-                    $pendingStepOne['confirm_password'] = $loginPassword;
-                    $_SESSION['book_dash_repair'] = $pendingStepOne;
-                }
-                unset($_SESSION[$pendingStepOneSessionKey]);
-                header('Location: book_a_repair.php?step=2');
-		} else {
-			header('Location: book_a_repair.php?step=2');
-			exit;
-		}
-            exit;
-        } else {
-            if ($loginContext === 'step1_existing_account') {
-                $inlineLoginError = 'Invalid email or password. Please try again.';
-            } else {
-                $loginError = 'Invalid email or password. Please try again.';
-            }
-        }
-    }
 }
 
 $pageTitle = 'Book a Repair | Ghost Laser';
@@ -107,19 +47,6 @@ $extraHead = <<<'HTML'
     .speed-option { transition: border-color 0.15s, background 0.15s; }
     .speed-option:has(input[type="radio"]:checked) { border-color: #06b6d4; background: rgba(6,182,212,0.08); color: #22d3ee; }
     .speed-option:hover { border-color: rgb(113,113,122); }
-    .confirmation-grid {
-        background-image:
-            linear-gradient(rgba(34,211,238,0.08) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(34,211,238,0.08) 1px, transparent 1px);
-        background-size: 42px 42px;
-        background-position: center;
-    }
-    .confirmation-orb {
-        position: absolute;
-        border-radius: 9999px;
-        filter: blur(70px);
-        pointer-events: none;
-    }
 </style>
 HTML;
 
@@ -176,13 +103,14 @@ $serviceBasePrices = [
 ];
 $speedOptions = [
     'standard' => ['label' => 'Standard', 'multiplier' => 1.00],
-    'rush' => ['label' => 'VIP', 'multiplier' => 1.35],
+    'rush' => ['label' => 'Rush', 'multiplier' => 1.35],
     'emergency' => ['label' => 'Emergency', 'multiplier' => 1.75],
 ];
 
 $step = isset($_GET['step']) && $_GET['step'] === '2' ? 2 : 1;
 $errors = [];
 $success = '';
+$emailAlreadyRegistered = false;
 $phoneError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1')) {
@@ -208,94 +136,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         $errors[] = $phoneError;
     }
 
+    // Validate password fields
     $password        = $_POST['password'] ?? '';
-    $passwordConfirm = $_POST['confirm_password'] ?? '';
-    $preparedBookingData = null;
-
-    // Check for an existing account BEFORE validating confirm_password so that a
-    // returning customer who enters only their existing password is silently logged
-    // in without needing to fill the "Confirm Password" field.
+    $passwordConfirm = $_POST['password_confirm'] ?? '';
     if (!$errors) {
-        $emailCheck = trim((string) ($_POST['email'] ?? ''));
-        $stmtCheck = $pdo->prepare('SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1');
-        $stmtCheck->execute([$emailCheck]);
-        $existingCustomer = $stmtCheck->fetch(PDO::FETCH_ASSOC);
-
-        if ($existingCustomer && !empty($existingCustomer['password_hash'])) {
-            if (password_verify($password, (string) $existingCustomer['password_hash'])) {
-                // Correct password — silently log the customer in and proceed to step 2.
-                session_regenerate_id(true);
-                $_SESSION['customer_id']         = (int) $existingCustomer['id'];
-                $_SESSION['customer_first_name'] = $existingCustomer['first_name'];
-                $_SESSION['customer_last_name']  = $existingCustomer['last_name'];
-                $_SESSION['customer_email']      = $existingCustomer['email'];
-                $preparedBookingData = [
-                    'first_name' => trim((string) ($_POST['first_name'] ?? '')),
-                    'last_name' => trim((string) ($_POST['last_name'] ?? '')),
-                    'phone' => formatUsPhoneDisplay($normalizedPhone),
-                    'phone_e164' => formatUsPhoneE164($normalizedPhone),
-                    'email' => $emailCheck,
-                    'machine_brand' => trim((string) ($_POST['machine_brand'] ?? '')),
-                    'machine_model' => trim((string) ($_POST['machine_model'] ?? '')),
-                    'watts' => trim((string) ($_POST['watts'] ?? '')),
-                    'age' => trim((string) ($_POST['age'] ?? '')),
-                    'address' => trim((string) ($_POST['address'] ?? '')),
-                    'city' => trim((string) ($_POST['city'] ?? '')),
-                    'state' => strtoupper(trim((string) ($_POST['state'] ?? ''))),
-                    'zip' => trim((string) ($_POST['zip'] ?? '')),
-                    'problem' => trim((string) ($_POST['problem'] ?? '')),
-                    'services' => $services,
-                    'other_service' => $otherService,
-                    'password' => $password,
-                    'confirm_password' => $password,
-                ];
-                $_SESSION['book_dash_repair'] = $preparedBookingData;
-                unset($_SESSION[$pendingStepOneSessionKey]);
-                header('Location: book_a_repair.php?step=2');
-                exit;
-            } else {
-                // Wrong password — show the inline login prompt.
-                $showInlineStepOneLogin = true;
-                $inlineLoginEmail = $emailCheck;
-                $inlineLoginError = 'We found your account. Please log in.';
-                $partialData = [
-                    'first_name' => trim((string) ($_POST['first_name'] ?? '')),
-                    'last_name' => trim((string) ($_POST['last_name'] ?? '')),
-                    'phone' => formatUsPhoneDisplay($normalizedPhone),
-                    'phone_e164' => formatUsPhoneE164($normalizedPhone),
-                    'email' => $emailCheck,
-                    'machine_brand' => trim((string) ($_POST['machine_brand'] ?? '')),
-                    'machine_model' => trim((string) ($_POST['machine_model'] ?? '')),
-                    'watts' => trim((string) ($_POST['watts'] ?? '')),
-                    'age' => trim((string) ($_POST['age'] ?? '')),
-                    'address' => trim((string) ($_POST['address'] ?? '')),
-                    'city' => trim((string) ($_POST['city'] ?? '')),
-                    'state' => strtoupper(trim((string) ($_POST['state'] ?? ''))),
-                    'zip' => trim((string) ($_POST['zip'] ?? '')),
-                    'problem' => trim((string) ($_POST['problem'] ?? '')),
-                    'services' => $services,
-                    'other_service' => $otherService,
-                    'password' => '',
-                    'confirm_password' => '',
-                ];
-                $_SESSION[$pendingStepOneSessionKey] = $partialData;
-            }
-        }
-    }
-
-    // New-customer password validation — only runs when not already handled above.
-    if (!$errors && !$showInlineStepOneLogin) {
-        if ($password === '' || $passwordConfirm === '') {
-            $errors[] = 'Password and confirm password are required.';
-        } elseif (strlen($password) < 8) {
+        if (strlen($password) < 8) {
             $errors[] = 'Password must be at least 8 characters.';
         } elseif ($password !== $passwordConfirm) {
             $errors[] = 'Passwords do not match.';
         }
     }
 
-    if (!$errors && !$showInlineStepOneLogin) {
-        $preparedBookingData = [
+    // Check for existing email in customers table
+    if (!$errors) {
+        $emailCheck = trim((string) ($_POST['email'] ?? ''));
+        $stmtCheck = $pdo->prepare('SELECT id FROM customers WHERE email = ? LIMIT 1');
+        $stmtCheck->execute([$emailCheck]);
+        if ($stmtCheck->fetch()) {
+            $emailAlreadyRegistered = true;
+        }
+    }
+
+    if (!$errors && !$emailAlreadyRegistered) {
+        $_SESSION['book_dash_repair'] = [
             'first_name' => trim((string) ($_POST['first_name'] ?? '')),
             'last_name' => trim((string) ($_POST['last_name'] ?? '')),
             'phone' => formatUsPhoneDisplay($normalizedPhone),
@@ -312,19 +175,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'problem' => trim((string) ($_POST['problem'] ?? '')),
             'services' => $services,
             'other_service' => $otherService,
-            'password' => $password,
-            'confirm_password' => $passwordConfirm,
+            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
         ];
-        $_SESSION['book_dash_repair'] = $preparedBookingData;
-        unset($_SESSION[$pendingStepOneSessionKey]);
-        header('Location: book_a_repair.php?step=2');
+        header('Location: book_dash_repair.php?step=2');
         exit;
     }
 }
 
 $booking = $_SESSION['book_dash_repair'] ?? null;
 if ($step === 2 && !$booking) {
-    header('Location: book_a_repair.php');
+    header('Location: book_dash_repair.php');
     exit;
 }
 
@@ -345,29 +205,10 @@ if ($step === 2 && $booking) {
         'state' => (string) ($booking['state'] ?? ''),
         'zip' => (string) ($booking['zip'] ?? ''),
         'problem' => (string) ($booking['problem'] ?? ''),
-        'password' => (string) ($booking['password'] ?? ''),
-        'confirm_password' => (string) ($booking['confirm_password'] ?? ''),
         'services' => array_values(array_intersect(array_keys($serviceLabels), (array) ($booking['services'] ?? []))),
         'other_service' => (string) ($booking['other_service'] ?? ''),
         'service_speed' => isset($speedOptions[$booking['service_speed'] ?? '']) ? (string) $booking['service_speed'] : 'standard',
     ];
-}
-
-// Determine which section to render:
-//   gate  – default landing (choose account type)
-//   login – inline login form for returning customers
-//   new   – full booking form for new customers (steps 1 & 2)
-if (($loginError !== '' && !$showInlineStepOneLogin) || (isset($_GET['mode']) && $_GET['mode'] === 'login')) {
-    $view = 'login';
-} elseif (
-    $showInlineStepOneLogin ||
-    $_SERVER['REQUEST_METHOD'] === 'POST' ||
-    isset($_GET['type']) ||
-    $step === 2
-) {
-    $view = 'new';
-} else {
-    $view = 'gate';
 }
 
 require_once __DIR__ . '/templates/header.php';
@@ -390,158 +231,18 @@ require_once __DIR__ . '/templates/header.php';
 
 <section class="pb-24 lg:pb-32 bg-zinc-950">
     <div class="max-w-3xl mx-auto px-6">
-
-        <?php if ($view === 'gate'): ?>
-        <!-- ── GATE: Choose account type ── -->
-        <div class="max-w-md mx-auto">
-            <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 sm:p-10 glow-box text-center">
-                <div class="flex flex-col items-center">
-                    <span class="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                        </svg>
-                    </span>
-                    <h2 class="text-xl font-bold tracking-tight">Get Started</h2>
-                    <p class="text-sm text-zinc-400 mt-1">Are you a new or returning customer?</p>
-                </div>
-                <div class="flex flex-col sm:flex-row gap-4 pt-2">
-                    <a href="book_a_repair.php?mode=login"
-                       class="flex-1 inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold text-sm px-4 py-3.5 rounded-lg transition-all">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
-                        </svg>
-                        I have an account
-                    </a>
-                    <a href="book_a_repair.php?type=new"
-                       class="flex-1 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-3.5 rounded-lg transition-all btn-glow">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                        </svg>
-                        I'm a new customer
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <?php elseif ($view === 'login'): ?>
-        <!-- ── LOGIN: Inline form for returning customers ── -->
-        <div class="max-w-md mx-auto">
-            <div class="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 sm:p-10 glow-box">
-                <div class="flex flex-col items-center mb-8">
-                    <span class="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4">
-                        <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                                d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
-                        </svg>
-                    </span>
-                    <h2 class="text-xl font-bold tracking-tight">Welcome Back</h2>
-                    <p class="text-sm text-zinc-500 mt-1">Log in to book your repair</p>
-                </div>
-
-                <?php if ($loginError !== ''): ?>
-                <div class="mb-5 flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-lg">
-                    <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                    </svg>
-                    <span><?= h($loginError) ?></span>
-                </div>
-                <?php endif; ?>
-
-                <form method="POST" action="book_a_repair.php?mode=login">
-                    <input type="hidden" name="form_step" value="login">
-                    <div class="flex flex-col gap-5">
-                        <div>
-                            <label for="login_email" class="block text-sm font-medium text-zinc-300 mb-1.5">Email Address</label>
-                            <input
-                                id="login_email"
-                                name="login_email"
-                                type="email"
-                                autocomplete="email"
-                                placeholder="you@example.com"
-                                value="<?= h($_POST['login_email'] ?? '') ?>"
-                                class="input-base"
-                                required
-                            >
-                        </div>
-                        <div>
-                            <label for="login_password" class="block text-sm font-medium text-zinc-300 mb-1.5">Password</label>
-                            <div class="relative">
-                                <input
-                                    id="login_password"
-                                    name="login_password"
-                                    type="password"
-                                    autocomplete="current-password"
-                                    placeholder="Enter your password"
-                                    class="input-base pr-10"
-                                    required
-                                >
-                                <button type="button" id="toggle-login-password"
-                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
-                                    aria-label="Toggle password visibility">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <button
-                            type="submit"
-                            class="w-full inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2.5 rounded-md transition-all btn-glow mt-1">
-                            Sign In &amp; Continue
-                        </button>
-                    </div>
-                </form>
-
-                <div class="mt-6 flex flex-col gap-2 text-center text-sm text-zinc-500">
-                    <span>New customer?
-                        <a href="book_a_repair.php?type=new" class="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">Register here</a>
-                    </span>
-                    <a href="book_a_repair.php" class="text-zinc-600 hover:text-zinc-400 transition-colors text-xs">&larr; Back</a>
-                </div>
-            </div>
-        </div>
-
-        <?php else: /* $view === 'new' */ ?>
-        <!-- ── NEW CUSTOMER: Full booking form (steps 1 & 2) ── -->
         <?php if ($errors): ?>
             <div class="mb-6 rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200">
                 <?= h($errors[0]) ?>
             </div>
         <?php endif; ?>
-        <?php if ($showInlineStepOneLogin && $step === 1): ?>
-            <div class="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-4 text-sm text-amber-100">
-                <p class="font-semibold text-amber-200"><?= h($inlineLoginError !== '' ? $inlineLoginError : 'We found your account. Please log in.') ?></p>
-                <form method="post" action="book_a_repair.php?type=new" class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                    <input type="hidden" name="form_step" value="login">
-                    <input type="hidden" name="login_context" value="step1_existing_account">
-                    <input
-                        class="input-base"
-                        type="email"
-                        name="login_email"
-                        placeholder="Email Address"
-                        autocomplete="email"
-                        value="<?= h($inlineLoginEmail !== '' ? $inlineLoginEmail : ($_POST['email'] ?? '')) ?>"
-                        required
-                    >
-                    <input
-                        class="input-base"
-                        id="login_password"
-                        type="password"
-                        name="login_password"
-                        placeholder="Password"
-                        autocomplete="current-password"
-                        required
-                    >
-                    <button type="submit" class="rounded-lg bg-amber-400 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-950 transition-colors hover:bg-amber-300">
-                        Log In
-                    </button>
-                </form>
+        <?php if ($emailAlreadyRegistered): ?>
+            <div class="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-4 text-sm text-amber-200">
+                <p class="font-semibold mb-2">This email is already registered. Please log in instead.</p>
+                <a href="customer-login.php?mode=login"
+                   class="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs px-3 py-1.5 rounded-md transition-colors">
+                    Go to Login Page &rarr;
+                </a>
             </div>
         <?php endif; ?>
         <?php if ($success): ?>
@@ -551,7 +252,7 @@ require_once __DIR__ . '/templates/header.php';
         <?php endif; ?>
 
         <?php if ($step === 1): ?>
-            <form method="post" action="book_a_repair.php?type=new" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
+            <form method="post" action="book_dash_repair.php" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
                 <input type="hidden" name="form_step" value="1">
                 <div>
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
@@ -639,8 +340,8 @@ require_once __DIR__ . '/templates/header.php';
                             <input class="input-base" id="password" type="password" name="password" placeholder="Min. 8 characters" autocomplete="new-password" required minlength="8">
                         </div>
                         <div>
-                            <label class="mb-1.5 block text-xs text-zinc-400" for="confirm_password">Confirm Password *</label>
-                            <input class="input-base" id="confirm_password" type="password" name="confirm_password" placeholder="Repeat password" autocomplete="new-password" required minlength="8">
+                            <label class="mb-1.5 block text-xs text-zinc-400" for="password_confirm">Confirm Password *</label>
+                            <input class="input-base" id="password_confirm" type="password" name="password_confirm" placeholder="Repeat password" autocomplete="new-password" required minlength="8">
                         </div>
                     </div>
                 </div>
@@ -660,62 +361,17 @@ require_once __DIR__ . '/templates/header.php';
                 $total = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
             ?>
             <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
-                <?php if (!empty($_SESSION['customer_id'])): ?>
-                    <div class="rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">
-                        You have been logged in successfully.
-                    </div>
-                <?php endif; ?>
-                <div id="step-2-success" class="hidden relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-zinc-950 px-6 py-8 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_0_70px_rgba(8,145,178,0.12)] sm:px-8 sm:py-10">
-                    <div class="confirmation-orb -top-16 right-0 h-40 w-40 bg-cyan-500/20"></div>
-                    <div class="confirmation-orb bottom-0 left-0 h-36 w-36 bg-emerald-500/10"></div>
-                    <div class="confirmation-grid absolute inset-0 opacity-40"></div>
-                    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent"></div>
-                    <div class="relative">
-                        <div class="flex flex-col items-center text-center">
-                            <span class="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200">
-                                <span class="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(103,232,249,0.9)]"></span>
-                                Transmission Received
-                            </span>
-                            <div class="mt-6 flex items-center gap-4 rounded-2xl border border-cyan-400/15 bg-zinc-900/80 px-5 py-4 shadow-[0_0_35px_rgba(6,182,212,0.12)]">
-                                <span class="flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10">
-                                    <img src="<?= h(asset('ghost-logo2-32x32.png')) ?>" alt="Ghost Laser logo" class="h-10 w-10">
-                                </span>
-                                <div class="text-left">
-                                    <p class="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500">Ghost Laser</p>
-                                    <p class="text-lg font-black tracking-[0.18em] text-white">REPAIR DESK</p>
-                                </div>
-                            </div>
-                            <h2 id="step-2-success-heading" class="mt-8 text-3xl font-black tracking-tight text-white sm:text-4xl">Your Repair Has Been Booked</h2>
-                            <p id="step-2-success-text" class="mt-3 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base">We’ve received your request and our team will reach out soon with the next steps.</p>
-                        </div>
-
-                        <div class="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                            <div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-                                <div class="flex flex-wrap items-center gap-3">
-                                    <span class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">Chosen Priority</span>
-                                    <span id="step-2-success-priority" class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-wide"></span>
-                                </div>
-                                <p id="step-2-success-priority-text" class="mt-4 text-sm leading-7 text-zinc-300">Your booking has been placed in our queue and we’ll contact you based on the priority you selected.</p>
-                            </div>
-                            <div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-                                <p id="step-2-success-dates-label" class="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">Suggested Service Dates</p>
-                                <ul id="step-2-success-dates" class="mt-4 space-y-3 text-sm text-zinc-100"></ul>
-                            </div>
-                        </div>
-
-                        <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-                            <a href="book_a_repair.php" class="inline-flex items-center justify-center rounded-lg border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-900">Book Another Repair</a>
-                            <a href="/" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-cyan-400 btn-glow">Return Home</a>
-                        </div>
-                    </div>
+                <div id="step-2-success" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-4 text-sm text-emerald-200">
+                    <p class="font-semibold text-emerald-300">Thank you. We’ve received your repair request.</p>
+                    <p id="step-2-success-text" class="mt-1 text-emerald-100/80">We’ll contact you shortly to schedule your repair.</p>
+                    <ul id="step-2-success-dates" class="mt-3 space-y-2 text-emerald-100/80"></ul>
                 </div>
 
                 <div id="step-2-error" class="hidden rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-4 text-sm text-red-200">
-                    <p id="step-2-error-heading" class="font-semibold text-red-300">Something went wrong</p>
+                    <p class="font-semibold text-red-300">Something went wrong</p>
                     <p id="step-2-error-text" class="mt-1 text-red-100/80">Please check your details and try again.</p>
                 </div>
 
-                <div id="step-2-booking-shell">
                 <div>
                     <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-cyan-400">Selected Services</p>
                     <ul class="space-y-2 text-sm text-zinc-200">
@@ -770,16 +426,14 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
 
                     <div class="flex gap-3">
-                        <a href="book_a_repair.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
+                        <a href="book_dash_repair.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
                         <button id="step-2-submit-btn" type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
                             <span id="step-2-submit-label">Book My Repair</span>
                         </button>
                     </div>
                 </form>
-                </div>
             </div>
         <?php endif; ?>
-        <?php endif; /* end $view === 'new' */ ?>
     </div>
 </section>
 
@@ -787,11 +441,9 @@ require_once __DIR__ . '/templates/header.php';
     const otherServiceCheckbox = document.getElementById('service-other');
     const otherServiceWrap = document.getElementById('other-service-wrap');
     const otherServiceInput = document.getElementById('other-service-input');
-    const stepOneForm = document.querySelector('form[action="book_a_repair.php?type=new"]');
+    const stepOneForm = document.querySelector('form[action="book_dash_repair.php"]');
     const phoneInput = document.getElementById('phone');
     const phoneErrorEl = document.getElementById('phone-error');
-    const passwordInput = document.getElementById('password');
-    const confirmPasswordInput = document.getElementById('confirm_password');
 
     const normalizeUsPhone = (value) => {
         let digits = String(value || '').replace(/\D/g, '');
@@ -827,14 +479,6 @@ require_once __DIR__ . '/templates/header.php';
         return isValid;
     };
 
-    const syncPasswordMatchValidity = () => {
-        if (!passwordInput || !confirmPasswordInput) return true;
-        const hasBothValues = passwordInput.value !== '' && confirmPasswordInput.value !== '';
-        const matches = !hasBothValues || passwordInput.value === confirmPasswordInput.value;
-        confirmPasswordInput.setCustomValidity(matches ? '' : 'Passwords do not match.');
-        return matches;
-    };
-
     if (phoneInput) {
         phoneInput.addEventListener('input', () => {
             const cursorAtEnd = phoneInput.selectionStart === phoneInput.value.length;
@@ -849,25 +493,10 @@ require_once __DIR__ . '/templates/header.php';
         syncPhoneValidationState();
     }
 
-    if (passwordInput && confirmPasswordInput) {
-        const clearPasswordMismatchIfFixed = () => {
-            syncPasswordMatchValidity();
-        };
-        passwordInput.addEventListener('input', clearPasswordMismatchIfFixed);
-        confirmPasswordInput.addEventListener('input', clearPasswordMismatchIfFixed);
-        confirmPasswordInput.addEventListener('blur', clearPasswordMismatchIfFixed);
-    }
-
     if (stepOneForm) {
         stepOneForm.addEventListener('submit', (event) => {
             if (phoneInput) {
                 phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
-            }
-            if (!syncPasswordMatchValidity()) {
-                event.preventDefault();
-                confirmPasswordInput?.reportValidity();
-                confirmPasswordInput?.focus();
-                return;
             }
             if (!syncPhoneValidationState()) {
                 event.preventDefault();
@@ -898,41 +527,12 @@ require_once __DIR__ . '/templates/header.php';
         const totalEl = document.getElementById('current-total');
         const submitBtn = document.getElementById('step-2-submit-btn');
         const submitLabel = document.getElementById('step-2-submit-label');
-        const bookingShell = document.getElementById('step-2-booking-shell');
         const successBox = document.getElementById('step-2-success');
-        const successHeading = document.getElementById('step-2-success-heading');
         const successText = document.getElementById('step-2-success-text');
-        const successPriority = document.getElementById('step-2-success-priority');
-        const successPriorityText = document.getElementById('step-2-success-priority-text');
-        const successDatesLabel = document.getElementById('step-2-success-dates-label');
         const successDates = document.getElementById('step-2-success-dates');
         const errorBox = document.getElementById('step-2-error');
-        const errorHeading = document.getElementById('step-2-error-heading');
         const errorText = document.getElementById('step-2-error-text');
         const speedInputs = stepTwoForm.querySelectorAll('input[name="service_speed"]');
-        const priorityConfig = {
-            standard: {
-                label: 'Standard',
-                badgeClasses: ['border-zinc-500/40', 'bg-zinc-500/15', 'text-zinc-100'],
-                headline: 'Your Repair Has Been Booked',
-                message: 'We’ve received your request and will contact you soon to confirm the next steps. Standard bookings are typically scheduled within 3–5 business days.',
-                detail: 'Your request is queued under Standard priority, and our team will follow up as soon as the next available scheduling window opens.'
-            },
-            vip: {
-                label: 'VIP',
-                badgeClasses: ['border-cyan-400/40', 'bg-cyan-400/15', 'text-cyan-100'],
-                headline: 'VIP Repair Request Confirmed',
-                message: 'Thank you — your VIP booking is locked in. We’ve received your request and will contact you soon with expedited scheduling details.',
-                detail: 'Your request has been elevated to VIP priority so our team can move quickly and keep your downtime to a minimum.'
-            },
-            emergency: {
-                label: 'Emergency',
-                badgeClasses: ['border-red-400/40', 'bg-red-500/15', 'text-red-100'],
-                headline: 'Emergency Repair Request Received',
-                message: 'Your emergency request has been received and flagged for urgent attention. Our team will contact you as soon as possible.',
-                detail: 'Your booking is marked Emergency, and we’ll prioritize outreach immediately based on your urgent service needs.'
-            }
-        };
 
         const updateDisplayedTotal = () => {
             const selectedSpeed = stepTwoForm.querySelector('input[name="service_speed"]:checked')?.value || 'standard';
@@ -998,8 +598,6 @@ require_once __DIR__ . '/templates/header.php';
                 state: (bookingPayload.state || '').toUpperCase(),
                 zip: bookingPayload.zip,
                 problem: problemSections.join('\n\n'),
-                password: bookingPayload.password,
-                confirm_password: bookingPayload.confirm_password,
                 priority: speedPriorityMap[selectedSpeed] || 'standard',
                 website: stepTwoForm.website.value.trim(),
                 services: bookingPayload.services || [],
@@ -1018,46 +616,35 @@ require_once __DIR__ . '/templates/header.php';
                 const json = await response.json().catch(() => ({}));
 
                 if (!response.ok) {
-                    const apiMessage = (Array.isArray(json.errors) && json.errors.length > 0)
-                        ? json.errors.join(' ')
-                        : (json.message || 'Please check your details and try again.');
-                    throw new Error(apiMessage);
+                    throw new Error(json.message || 'Please check your details and try again.');
                 }
 
-                const activePriority = priorityConfig[requestBody.priority] || priorityConfig.standard;
-                successHeading.textContent = activePriority.headline;
-                successText.textContent = activePriority.message;
-                successPriorityText.textContent = activePriority.detail;
-                successPriority.textContent = activePriority.label;
-                successPriority.className = 'inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-wide';
-                successPriority.classList.add(...activePriority.badgeClasses);
-                successDatesLabel.textContent = `Based on your ${activePriority.label} priority, here are your suggested service dates:`;
+                successText.textContent = requestBody.priority === 'emergency'
+                    ? 'Your Emergency request has been received and flagged. Our team will contact you as soon as possible.'
+                    : (requestBody.priority === 'vip'
+                        ? 'Your Rush request has been received. We’ll contact you shortly to schedule your repair.'
+                        : 'We’ll contact you shortly to schedule your repair.');
 
                 successDates.innerHTML = '';
                 const suggestedDates = Array.isArray(json.suggested_dates) ? json.suggested_dates : [];
                 if (suggestedDates.length > 0) {
                     suggestedDates.forEach((dateStr) => {
                         const item = document.createElement('li');
-                        item.className = 'flex items-center gap-3 rounded-xl border border-cyan-400/15 bg-cyan-400/5 px-4 py-3';
-                        item.innerHTML = `<span class="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-200"><svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg></span><span>${formatDate(dateStr)}</span>`;
+                        item.className = 'rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2';
+                        item.textContent = formatDate(dateStr);
                         successDates.appendChild(item);
                     });
                 } else {
                     const item = document.createElement('li');
-                    item.className = 'rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-300';
+                    item.className = 'rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2';
                     item.textContent = 'We’ll be in touch shortly to arrange a date.';
                     successDates.appendChild(item);
                 }
 
-                bookingShell.classList.add('hidden');
                 successBox.classList.remove('hidden');
                 successBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Network error — please check your connection and try again.';
-                if (errorHeading) {
-                    errorHeading.textContent = errorMessage;
-                }
-                errorText.textContent = '';
+                errorText.textContent = error instanceof Error ? error.message : 'Network error — please check your connection and try again.';
                 errorBox.classList.remove('hidden');
                 errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             } finally {
@@ -1066,17 +653,5 @@ require_once __DIR__ . '/templates/header.php';
             }
         });
     }
-
-    // Login view: password visibility toggle
-    const toggleLoginBtn   = document.getElementById('toggle-login-password');
-    const loginPasswordInput = document.getElementById('login_password');
-    if (toggleLoginBtn && loginPasswordInput) {
-        toggleLoginBtn.addEventListener('click', () => {
-            const isPassword = loginPasswordInput.type === 'password';
-            loginPasswordInput.type = isPassword ? 'text' : 'password';
-            toggleLoginBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
-        });
-    }
-
 </script>
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
