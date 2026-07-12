@@ -130,26 +130,6 @@ $extraHead = <<<'HTML'
         filter: blur(70px);
         pointer-events: none;
     }
-    .customer-menu-dropdown {
-        min-width: 14rem;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-    }
-    .customer-avatar {
-        width: 2rem;
-        height: 2rem;
-        border-radius: 9999px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.75rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        background: rgba(6, 182, 212, 0.2);
-        border: 1px solid rgba(34, 211, 238, 0.4);
-        color: rgb(165, 243, 252);
-        flex-shrink: 0;
-    }
 </style>
 HTML;
 
@@ -354,59 +334,6 @@ if (($loginError !== '' && !$showInlineStepOneLogin) || (isset($_GET['mode']) &&
     $view = 'new';
 } else {
     $view = 'gate';
-}
-
-$headerRight = '';
-if (!empty($_SESSION['customer_id'])) {
-    $customerFirstName = trim((string) ($_SESSION['customer_first_name'] ?? ''));
-    $customerLastName  = trim((string) ($_SESSION['customer_last_name'] ?? ''));
-    $customerEmail     = trim((string) ($_SESSION['customer_email'] ?? ''));
-    $customerFullName  = trim($customerFirstName . ' ' . $customerLastName);
-    if ($customerFullName === '') {
-        $customerFullName = $customerEmail !== '' ? $customerEmail : 'Customer';
-    }
-    $initials = '';
-    if ($customerFirstName !== '') {
-        $initials .= substr($customerFirstName, 0, 1);
-    }
-    if ($customerLastName !== '') {
-        $initials .= substr($customerLastName, 0, 1);
-    }
-    if ($initials === '') {
-        $initials = $customerEmail !== '' ? substr($customerEmail, 0, 1) : 'C';
-    }
-    $initials = strtoupper($initials);
-
-    $headerRight = '
-        <div class="relative" id="customer-menu">
-            <button
-                type="button"
-                id="customer-menu-toggle"
-                class="inline-flex items-center gap-2 rounded-full border border-zinc-700/90 bg-zinc-900/85 px-2.5 py-1.5 text-sm text-zinc-100 transition-colors hover:border-cyan-400/50 hover:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                aria-haspopup="menu"
-                aria-expanded="false"
-            >
-                <span class="customer-avatar">' . h($initials) . '</span>
-                <span class="max-w-[9rem] truncate text-sm font-medium text-zinc-200">' . h($customerFirstName !== '' ? $customerFirstName : 'Customer') . '</span>
-                <svg class="h-4 w-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-            </button>
-            <div
-                id="customer-menu-dropdown"
-                class="customer-menu-dropdown hidden absolute right-0 mt-2 rounded-xl border border-zinc-700 bg-zinc-900/95 p-2"
-                role="menu"
-            >
-                <div class="px-2.5 py-2">
-                    <p class="text-sm font-semibold text-white truncate">' . h($customerFullName) . '</p>
-                    <p class="mt-0.5 text-xs text-zinc-400 truncate">' . h($customerEmail) . '</p>
-                </div>
-                <div class="my-1 border-t border-zinc-700/80"></div>
-                <a href="customer-logout.php" class="block rounded-lg px-2.5 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-950/40 hover:text-red-200" role="menuitem">
-                    Logout
-                </a>
-            </div>
-        </div>';
 }
 
 require_once __DIR__ . '/templates/header.php';
@@ -1109,40 +1036,5 @@ require_once __DIR__ . '/templates/header.php';
         });
     }
 
-    const customerMenu = document.getElementById('customer-menu');
-    const customerMenuToggle = document.getElementById('customer-menu-toggle');
-    const customerMenuDropdown = document.getElementById('customer-menu-dropdown');
-    if (customerMenu && customerMenuToggle && customerMenuDropdown) {
-        const closeCustomerMenu = () => {
-            customerMenuDropdown.classList.add('hidden');
-            customerMenuToggle.setAttribute('aria-expanded', 'false');
-        };
-        const openCustomerMenu = () => {
-            customerMenuDropdown.classList.remove('hidden');
-            customerMenuToggle.setAttribute('aria-expanded', 'true');
-        };
-
-        customerMenuToggle.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const isHidden = customerMenuDropdown.classList.contains('hidden');
-            if (isHidden) {
-                openCustomerMenu();
-            } else {
-                closeCustomerMenu();
-            }
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!customerMenu.contains(event.target)) {
-                closeCustomerMenu();
-            }
-        });
-
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') {
-                closeCustomerMenu();
-            }
-        });
-    }
 </script>
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
