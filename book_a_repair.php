@@ -246,7 +246,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
     // Check for an existing account BEFORE validating confirm_password so that a
     // returning customer who enters only their existing password is silently logged
     // in without needing to fill the "Confirm Password" field.
-    if (!$errors) {
+    // Skip this block entirely if the customer is already logged in via session.
+    if (!$errors && empty($_SESSION['customer_id'])) {
         $emailCheck = trim((string) ($_POST['email'] ?? ''));
         $stmtCheck = $pdo->prepare('SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1');
         $stmtCheck->execute([$emailCheck]);
