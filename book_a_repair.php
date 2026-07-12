@@ -16,6 +16,7 @@ $inlineLoginError = '';
 $showInlineStepOneLogin = false;
 $inlineLoginEmail = '';
 $pendingStepOneSessionKey = 'book_a_repair_pending_booking';
+$customerPrefillSessionKey = 'book_a_repair_customer_prefill';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'login') {
     $loginContext = trim((string) ($_POST['login_context'] ?? ''));
@@ -41,20 +42,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
         }
     } else {
         $stmtLogin = $pdo->prepare(
-            'SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1'
+            'SELECT id, first_name, last_name, email, password_hash, phone, address, city, state, zip FROM customers WHERE email = ? LIMIT 1'
         );
         $stmtLogin->execute([$loginEmail]);
         $customerLogin = $stmtLogin->fetch(PDO::FETCH_ASSOC);
         if ($customerLogin && !empty($customerLogin['password_hash']) && password_verify($loginPassword, $customerLogin['password_hash'])) {
             session_regenerate_id(true);
+            $customerPhoneDigits = normalizeUsPhone($customerLogin['phone'] ?? '');
+            $customerProfile = [
+                'first_name' => trim((string) ($customerLogin['first_name'] ?? '')),
+                'last_name' => trim((string) ($customerLogin['last_name'] ?? '')),
+                'phone' => formatUsPhoneDisplay($customerPhoneDigits ?? ($customerLogin['phone'] ?? '')),
+                'phone_e164' => formatUsPhoneE164($customerPhoneDigits),
+                'email' => trim((string) ($customerLogin['email'] ?? '')),
+                'address' => trim((string) ($customerLogin['address'] ?? '')),
+                'city' => trim((string) ($customerLogin['city'] ?? '')),
+                'state' => strtoupper(trim((string) ($customerLogin['state'] ?? ''))),
+                'zip' => trim((string) ($customerLogin['zip'] ?? '')),
+            ];
             $_SESSION['customer_id']         = (int) $customerLogin['id'];
-            $_SESSION['customer_first_name'] = $customerLogin['first_name'];
-            $_SESSION['customer_last_name']  = $customerLogin['last_name'];
-            $_SESSION['customer_email']      = $customerLogin['email'];
+            $_SESSION['customer_first_name'] = $customerProfile['first_name'];
+            $_SESSION['customer_last_name']  = $customerProfile['last_name'];
+            $_SESSION['customer_email']      = $customerProfile['email'];
+            $_SESSION['customer_phone']      = $customerProfile['phone'];
+            $_SESSION['customer_phone_e164'] = $customerProfile['phone_e164'];
+            $_SESSION['customer_address']    = $customerProfile['address'];
+            $_SESSION['customer_city']       = $customerProfile['city'];
+            $_SESSION['customer_state']      = $customerProfile['state'];
+            $_SESSION['customer_zip']        = $customerProfile['zip'];
+            $_SESSION[$customerPrefillSessionKey] = $customerProfile;
 
             if ($loginContext === 'step1_existing_account') {
                 $pendingStepOne = $_SESSION[$pendingStepOneSessionKey] ?? null;
                 if (is_array($pendingStepOne)) {
+                    foreach ($customerProfile as $profileKey => $profileValue) {
+                        if (trim((string) ($pendingStepOne[$profileKey] ?? '')) === '' && $profileValue !== '') {
+                            $pendingStepOne[$profileKey] = $profileValue;
+                        }
+                    }
                     $pendingStepOne['password']         = $loginPassword;
                     $pendingStepOne['confirm_password'] = $loginPassword;
                     $_SESSION['book_dash_repair']       = $pendingStepOne;
@@ -332,6 +357,17 @@ $booking = $_SESSION['book_dash_repair'] ?? null;
 if ($step === 2 && !$booking) {
     header('Location: book_a_repair.php');
     exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $step === 1 && (($_GET['type'] ?? '') === 'new')) {
+    $customerPrefill = $_SESSION[$customerPrefillSessionKey] ?? null;
+    if (is_array($customerPrefill)) {
+        foreach ($customerPrefill as $prefillKey => $prefillValue) {
+            if (!isset($_POST[$prefillKey]) || trim((string) $_POST[$prefillKey]) === '') {
+                $_POST[$prefillKey] = $prefillValue;
+            }
+        }
+    }
 }
 
 $stepTwoPayload = null;
