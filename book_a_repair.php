@@ -626,6 +626,11 @@ require_once __DIR__ . '/templates/header.php';
                 $total = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
             ?>
             <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
+                <?php if (!empty($_SESSION['customer_id'])): ?>
+                    <div class="rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">
+                        You have been logged in successfully.
+                    </div>
+                <?php endif; ?>
                 <div id="step-2-success" class="hidden relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-zinc-950 px-6 py-8 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_0_70px_rgba(8,145,178,0.12)] sm:px-8 sm:py-10">
                     <div class="confirmation-orb -top-16 right-0 h-40 w-40 bg-cyan-500/20"></div>
                     <div class="confirmation-orb bottom-0 left-0 h-36 w-36 bg-emerald-500/10"></div>
