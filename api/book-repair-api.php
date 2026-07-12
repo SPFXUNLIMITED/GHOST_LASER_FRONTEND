@@ -266,15 +266,6 @@ function resolve_customer_id(
         }
     }
 
-    if ($first_name !== '' && $last_name !== '') {
-        $stmt = $pdo->prepare("SELECT id FROM customers WHERE first_name = ? AND last_name = ? ORDER BY id ASC LIMIT 1");
-        $stmt->execute([$first_name, $last_name]);
-        $id = (int)($stmt->fetchColumn() ?: 0);
-        if ($id > 0) {
-            return $id;
-        }
-    }
-
     $hubspot_contact_id = 'service_api_' . bin2hex(random_bytes(10));
     $insert = $pdo->prepare("
         INSERT INTO customers (
@@ -392,10 +383,10 @@ if ($problem === '') {
 
 if ($street === '') {
     $msg = 'Street address is required.';
-    $errors[] = $msg; $field_errors['street'] = $msg;
+    $errors[] = $msg; $field_errors['address'] = $msg;
 } elseif (strlen($street) > 255) {
     $msg = 'Street address must be 255 characters or fewer.';
-    $errors[] = $msg; $field_errors['street'] = $msg;
+    $errors[] = $msg; $field_errors['address'] = $msg;
 }
 
 if ($city === '') {
