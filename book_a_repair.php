@@ -314,8 +314,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         }
     }
 
-    // New-customer password validation — only runs when not already handled above.
-    if (!$errors && !$showInlineStepOneLogin) {
+    // New-customer password validation — only runs when not already handled above
+    // and when the user is not already logged in as a returning customer.
+    if (!$errors && !$showInlineStepOneLogin && empty($_SESSION['customer_id'])) {
         if ($password === '' || $passwordConfirm === '') {
             $errors[] = 'Password and confirm password are required.';
         } elseif (strlen($password) < 8) {
@@ -673,6 +674,7 @@ require_once __DIR__ . '/templates/header.php';
 
                 <div class="border-t border-zinc-800"></div>
 
+                <?php if (empty($_SESSION['customer_id'])): ?>
                 <div>
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Create Account Password</p>
                     <div class="grid gap-5 sm:grid-cols-2">
@@ -686,6 +688,7 @@ require_once __DIR__ . '/templates/header.php';
                         </div>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <button type="submit" class="w-full rounded-lg bg-cyan-500 py-3.5 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
                     Continue to Service Speed →
