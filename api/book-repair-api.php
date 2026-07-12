@@ -450,6 +450,7 @@ if ($errors) {
     http_response_code(400);
     echo json_encode([
         'success'      => false,
+        'message'      => $errors[0],
         'errors'       => $errors,
         'field_errors' => $field_errors,
         'received'     => [

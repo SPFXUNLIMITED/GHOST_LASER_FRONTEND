@@ -984,7 +984,10 @@ require_once __DIR__ . '/templates/header.php';
                 const json = await response.json().catch(() => ({}));
 
                 if (!response.ok) {
-                    throw new Error(json.message || 'Please check your details and try again.');
+                    const apiMessage = (Array.isArray(json.errors) && json.errors.length > 0)
+                        ? json.errors.join(' ')
+                        : (json.message || 'Please check your details and try again.');
+                    throw new Error(apiMessage);
                 }
 
                 const activePriority = priorityConfig[requestBody.priority] || priorityConfig.standard;
