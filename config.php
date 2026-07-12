@@ -15,6 +15,6 @@ return [
     'secret_key' => '6LdUs-csAAAAAC1ezjVMiAAUtS0GWoQrvYSsITCo',
   ],
   'google_maps' => [
-    'api_key' => getenv('GOOGLE_MAPS_API_KEY') ?: '',
+    'api_key' => getenv('') ?: '',
   ],
 ];
