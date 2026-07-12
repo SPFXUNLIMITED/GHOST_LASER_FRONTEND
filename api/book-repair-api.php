@@ -302,7 +302,7 @@ function resolve_customer_id(
         $state,
         $zip,
         $country,
-        password_hash($password, PASSWORD_DEFAULT),
+        $password !== '' ? password_hash($password, PASSWORD_DEFAULT) : null,
         null,
     ]);
 
@@ -365,24 +365,6 @@ if ($email === '') {
 } elseif (strlen($email) > 255) {
     $msg = 'Email address must be 255 characters or fewer.';
     $errors[] = $msg; $field_errors['email'] = $msg;
-}
-
-if (empty($_SESSION['customer_id'])) {
-    if ($password === '') {
-        $msg = 'Password is required.';
-        $errors[] = $msg; $field_errors['password'] = $msg;
-    } elseif (strlen($password) < 8) {
-        $msg = 'Password must be at least 8 characters.';
-        $errors[] = $msg; $field_errors['password'] = $msg;
-    }
-
-    if ($confirm_password === '') {
-        $msg = 'Confirm password is required.';
-        $errors[] = $msg; $field_errors['confirm_password'] = $msg;
-    } elseif ($password !== '' && $password !== $confirm_password) {
-        $msg = 'Passwords do not match.';
-        $errors[] = $msg; $field_errors['confirm_password'] = $msg;
-    }
 }
 
 if ($machine_brand === '') {
