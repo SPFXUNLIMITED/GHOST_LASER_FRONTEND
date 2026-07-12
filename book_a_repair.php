@@ -87,14 +87,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
                 unset($_SESSION[$pendingStepOneSessionKey]);
                 header('Location: book_a_repair.php?step=2');
             } else {
-                // Returning-customer login from the dedicated login page.
-                // If booking data already exists in the session (e.g. a mid-flow
-                // session timeout), resume at step 2; otherwise send the customer
-                // to the booking form so they can enter their repair details.
-                $destination = !empty($_SESSION['book_dash_repair'])
-                    ? 'book_a_repair.php?step=2'
-                    : 'book_a_repair.php?type=new';
-                header('Location: ' . $destination);
+                // Returning-customer login from the dedicated login page (?mode=login).
+                // Always send the customer to step 1 so they can fill in their
+                // machine and service details. Only the step1_existing_account
+                // path (inline login from step 1) has booking data in the session
+                // already and is allowed to skip straight to step 2.
+                header('Location: book_a_repair.php?type=new');
             }
             exit;
         } else {
