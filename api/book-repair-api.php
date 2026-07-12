@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // ── Load DB ───────────────────────────────────────────────────────────────────
-require __DIR__ . '/../db.php';
+require __DIR__ . '/../project/db.php';
 
 // ── Rate limit: max 10 submissions per IP per hour (reuses form_rate_limit) ───
 $_api_ip = (function (): string {
