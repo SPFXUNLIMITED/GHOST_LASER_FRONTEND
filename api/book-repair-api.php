@@ -280,12 +280,13 @@ function resolve_customer_id(
         INSERT INTO customers (
             hubspot_contact_id, first_name, last_name, company, phone, email,
             address, city, state, zip, country, last_updated
-        ) VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $insert->execute([
         $hubspot_contact_id,
         $first_name,
         $last_name,
+        '',
         $phone,
         $email,
         $street,
@@ -293,6 +294,7 @@ function resolve_customer_id(
         $state,
         $zip,
         $country,
+        null,
     ]);
 
     return (int)$pdo->lastInsertId();
