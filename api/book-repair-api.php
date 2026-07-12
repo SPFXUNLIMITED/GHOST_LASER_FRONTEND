@@ -250,10 +250,18 @@ function resolve_customer_id(
 ): int {
 
     if ($email !== '') {
-        $stmt = $pdo->prepare("SELECT id FROM customers WHERE email = ? ORDER BY id ASC LIMIT 1");
+        $stmt = $pdo->prepare("SELECT id, password_hash FROM customers WHERE email = ? ORDER BY id ASC LIMIT 1");
         $stmt->execute([$email]);
-        $id = (int)($stmt->fetchColumn() ?: 0);
+        $existingByEmail = $stmt->fetch(PDO::FETCH_ASSOC);
+        $id = (int)($existingByEmail['id'] ?? 0);
         if ($id > 0) {
+            if (empty($existingByEmail['password_hash']) && $password !== '') {
+                $updatePassword = $pdo->prepare("UPDATE customers SET password_hash = ? WHERE id = ? AND (password_hash IS NULL OR password_hash = '')");
+                $updatePassword->execute([
+                    password_hash($password, PASSWORD_DEFAULT),
+                    $id,
+                ]);
+            }
             return $id;
         }
     }

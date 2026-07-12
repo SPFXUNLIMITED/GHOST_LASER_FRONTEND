@@ -2,7 +2,12 @@
 session_start();
 
 // Redirect already-logged-in customers to the booking form
-if (!empty($_SESSION['customer_id'])) {
+if (
+    !empty($_SESSION['customer_id']) &&
+    !isset($_GET['step']) &&
+    !isset($_GET['type']) &&
+    (($_GET['mode'] ?? '') !== 'login')
+) {
     header('Location: book-repair.php');
     exit;
 }
@@ -18,11 +23,33 @@ try {
 
 // Handle "I have an account" login POST
 $loginError = '';
+$inlineLoginError = '';
+$showInlineStepOneLogin = false;
+$inlineLoginEmail = '';
+$pendingStepOneSessionKey = 'book_a_repair_pending_booking';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'login') {
+    $loginContext = trim((string) ($_POST['login_context'] ?? ''));
     $loginEmail    = trim($_POST['login_email'] ?? '');
     $loginPassword = $_POST['login_password'] ?? '';
+
+    if ($loginContext === 'step1_existing_account') {
+        $showInlineStepOneLogin = true;
+        $inlineLoginEmail = $loginEmail;
+        $pendingStepOne = $_SESSION[$pendingStepOneSessionKey] ?? null;
+        if (is_array($pendingStepOne)) {
+            foreach ($pendingStepOne as $pendingKey => $pendingValue) {
+                $_POST[$pendingKey] = $pendingValue;
+            }
+        }
+    }
+
     if ($loginEmail === '' || $loginPassword === '') {
-        $loginError = 'Please enter your email and password.';
+        if ($loginContext === 'step1_existing_account') {
+            $inlineLoginError = 'Please enter your email and password.';
+        } else {
+            $loginError = 'Please enter your email and password.';
+        }
     } else {
         $stmtLogin = $pdo->prepare(
             'SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1'
@@ -35,10 +62,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
             $_SESSION['customer_first_name'] = $customerLogin['first_name'];
             $_SESSION['customer_last_name']  = $customerLogin['last_name'];
             $_SESSION['customer_email']      = $customerLogin['email'];
-            header('Location: book-repair.php');
+
+            if ($loginContext === 'step1_existing_account') {
+                $pendingStepOne = $_SESSION[$pendingStepOneSessionKey] ?? null;
+                if (is_array($pendingStepOne)) {
+                    $pendingStepOne['password'] = $loginPassword;
+                    $pendingStepOne['confirm_password'] = $loginPassword;
+                    $_SESSION['book_dash_repair'] = $pendingStepOne;
+                }
+                unset($_SESSION[$pendingStepOneSessionKey]);
+                header('Location: book_a_repair.php?step=2');
+            } else {
+                header('Location: book-repair.php');
+            }
             exit;
         } else {
-            $loginError = 'Invalid email or password. Please try again.';
+            if ($loginContext === 'step1_existing_account') {
+                $inlineLoginError = 'Invalid email or password. Please try again.';
+            } else {
+                $loginError = 'Invalid email or password. Please try again.';
+            }
         }
     }
 }
@@ -150,7 +193,6 @@ $speedOptions = [
 $step = isset($_GET['step']) && $_GET['step'] === '2' ? 2 : 1;
 $errors = [];
 $success = '';
-$emailAlreadyRegistered = false;
 $phoneError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1')) {
@@ -189,18 +231,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         }
     }
 
-    // Check for existing email in customers table
+    $preparedBookingData = null;
     if (!$errors) {
-        $emailCheck = trim((string) ($_POST['email'] ?? ''));
-        $stmtCheck = $pdo->prepare('SELECT id FROM customers WHERE email = ? LIMIT 1');
-        $stmtCheck->execute([$emailCheck]);
-        if ($stmtCheck->fetch()) {
-            $emailAlreadyRegistered = true;
-        }
-    }
-
-    if (!$errors && !$emailAlreadyRegistered) {
-        $_SESSION['book_dash_repair'] = [
+        $preparedBookingData = [
             'first_name' => trim((string) ($_POST['first_name'] ?? '')),
             'last_name' => trim((string) ($_POST['last_name'] ?? '')),
             'phone' => formatUsPhoneDisplay($normalizedPhone),
@@ -220,6 +253,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'password' => $password,
             'confirm_password' => $passwordConfirm,
         ];
+    }
+
+    // Check for existing email in customers table
+    if (!$errors) {
+        $emailCheck = trim((string) ($_POST['email'] ?? ''));
+        $stmtCheck = $pdo->prepare('SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1');
+        $stmtCheck->execute([$emailCheck]);
+        $existingCustomer = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+        if ($existingCustomer && !empty($existingCustomer['password_hash'])) {
+            if (password_verify($password, (string) $existingCustomer['password_hash'])) {
+                session_regenerate_id(true);
+                $_SESSION['customer_id']         = (int) $existingCustomer['id'];
+                $_SESSION['customer_first_name'] = $existingCustomer['first_name'];
+                $_SESSION['customer_last_name']  = $existingCustomer['last_name'];
+                $_SESSION['customer_email']      = $existingCustomer['email'];
+            } else {
+                $showInlineStepOneLogin = true;
+                $inlineLoginEmail = $emailCheck;
+                $inlineLoginError = 'We found your account. Please log in.';
+                if (is_array($preparedBookingData)) {
+                    $_SESSION[$pendingStepOneSessionKey] = $preparedBookingData;
+                }
+            }
+        }
+    }
+
+    if (!$errors && !$showInlineStepOneLogin && is_array($preparedBookingData)) {
+        $_SESSION['book_dash_repair'] = $preparedBookingData;
+        unset($_SESSION[$pendingStepOneSessionKey]);
         header('Location: book_a_repair.php?step=2');
         exit;
     }
@@ -260,9 +323,10 @@ if ($step === 2 && $booking) {
 //   gate  – default landing (choose account type)
 //   login – inline login form for returning customers
 //   new   – full booking form for new customers (steps 1 & 2)
-if ($loginError !== '' || (isset($_GET['mode']) && $_GET['mode'] === 'login')) {
+if (($loginError !== '' && !$showInlineStepOneLogin) || (isset($_GET['mode']) && $_GET['mode'] === 'login')) {
     $view = 'login';
 } elseif (
+    $showInlineStepOneLogin ||
     $_SERVER['REQUEST_METHOD'] === 'POST' ||
     isset($_GET['type']) ||
     $step === 2
@@ -416,13 +480,34 @@ require_once __DIR__ . '/templates/header.php';
                 <?= h($errors[0]) ?>
             </div>
         <?php endif; ?>
-        <?php if ($emailAlreadyRegistered): ?>
-            <div class="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-4 text-sm text-amber-200">
-                <p class="font-semibold mb-2">This email is already registered. Please log in instead.</p>
-                <a href="book_a_repair.php?mode=login"
-                   class="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs px-3 py-1.5 rounded-md transition-colors">
-                    Log In to Book &rarr;
-                </a>
+        <?php if ($showInlineStepOneLogin && $step === 1): ?>
+            <div class="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-4 text-sm text-amber-100">
+                <p class="font-semibold text-amber-200"><?= h($inlineLoginError !== '' ? $inlineLoginError : 'We found your account. Please log in.') ?></p>
+                <form method="post" action="book_a_repair.php?type=new" class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                    <input type="hidden" name="form_step" value="login">
+                    <input type="hidden" name="login_context" value="step1_existing_account">
+                    <input
+                        class="input-base"
+                        type="email"
+                        name="login_email"
+                        placeholder="Email Address"
+                        autocomplete="email"
+                        value="<?= h($inlineLoginEmail !== '' ? $inlineLoginEmail : ($_POST['email'] ?? '')) ?>"
+                        required
+                    >
+                    <input
+                        class="input-base"
+                        id="login_password"
+                        type="password"
+                        name="login_password"
+                        placeholder="Password"
+                        autocomplete="current-password"
+                        required
+                    >
+                    <button type="submit" class="rounded-lg bg-amber-400 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-zinc-950 transition-colors hover:bg-amber-300">
+                        Log In
+                    </button>
+                </form>
             </div>
         <?php endif; ?>
         <?php if ($success): ?>
