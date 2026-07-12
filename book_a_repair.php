@@ -703,6 +703,14 @@ require_once __DIR__ . '/templates/header.php';
         return isValid;
     };
 
+    const syncPasswordMatchValidity = () => {
+        if (!passwordInput || !confirmPasswordInput) return true;
+        const hasBothValues = passwordInput.value !== '' && confirmPasswordInput.value !== '';
+        const matches = !hasBothValues || passwordInput.value === confirmPasswordInput.value;
+        confirmPasswordInput.setCustomValidity(matches ? '' : 'Passwords do not match.');
+        return matches;
+    };
+
     if (phoneInput) {
         phoneInput.addEventListener('input', () => {
             const cursorAtEnd = phoneInput.selectionStart === phoneInput.value.length;
@@ -717,21 +725,25 @@ require_once __DIR__ . '/templates/header.php';
         syncPhoneValidationState();
     }
 
+    if (passwordInput && confirmPasswordInput) {
+        const clearPasswordMismatchIfFixed = () => {
+            syncPasswordMatchValidity();
+        };
+        passwordInput.addEventListener('input', clearPasswordMismatchIfFixed);
+        confirmPasswordInput.addEventListener('input', clearPasswordMismatchIfFixed);
+        confirmPasswordInput.addEventListener('blur', clearPasswordMismatchIfFixed);
+    }
+
     if (stepOneForm) {
         stepOneForm.addEventListener('submit', (event) => {
             if (phoneInput) {
                 phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
             }
-            if (passwordInput && confirmPasswordInput) {
-                passwordInput.setCustomValidity('');
-                confirmPasswordInput.setCustomValidity('');
-                if (passwordInput.value && confirmPasswordInput.value && passwordInput.value !== confirmPasswordInput.value) {
-                    event.preventDefault();
-                    confirmPasswordInput.setCustomValidity('Passwords do not match.');
-                    confirmPasswordInput.reportValidity();
-                    confirmPasswordInput.focus();
-                    return;
-                }
+            if (!syncPasswordMatchValidity()) {
+                event.preventDefault();
+                confirmPasswordInput?.reportValidity();
+                confirmPasswordInput?.focus();
+                return;
             }
             if (!syncPhoneValidationState()) {
                 event.preventDefault();
