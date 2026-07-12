@@ -178,9 +178,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
 
     // Validate password fields
     $password        = $_POST['password'] ?? '';
-    $passwordConfirm = $_POST['password_confirm'] ?? '';
+    $passwordConfirm = $_POST['confirm_password'] ?? '';
     if (!$errors) {
-        if (strlen($password) < 8) {
+        if ($password === '' || $passwordConfirm === '') {
+            $errors[] = 'Password and confirm password are required.';
+        } elseif (strlen($password) < 8) {
             $errors[] = 'Password must be at least 8 characters.';
         } elseif ($password !== $passwordConfirm) {
             $errors[] = 'Passwords do not match.';
@@ -215,7 +217,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'problem' => trim((string) ($_POST['problem'] ?? '')),
             'services' => $services,
             'other_service' => $otherService,
-            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+            'password' => $password,
+            'confirm_password' => $passwordConfirm,
         ];
         header('Location: book_a_repair.php?step=2');
         exit;
@@ -245,6 +248,8 @@ if ($step === 2 && $booking) {
         'state' => (string) ($booking['state'] ?? ''),
         'zip' => (string) ($booking['zip'] ?? ''),
         'problem' => (string) ($booking['problem'] ?? ''),
+        'password' => (string) ($booking['password'] ?? ''),
+        'confirm_password' => (string) ($booking['confirm_password'] ?? ''),
         'services' => array_values(array_intersect(array_keys($serviceLabels), (array) ($booking['services'] ?? []))),
         'other_service' => (string) ($booking['other_service'] ?? ''),
         'service_speed' => isset($speedOptions[$booking['service_speed'] ?? '']) ? (string) $booking['service_speed'] : 'standard',
@@ -515,8 +520,8 @@ require_once __DIR__ . '/templates/header.php';
                             <input class="input-base" id="password" type="password" name="password" placeholder="Min. 8 characters" autocomplete="new-password" required minlength="8">
                         </div>
                         <div>
-                            <label class="mb-1.5 block text-xs text-zinc-400" for="password_confirm">Confirm Password *</label>
-                            <input class="input-base" id="password_confirm" type="password" name="password_confirm" placeholder="Repeat password" autocomplete="new-password" required minlength="8">
+                            <label class="mb-1.5 block text-xs text-zinc-400" for="confirm_password">Confirm Password *</label>
+                            <input class="input-base" id="confirm_password" type="password" name="confirm_password" placeholder="Repeat password" autocomplete="new-password" required minlength="8">
                         </div>
                     </div>
                 </div>
@@ -661,6 +666,8 @@ require_once __DIR__ . '/templates/header.php';
     const stepOneForm = document.querySelector('form[action="book_a_repair.php?type=new"]');
     const phoneInput = document.getElementById('phone');
     const phoneErrorEl = document.getElementById('phone-error');
+    const passwordInput = document.getElementById('password');
+    const confirmPasswordInput = document.getElementById('confirm_password');
 
     const normalizeUsPhone = (value) => {
         let digits = String(value || '').replace(/\D/g, '');
@@ -714,6 +721,17 @@ require_once __DIR__ . '/templates/header.php';
         stepOneForm.addEventListener('submit', (event) => {
             if (phoneInput) {
                 phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
+            }
+            if (passwordInput && confirmPasswordInput) {
+                passwordInput.setCustomValidity('');
+                confirmPasswordInput.setCustomValidity('');
+                if (passwordInput.value && confirmPasswordInput.value && passwordInput.value !== confirmPasswordInput.value) {
+                    event.preventDefault();
+                    confirmPasswordInput.setCustomValidity('Passwords do not match.');
+                    confirmPasswordInput.reportValidity();
+                    confirmPasswordInput.focus();
+                    return;
+                }
             }
             if (!syncPhoneValidationState()) {
                 event.preventDefault();
@@ -843,6 +861,8 @@ require_once __DIR__ . '/templates/header.php';
                 state: (bookingPayload.state || '').toUpperCase(),
                 zip: bookingPayload.zip,
                 problem: problemSections.join('\n\n'),
+                password: bookingPayload.password,
+                confirm_password: bookingPayload.confirm_password,
                 priority: speedPriorityMap[selectedSpeed] || 'standard',
                 website: stepTwoForm.website.value.trim(),
                 services: bookingPayload.services || [],

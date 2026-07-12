@@ -299,6 +299,7 @@ $last_name     = str_field($body, 'last_name');
 $phone         = str_field($body, 'phone');
 $email         = str_field($body, 'email');
 $password      = str_field($body, 'password');
+$confirm_password = str_field($body, 'confirm_password');
 $machine_brand = str_field($body, 'machine_brand');
 $machine_model = str_field($body, 'machine_model');
 $machine_watts = str_field($body, 'machine_watts');
@@ -356,6 +357,14 @@ if ($password === '') {
 } elseif (strlen($password) < 8) {
     $msg = 'Password must be at least 8 characters.';
     $errors[] = $msg; $field_errors['password'] = $msg;
+}
+
+if ($confirm_password === '') {
+    $msg = 'Confirm password is required.';
+    $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+} elseif ($password !== '' && $password !== $confirm_password) {
+    $msg = 'Passwords do not match.';
+    $errors[] = $msg; $field_errors['confirm_password'] = $msg;
 }
 
 if ($machine_brand === '') {
