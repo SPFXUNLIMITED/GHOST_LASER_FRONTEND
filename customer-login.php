@@ -3,7 +3,8 @@ session_start();
 
 // Redirect already-logged-in customers
 if (!empty($_SESSION['customer_id'])) {
-    header('Location: book-repair.php');
+    $dest = !empty($_SESSION['book_dash_repair']) ? 'book_a_repair.php' : 'book_a_repair.php?type=new';
+    header('Location: ' . $dest);
     exit;
 }
 
@@ -33,7 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $mode === 'login') {
             $_SESSION['customer_first_name'] = $customer['first_name'];
             $_SESSION['customer_last_name']  = $customer['last_name'];
             $_SESSION['customer_email']      = $customer['email'];
-            header('Location: book-repair.php');
+            $dest = !empty($_SESSION['book_dash_repair']) ? 'book_a_repair.php' : 'book_a_repair.php?type=new';
+            header('Location: ' . $dest);
             exit;
         } else {
             $error = 'Invalid email or password. Please try again.';
