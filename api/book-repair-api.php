@@ -241,6 +241,7 @@ function resolve_customer_id(
     string $last_name,
     string $phone,
     string $email,
+    string $password,
     string $street,
     string $city,
     string $state,
@@ -270,8 +271,8 @@ function resolve_customer_id(
     $insert = $pdo->prepare("
         INSERT INTO customers (
             hubspot_contact_id, first_name, last_name, company, phone, email,
-            address, city, state, zip, country, last_updated
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            address, city, state, zip, country, password_hash, last_updated
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $insert->execute([
         $hubspot_contact_id,
@@ -285,6 +286,7 @@ function resolve_customer_id(
         $state,
         $zip,
         $country,
+        password_hash($password, PASSWORD_DEFAULT),
         null,
     ]);
 
@@ -296,6 +298,8 @@ $first_name    = str_field($body, 'first_name');
 $last_name     = str_field($body, 'last_name');
 $phone         = str_field($body, 'phone');
 $email         = str_field($body, 'email');
+$password      = str_field($body, 'password');
+$confirm_password = str_field($body, 'confirm_password');
 $machine_brand = str_field($body, 'machine_brand');
 $machine_model = str_field($body, 'machine_model');
 $machine_watts = str_field($body, 'machine_watts');
@@ -345,6 +349,22 @@ if ($email === '') {
 } elseif (strlen($email) > 255) {
     $msg = 'Email address must be 255 characters or fewer.';
     $errors[] = $msg; $field_errors['email'] = $msg;
+}
+
+if ($password === '') {
+    $msg = 'Password is required.';
+    $errors[] = $msg; $field_errors['password'] = $msg;
+} elseif (strlen($password) < 8) {
+    $msg = 'Password must be at least 8 characters.';
+    $errors[] = $msg; $field_errors['password'] = $msg;
+}
+
+if ($confirm_password === '') {
+    $msg = 'Confirm password is required.';
+    $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+} elseif ($password !== '' && $password !== $confirm_password) {
+    $msg = 'Passwords do not match.';
+    $errors[] = $msg; $field_errors['confirm_password'] = $msg;
 }
 
 if ($machine_brand === '') {
@@ -456,6 +476,7 @@ try {
         $last_name,
         $phone,
         $email,
+        $password,
         $street,
         $city,
         $state,
