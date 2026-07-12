@@ -55,16 +55,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
             if ($loginContext === 'step1_existing_account') {
                 $pendingStepOne = $_SESSION[$pendingStepOneSessionKey] ?? null;
                 if (is_array($pendingStepOne)) {
-                    $pendingStepOne['password'] = $loginPassword;
+                    $pendingStepOne['password']         = $loginPassword;
                     $pendingStepOne['confirm_password'] = $loginPassword;
-                    $_SESSION['book_dash_repair'] = $pendingStepOne;
+                    $_SESSION['book_dash_repair']       = $pendingStepOne;
                 }
                 unset($_SESSION[$pendingStepOneSessionKey]);
                 header('Location: book_a_repair.php?step=2');
-		} else {
-			header('Location: book_a_repair.php?step=2');
-			exit;
-		}
+            } else {
+                // Returning-customer login from the dedicated login page.
+                // If booking data already exists in the session (e.g. a mid-flow
+                // session timeout), resume at step 2; otherwise send the customer
+                // to the booking form so they can enter their repair details.
+                $destination = !empty($_SESSION['book_dash_repair'])
+                    ? 'book_a_repair.php?step=2'
+                    : 'book_a_repair.php?type=new';
+                header('Location: ' . $destination);
+            }
             exit;
         } else {
             if ($loginContext === 'step1_existing_account') {
