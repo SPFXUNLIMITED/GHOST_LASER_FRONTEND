@@ -14,6 +14,10 @@ error_reporting(E_ALL);
  *   { "success": false, "errors": [ "…", … ] }
  */
 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
 
@@ -359,20 +363,22 @@ if ($email === '') {
     $errors[] = $msg; $field_errors['email'] = $msg;
 }
 
-if ($password === '') {
-    $msg = 'Password is required.';
-    $errors[] = $msg; $field_errors['password'] = $msg;
-} elseif (strlen($password) < 8) {
-    $msg = 'Password must be at least 8 characters.';
-    $errors[] = $msg; $field_errors['password'] = $msg;
-}
+if (empty($_SESSION['customer_id'])) {
+    if ($password === '') {
+        $msg = 'Password is required.';
+        $errors[] = $msg; $field_errors['password'] = $msg;
+    } elseif (strlen($password) < 8) {
+        $msg = 'Password must be at least 8 characters.';
+        $errors[] = $msg; $field_errors['password'] = $msg;
+    }
 
-if ($confirm_password === '') {
-    $msg = 'Confirm password is required.';
-    $errors[] = $msg; $field_errors['confirm_password'] = $msg;
-} elseif ($password !== '' && $password !== $confirm_password) {
-    $msg = 'Passwords do not match.';
-    $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+    if ($confirm_password === '') {
+        $msg = 'Confirm password is required.';
+        $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+    } elseif ($password !== '' && $password !== $confirm_password) {
+        $msg = 'Passwords do not match.';
+        $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+    }
 }
 
 if ($machine_brand === '') {
