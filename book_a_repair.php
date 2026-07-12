@@ -677,7 +677,7 @@ require_once __DIR__ . '/templates/header.php';
                 </div>
 
                 <div id="step-2-error" class="hidden rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-4 text-sm text-red-200">
-                    <p class="font-semibold text-red-300">Something went wrong</p>
+                    <p id="step-2-error-heading" class="font-semibold text-red-300">Something went wrong</p>
                     <p id="step-2-error-text" class="mt-1 text-red-100/80">Please check your details and try again.</p>
                 </div>
 
@@ -873,6 +873,7 @@ require_once __DIR__ . '/templates/header.php';
         const successDatesLabel = document.getElementById('step-2-success-dates-label');
         const successDates = document.getElementById('step-2-success-dates');
         const errorBox = document.getElementById('step-2-error');
+        const errorHeading = document.getElementById('step-2-error-heading');
         const errorText = document.getElementById('step-2-error-text');
         const speedInputs = stepTwoForm.querySelectorAll('input[name="service_speed"]');
         const priorityConfig = {
@@ -1015,7 +1016,11 @@ require_once __DIR__ . '/templates/header.php';
                 successBox.classList.remove('hidden');
                 successBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             } catch (error) {
-                errorText.textContent = error instanceof Error ? error.message : 'Network error — please check your connection and try again.';
+                const errorMessage = error instanceof Error ? error.message : 'Network error — please check your connection and try again.';
+                if (errorHeading) {
+                    errorHeading.textContent = errorMessage;
+                }
+                errorText.textContent = '';
                 errorBox.classList.remove('hidden');
                 errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             } finally {
