@@ -218,10 +218,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         $errors[] = $phoneError;
     }
 
-    // Validate password fields
     $password        = $_POST['password'] ?? '';
     $passwordConfirm = $_POST['confirm_password'] ?? '';
+    $preparedBookingData = null;
+
+    // Check for an existing account BEFORE validating confirm_password so that a
+    // returning customer who enters only their existing password is silently logged
+    // in without needing to fill the "Confirm Password" field.
     if (!$errors) {
+        $emailCheck = trim((string) ($_POST['email'] ?? ''));
+        $stmtCheck = $pdo->prepare('SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1');
+        $stmtCheck->execute([$emailCheck]);
+        $existingCustomer = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+        if ($existingCustomer && !empty($existingCustomer['password_hash'])) {
+            if (password_verify($password, (string) $existingCustomer['password_hash'])) {
+                // Correct password — silently log the customer in and proceed to step 2.
+                session_regenerate_id(true);
+                $_SESSION['customer_id']         = (int) $existingCustomer['id'];
+                $_SESSION['customer_first_name'] = $existingCustomer['first_name'];
+                $_SESSION['customer_last_name']  = $existingCustomer['last_name'];
+                $_SESSION['customer_email']      = $existingCustomer['email'];
+                $preparedBookingData = [
+                    'first_name' => trim((string) ($_POST['first_name'] ?? '')),
+                    'last_name' => trim((string) ($_POST['last_name'] ?? '')),
+                    'phone' => formatUsPhoneDisplay($normalizedPhone),
+                    'phone_e164' => formatUsPhoneE164($normalizedPhone),
+                    'email' => $emailCheck,
+                    'machine_brand' => trim((string) ($_POST['machine_brand'] ?? '')),
+                    'machine_model' => trim((string) ($_POST['machine_model'] ?? '')),
+                    'watts' => trim((string) ($_POST['watts'] ?? '')),
+                    'age' => trim((string) ($_POST['age'] ?? '')),
+                    'address' => trim((string) ($_POST['address'] ?? '')),
+                    'city' => trim((string) ($_POST['city'] ?? '')),
+                    'state' => strtoupper(trim((string) ($_POST['state'] ?? ''))),
+                    'zip' => trim((string) ($_POST['zip'] ?? '')),
+                    'problem' => trim((string) ($_POST['problem'] ?? '')),
+                    'services' => $services,
+                    'other_service' => $otherService,
+                    'password' => $password,
+                    'confirm_password' => $password,
+                ];
+                $_SESSION['book_dash_repair'] = $preparedBookingData;
+                unset($_SESSION[$pendingStepOneSessionKey]);
+                header('Location: book_a_repair.php?step=2');
+                exit;
+            } else {
+                // Wrong password — show the inline login prompt.
+                $showInlineStepOneLogin = true;
+                $inlineLoginEmail = $emailCheck;
+                $inlineLoginError = 'We found your account. Please log in.';
+                $partialData = [
+                    'first_name' => trim((string) ($_POST['first_name'] ?? '')),
+                    'last_name' => trim((string) ($_POST['last_name'] ?? '')),
+                    'phone' => formatUsPhoneDisplay($normalizedPhone),
+                    'phone_e164' => formatUsPhoneE164($normalizedPhone),
+                    'email' => $emailCheck,
+                    'machine_brand' => trim((string) ($_POST['machine_brand'] ?? '')),
+                    'machine_model' => trim((string) ($_POST['machine_model'] ?? '')),
+                    'watts' => trim((string) ($_POST['watts'] ?? '')),
+                    'age' => trim((string) ($_POST['age'] ?? '')),
+                    'address' => trim((string) ($_POST['address'] ?? '')),
+                    'city' => trim((string) ($_POST['city'] ?? '')),
+                    'state' => strtoupper(trim((string) ($_POST['state'] ?? ''))),
+                    'zip' => trim((string) ($_POST['zip'] ?? '')),
+                    'problem' => trim((string) ($_POST['problem'] ?? '')),
+                    'services' => $services,
+                    'other_service' => $otherService,
+                    'password' => '',
+                    'confirm_password' => '',
+                ];
+                $_SESSION[$pendingStepOneSessionKey] = $partialData;
+            }
+        }
+    }
+
+    // New-customer password validation — only runs when not already handled above.
+    if (!$errors && !$showInlineStepOneLogin) {
         if ($password === '' || $passwordConfirm === '') {
             $errors[] = 'Password and confirm password are required.';
         } elseif (strlen($password) < 8) {
@@ -231,8 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         }
     }
 
-    $preparedBookingData = null;
-    if (!$errors) {
+    if (!$errors && !$showInlineStepOneLogin) {
         $preparedBookingData = [
             'first_name' => trim((string) ($_POST['first_name'] ?? '')),
             'last_name' => trim((string) ($_POST['last_name'] ?? '')),
@@ -253,34 +325,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'password' => $password,
             'confirm_password' => $passwordConfirm,
         ];
-    }
-
-    // Check for existing email in customers table
-    if (!$errors) {
-        $emailCheck = trim((string) ($_POST['email'] ?? ''));
-        $stmtCheck = $pdo->prepare('SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1');
-        $stmtCheck->execute([$emailCheck]);
-        $existingCustomer = $stmtCheck->fetch(PDO::FETCH_ASSOC);
-
-        if ($existingCustomer && !empty($existingCustomer['password_hash'])) {
-            if (password_verify($password, (string) $existingCustomer['password_hash'])) {
-                session_regenerate_id(true);
-                $_SESSION['customer_id']         = (int) $existingCustomer['id'];
-                $_SESSION['customer_first_name'] = $existingCustomer['first_name'];
-                $_SESSION['customer_last_name']  = $existingCustomer['last_name'];
-                $_SESSION['customer_email']      = $existingCustomer['email'];
-            } else {
-                $showInlineStepOneLogin = true;
-                $inlineLoginEmail = $emailCheck;
-                $inlineLoginError = 'We found your account. Please log in.';
-                if (is_array($preparedBookingData)) {
-                    $_SESSION[$pendingStepOneSessionKey] = $preparedBookingData;
-                }
-            }
-        }
-    }
-
-    if (!$errors && !$showInlineStepOneLogin && is_array($preparedBookingData)) {
         $_SESSION['book_dash_repair'] = $preparedBookingData;
         unset($_SESSION[$pendingStepOneSessionKey]);
         header('Location: book_a_repair.php?step=2');
