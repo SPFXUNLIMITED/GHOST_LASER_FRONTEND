@@ -14,4 +14,7 @@ return [
     'site_key'   => '6LdUs-csAAAAAO0OwhwPWMTV941Vs7jN3XWB7MhT',
     'secret_key' => '6LdUs-csAAAAAC1ezjVMiAAUtS0GWoQrvYSsITCo',
   ],
+  'google_maps' => [
+    'api_key' => getenv('GOOGLE_MAPS_API_KEY') ?: '',
+  ],
 ];

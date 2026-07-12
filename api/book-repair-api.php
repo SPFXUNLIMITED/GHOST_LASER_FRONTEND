@@ -135,6 +135,10 @@ function load_env_value(string $key): string {
 function geocode_address(string $full_address): array {
     $api_key = load_env_value('GOOGLE_MAPS_API_KEY');
     if ($api_key === '') {
+        $config = @(require __DIR__ . '/../config.php');
+        $api_key = is_array($config) ? (string)($config['google_maps']['api_key'] ?? '') : '';
+    }
+    if ($api_key === '') {
         return ['lat' => null, 'lng' => null, 'status' => 'failed'];
     }
 
