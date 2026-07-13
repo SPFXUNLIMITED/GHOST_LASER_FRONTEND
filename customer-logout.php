@@ -2,5 +2,5 @@
 session_start();
 session_unset();
 session_destroy();
-header('Location: book_a_technician.php');
+header('Location: customer-login.php?step=1');
 exit;
