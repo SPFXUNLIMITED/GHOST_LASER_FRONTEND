@@ -857,6 +857,15 @@ require_once __DIR__ . '/templates/header.php';
                         <span class="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(103,232,249,0.9)]"></span>
                         Booking Confirmed
                     </span>
+                    <div class="mt-6 flex items-center gap-4 rounded-2xl border border-cyan-400/15 bg-zinc-900/80 px-5 py-4 shadow-[0_0_35px_rgba(6,182,212,0.12)]">
+                        <span class="flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10">
+                            <img src="<?= h(asset('ghost-logo2-32x32.png')) ?>" alt="Ghost Laser logo" class="h-10 w-10">
+                        </span>
+                        <div class="text-left">
+                            <p class="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-500">Ghost Laser</p>
+                            <p class="text-lg font-black tracking-[0.18em] text-white">REPAIR DESK</p>
+                        </div>
+                    </div>
                     <h2 class="mt-8 text-3xl font-black tracking-tight text-white sm:text-4xl">Your booking has been received</h2>
                     <p class="mt-3 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base">Thank you. Our team will contact you soon with the next steps.</p>
                     <div class="mt-8 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
