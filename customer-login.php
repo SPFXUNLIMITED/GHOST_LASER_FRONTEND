@@ -1,14 +1,54 @@
 <?php
 session_start();
 
+require_once __DIR__ . '/project/db.php';
+
+$customerPrefillSessionKey = 'book_a_repair_customer_prefill';
+
+function buildCustomerBookingProfile(array $customer): array
+{
+    return [
+        'first_name' => trim((string) ($customer['first_name'] ?? '')),
+        'last_name' => trim((string) ($customer['last_name'] ?? '')),
+        'email' => trim((string) ($customer['email'] ?? '')),
+        'phone' => trim((string) ($customer['phone'] ?? '')),
+        'address' => trim((string) ($customer['address'] ?? '')),
+        'city' => trim((string) ($customer['city'] ?? '')),
+        'state' => strtoupper(trim((string) ($customer['state'] ?? ''))),
+        'zip' => trim((string) ($customer['zip'] ?? '')),
+    ];
+}
+
+function storeCustomerBookingSession(array $customer, string $customerPrefillSessionKey): void
+{
+    $customerProfile = buildCustomerBookingProfile($customer);
+
+    $_SESSION['customer_id']         = (int) ($customer['id'] ?? 0);
+    $_SESSION['customer_first_name'] = $customerProfile['first_name'];
+    $_SESSION['customer_last_name']  = $customerProfile['last_name'];
+    $_SESSION['customer_email']      = $customerProfile['email'];
+    $_SESSION['customer_phone']      = $customerProfile['phone'];
+    $_SESSION['customer_address']    = $customerProfile['address'];
+    $_SESSION['customer_city']       = $customerProfile['city'];
+    $_SESSION['customer_state']      = $customerProfile['state'];
+    $_SESSION['customer_zip']        = $customerProfile['zip'];
+    $_SESSION[$customerPrefillSessionKey] = $customerProfile;
+}
+
 // Redirect already-logged-in customers
 if (!empty($_SESSION['customer_id'])) {
+    $stmt = $pdo->prepare(
+        'SELECT id, first_name, last_name, email, phone, address, city, state, zip FROM customers WHERE id = ? LIMIT 1'
+    );
+    $stmt->execute([(int) $_SESSION['customer_id']]);
+    $customer = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($customer) {
+        storeCustomerBookingSession($customer, $customerPrefillSessionKey);
+    }
     $dest = 'book_a_technician.php?step=2';
     header('Location: ' . $dest);
     exit;
 }
-
-require_once __DIR__ . '/project/db.php';
 
 $mode   = $_GET['mode'] ?? 'landing'; // 'landing' | 'login'
 $error  = '';
@@ -23,17 +63,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $mode === 'login') {
         $error = 'Please enter your email and password.';
     } else {
         $stmt = $pdo->prepare(
-            'SELECT id, first_name, last_name, email, password_hash FROM customers WHERE email = ? LIMIT 1'
+            'SELECT id, first_name, last_name, email, password_hash, phone, address, city, state, zip FROM customers WHERE email = ? LIMIT 1'
         );
         $stmt->execute([$email]);
         $customer = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($customer && !empty($customer['password_hash']) && password_verify($password, $customer['password_hash'])) {
             session_regenerate_id(true);
-            $_SESSION['customer_id']         = (int) $customer['id'];
-            $_SESSION['customer_first_name'] = $customer['first_name'];
-            $_SESSION['customer_last_name']  = $customer['last_name'];
-            $_SESSION['customer_email']      = $customer['email'];
+            storeCustomerBookingSession($customer, $customerPrefillSessionKey);
             $dest = 'book_a_technician.php?step=2';
             header('Location: ' . $dest);
             exit;
