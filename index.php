@@ -26,7 +26,7 @@ $headerRight     = <<<'HTML'
                     <a href="#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a>
                 </nav>
                 <div class="hidden md:flex items-center gap-3">
-                    <a href="book_a_repair.php" class="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors btn-glow">
+                    <a href="book_a_technician.php" class="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors btn-glow">
                         Book a Repair
                     </a>
                     <a
@@ -51,7 +51,7 @@ $headerMobileMenu = <<<'HTML'
                 <a href="#why-us" class="text-sm text-zinc-400 hover:text-white transition-colors">Why Us</a>
                 <a href="#process" class="text-sm text-zinc-400 hover:text-white transition-colors">Process</a>
                 <a href="#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a>
-                <a href="book_a_repair.php" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors w-full">
+                <a href="book_a_technician.php" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors w-full">
                     Book a Repair
                 </a>
                 <a
@@ -92,7 +92,7 @@ require_once __DIR__ . '/templates/header.php';
                 </p>
 
                 <div class="flex flex-col sm:flex-row gap-4">
-                    <a href="book_a_repair.php" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-base px-7 py-3.5 rounded-md transition-all btn-glow">
+                    <a href="book_a_technician.php" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-base px-7 py-3.5 rounded-md transition-all btn-glow">
                         Book a Repair
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 8l4 4m0 0l-4 4m4-4H3"/>

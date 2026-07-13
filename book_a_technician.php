@@ -17,6 +17,18 @@ $showInlineStepOneLogin = false;
 $inlineLoginEmail = '';
 $pendingStepOneSessionKey = 'book_a_repair_pending_booking';
 $customerPrefillSessionKey = 'book_a_repair_customer_prefill';
+$hasLoggedInCustomer = !empty($_SESSION['customer_id']) || !empty($_SESSION['customer_email']);
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET'
+    && $hasLoggedInCustomer
+    && !isset($_GET['type'])
+    && !isset($_GET['mode'])
+    && !isset($_GET['step'])
+) {
+    $redirectTarget = !empty($_SESSION['book_dash_repair']) ? 'book_a_technician.php?step=2' : 'book_a_technician.php?type=new';
+    header('Location: ' . $redirectTarget);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'login') {
     $loginContext = trim((string) ($_POST['login_context'] ?? ''));
@@ -85,14 +97,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
                     $_SESSION['book_dash_repair']       = $pendingStepOne;
                 }
                 unset($_SESSION[$pendingStepOneSessionKey]);
-                header('Location: book_a_repair.php?step=2');
+                header('Location: book_a_technician.php?step=2');
             } else {
                 // Returning-customer login from the dedicated login page (?mode=login).
                 // Always send the customer to step 1 so they can fill in their
                 // machine and service details. Only the step1_existing_account
                 // path (inline login from step 1) has booking data in the session
                 // already and is allowed to skip straight to step 2.
-                header('Location: book_a_repair.php?type=new');
+                header('Location: book_a_technician.php?type=new');
             }
             exit;
         } else {
@@ -105,8 +117,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
     }
 }
 
-$pageTitle = 'Book a Repair | Ghost Laser';
-$pageDescription = 'Book a laser machine repair with Ghost Laser.';
+$pageTitle = 'Book a Technician | Ghost Laser';
+$pageDescription = 'Book a laser technician with Ghost Laser.';
 $extraHead = <<<'HTML'
 <style>
     .glow-cyan { text-shadow: 0 0 30px rgba(6,182,212,0.6), 0 0 60px rgba(6,182,212,0.3); }
@@ -281,7 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
                 ];
                 $_SESSION['book_dash_repair'] = $preparedBookingData;
                 unset($_SESSION[$pendingStepOneSessionKey]);
-                header('Location: book_a_repair.php?step=2');
+                header('Location: book_a_technician.php?step=2');
                 exit;
             } else {
                 // Wrong password — show the inline login prompt.
@@ -348,14 +360,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         ];
         $_SESSION['book_dash_repair'] = $preparedBookingData;
         unset($_SESSION[$pendingStepOneSessionKey]);
-        header('Location: book_a_repair.php?step=2');
+        header('Location: book_a_technician.php?step=2');
         exit;
     }
 }
 
 $booking = $_SESSION['book_dash_repair'] ?? null;
 if ($step === 2 && !$booking) {
-    header('Location: book_a_repair.php');
+    header('Location: book_a_technician.php');
     exit;
 }
 
@@ -422,7 +434,7 @@ require_once __DIR__ . '/templates/header.php';
             <span class="text-xs text-cyan-400 font-medium tracking-wider uppercase">Book a Service</span>
         </div>
         <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight mb-5">
-            Book Your <span class="text-cyan-400 glow-cyan">Repair</span>
+            Book a <span class="text-cyan-400 glow-cyan">Technician</span>
         </h1>
         <p class="text-zinc-400 text-lg leading-relaxed max-w-xl mx-auto">
             Fill in the details below and our team will follow up within 2 hours with a diagnosis plan and transparent quote.
@@ -448,7 +460,7 @@ require_once __DIR__ . '/templates/header.php';
                     <p class="text-sm text-zinc-400 mt-1">Are you a new or returning customer?</p>
                 </div>
                 <div class="flex flex-col sm:flex-row gap-4 pt-2">
-                    <a href="book_a_repair.php?mode=login"
+                    <a href="book_a_technician.php?mode=login"
                        class="flex-1 inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold text-sm px-4 py-3.5 rounded-lg transition-all">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -456,7 +468,7 @@ require_once __DIR__ . '/templates/header.php';
                         </svg>
                         I have an account
                     </a>
-                    <a href="book_a_repair.php?type=new"
+                    <a href="book_a_technician.php?type=new"
                        class="flex-1 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-3.5 rounded-lg transition-all btn-glow">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -480,7 +492,7 @@ require_once __DIR__ . '/templates/header.php';
                         </svg>
                     </span>
                     <h2 class="text-xl font-bold tracking-tight">Welcome Back</h2>
-                    <p class="text-sm text-zinc-500 mt-1">Log in to book your repair</p>
+                    <p class="text-sm text-zinc-500 mt-1">Log in to book your technician visit</p>
                 </div>
 
                 <?php if ($loginError !== ''): ?>
@@ -492,7 +504,7 @@ require_once __DIR__ . '/templates/header.php';
                 </div>
                 <?php endif; ?>
 
-                <form method="POST" action="book_a_repair.php?mode=login">
+                <form method="POST" action="book_a_technician.php?mode=login">
                     <input type="hidden" name="form_step" value="login">
                     <div class="flex flex-col gap-5">
                         <div>
@@ -542,9 +554,9 @@ require_once __DIR__ . '/templates/header.php';
 
                 <div class="mt-6 flex flex-col gap-2 text-center text-sm text-zinc-500">
                     <span>New customer?
-                        <a href="book_a_repair.php?type=new" class="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">Register here</a>
+                        <a href="book_a_technician.php?type=new" class="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">Register here</a>
                     </span>
-                    <a href="book_a_repair.php" class="text-zinc-600 hover:text-zinc-400 transition-colors text-xs">&larr; Back</a>
+                    <a href="book_a_technician.php" class="text-zinc-600 hover:text-zinc-400 transition-colors text-xs">&larr; Back</a>
                 </div>
             </div>
         </div>
@@ -559,7 +571,7 @@ require_once __DIR__ . '/templates/header.php';
         <?php if ($showInlineStepOneLogin && $step === 1): ?>
             <div class="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-4 text-sm text-amber-100">
                 <p class="font-semibold text-amber-200"><?= h($inlineLoginError !== '' ? $inlineLoginError : 'We found your account. Please log in.') ?></p>
-                <form method="post" action="book_a_repair.php?type=new" class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <form method="post" action="book_a_technician.php?type=new" class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                     <input type="hidden" name="form_step" value="login">
                     <input type="hidden" name="login_context" value="step1_existing_account">
                     <input
@@ -593,7 +605,7 @@ require_once __DIR__ . '/templates/header.php';
         <?php endif; ?>
 
         <?php if ($step === 1): ?>
-            <form method="post" action="book_a_repair.php?type=new" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
+            <form method="post" action="book_a_technician.php?type=new" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
                 <input type="hidden" name="form_step" value="1">
                 <div>
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
@@ -748,7 +760,7 @@ require_once __DIR__ . '/templates/header.php';
                         </div>
 
                         <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-                            <a href="book_a_repair.php" class="inline-flex items-center justify-center rounded-lg border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-900">Book Another Repair</a>
+                            <a href="book_a_technician.php" class="inline-flex items-center justify-center rounded-lg border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-900">Book Another Repair</a>
                             <a href="/" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-cyan-400 btn-glow">Return Home</a>
                         </div>
                     </div>
@@ -814,7 +826,7 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
 
                     <div class="flex gap-3">
-                        <a href="book_a_repair.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
+                        <a href="book_a_technician.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
                         <button id="step-2-submit-btn" type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
                             <span id="step-2-submit-label">Book My Repair</span>
                         </button>
@@ -831,7 +843,7 @@ require_once __DIR__ . '/templates/header.php';
     const otherServiceCheckbox = document.getElementById('service-other');
     const otherServiceWrap = document.getElementById('other-service-wrap');
     const otherServiceInput = document.getElementById('other-service-input');
-    const stepOneForm = document.querySelector('form[action="book_a_repair.php?type=new"]');
+    const stepOneForm = document.querySelector('form[action="book_a_technician.php?type=new"]');
     const phoneInput = document.getElementById('phone');
     const phoneErrorEl = document.getElementById('phone-error');
     const passwordInput = document.getElementById('password');
