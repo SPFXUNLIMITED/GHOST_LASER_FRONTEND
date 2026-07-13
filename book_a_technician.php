@@ -19,14 +19,20 @@ $pendingStepOneSessionKey = 'book_a_repair_pending_booking';
 $customerPrefillSessionKey = 'book_a_repair_customer_prefill';
 $hasLoggedInCustomer = !empty($_SESSION['customer_id']) || !empty($_SESSION['customer_email']);
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET'
-    && $hasLoggedInCustomer
-    && !isset($_GET['type'])
-    && !isset($_GET['mode'])
-    && !isset($_GET['step'])
-) {
-    $redirectTarget = !empty($_SESSION['book_dash_repair']) ? 'book_a_technician.php?step=2' : 'book_a_technician.php?type=new';
-    header('Location: ' . $redirectTarget);
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['step'])) {
+    if (isset($_GET['mode']) && $_GET['mode'] === 'login') {
+        header('Location: customer-login.php?step=1&mode=login');
+        exit;
+    }
+    if (isset($_GET['type']) && $_GET['type'] === 'new') {
+        header('Location: book_a_technician.php?step=2');
+        exit;
+    }
+    if (!$hasLoggedInCustomer) {
+        header('Location: customer-login.php?step=1');
+        exit;
+    }
+    header('Location: book_a_technician.php?step=2');
     exit;
 }
 
@@ -97,14 +103,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
                     $_SESSION['book_dash_repair']       = $pendingStepOne;
                 }
                 unset($_SESSION[$pendingStepOneSessionKey]);
-                header('Location: book_a_technician.php?step=2');
+                header('Location: book_a_technician.php?step=3');
             } else {
                 // Returning-customer login from the dedicated login page (?mode=login).
                 // Always send the customer to step 1 so they can fill in their
                 // machine and service details. Only the step1_existing_account
                 // path (inline login from step 1) has booking data in the session
                 // already and is allowed to skip straight to step 2.
-                header('Location: book_a_technician.php?type=new');
+                header('Location: book_a_technician.php?step=2');
             }
             exit;
         } else {
@@ -221,7 +227,10 @@ $speedOptions = [
     'emergency' => ['label' => 'Emergency', 'multiplier' => 1.75],
 ];
 
-$step = isset($_GET['step']) && $_GET['step'] === '2' ? 2 : 1;
+$step = isset($_GET['step']) ? (int) $_GET['step'] : 2;
+if (!in_array($step, [2, 3, 4], true)) {
+    $step = 2;
+}
 $errors = [];
 $success = '';
 $phoneError = '';
@@ -265,7 +274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
 
         if ($existingCustomer && !empty($existingCustomer['password_hash'])) {
             if (password_verify($password, (string) $existingCustomer['password_hash'])) {
-                // Correct password — silently log the customer in and proceed to step 2.
+                // Correct password — silently log the customer in and proceed to speed selection.
                 session_regenerate_id(true);
                 $_SESSION['customer_id']         = (int) $existingCustomer['id'];
                 $_SESSION['customer_first_name'] = $existingCustomer['first_name'];
@@ -293,7 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
                 ];
                 $_SESSION['book_dash_repair'] = $preparedBookingData;
                 unset($_SESSION[$pendingStepOneSessionKey]);
-                header('Location: book_a_technician.php?step=2');
+                header('Location: book_a_technician.php?step=3');
                 exit;
             } else {
                 // Wrong password — show the inline login prompt.
@@ -360,18 +369,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         ];
         $_SESSION['book_dash_repair'] = $preparedBookingData;
         unset($_SESSION[$pendingStepOneSessionKey]);
-        header('Location: book_a_technician.php?step=2');
+        header('Location: book_a_technician.php?step=3');
         exit;
     }
 }
 
 $booking = $_SESSION['book_dash_repair'] ?? null;
-if ($step === 2 && !$booking) {
-    header('Location: book_a_technician.php');
+if ($step === 4) {
+    unset($_SESSION['book_dash_repair'], $_SESSION[$pendingStepOneSessionKey]);
+    $booking = null;
+}
+if ($step === 3 && !$booking) {
+    header('Location: book_a_technician.php?step=2');
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $step === 1 && (($_GET['type'] ?? '') === 'new')) {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $step === 2) {
     $customerPrefill = $_SESSION[$customerPrefillSessionKey] ?? null;
     if (is_array($customerPrefill)) {
         foreach ($customerPrefill as $prefillKey => $prefillValue) {
@@ -383,7 +396,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $step === 1 && (($_GET['type'] ?? '
 }
 
 $stepTwoPayload = null;
-if ($step === 2 && $booking) {
+if ($step === 3 && $booking) {
     $stepTwoPayload = [
         'first_name' => (string) ($booking['first_name'] ?? ''),
         'last_name' => (string) ($booking['last_name'] ?? ''),
@@ -416,8 +429,7 @@ if (($loginError !== '' && !$showInlineStepOneLogin) || (isset($_GET['mode']) &&
 } elseif (
     $showInlineStepOneLogin ||
     $_SERVER['REQUEST_METHOD'] === 'POST' ||
-    isset($_GET['type']) ||
-    $step === 2
+    $step >= 2
 ) {
     $view = 'new';
 } else {
@@ -460,7 +472,7 @@ require_once __DIR__ . '/templates/header.php';
                     <p class="text-sm text-zinc-400 mt-1">Are you a new or returning customer?</p>
                 </div>
                 <div class="flex flex-col sm:flex-row gap-4 pt-2">
-                    <a href="book_a_technician.php?mode=login"
+                    <a href="customer-login.php?step=1&amp;mode=login"
                        class="flex-1 inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold text-sm px-4 py-3.5 rounded-lg transition-all">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -468,7 +480,7 @@ require_once __DIR__ . '/templates/header.php';
                         </svg>
                         I have an account
                     </a>
-                    <a href="book_a_technician.php?type=new"
+                    <a href="book_a_technician.php?step=2"
                        class="flex-1 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-3.5 rounded-lg transition-all btn-glow">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -504,7 +516,7 @@ require_once __DIR__ . '/templates/header.php';
                 </div>
                 <?php endif; ?>
 
-                <form method="POST" action="book_a_technician.php?mode=login">
+                <form method="POST" action="customer-login.php?step=1&amp;mode=login">
                     <input type="hidden" name="form_step" value="login">
                     <div class="flex flex-col gap-5">
                         <div>
@@ -554,9 +566,9 @@ require_once __DIR__ . '/templates/header.php';
 
                 <div class="mt-6 flex flex-col gap-2 text-center text-sm text-zinc-500">
                     <span>New customer?
-                        <a href="book_a_technician.php?type=new" class="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">Register here</a>
+                        <a href="book_a_technician.php?step=2" class="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">Register here</a>
                     </span>
-                    <a href="book_a_technician.php" class="text-zinc-600 hover:text-zinc-400 transition-colors text-xs">&larr; Back</a>
+                    <a href="customer-login.php?step=1" class="text-zinc-600 hover:text-zinc-400 transition-colors text-xs">&larr; Back</a>
                 </div>
             </div>
         </div>
@@ -568,10 +580,10 @@ require_once __DIR__ . '/templates/header.php';
                 <?= h($errors[0]) ?>
             </div>
         <?php endif; ?>
-        <?php if ($showInlineStepOneLogin && $step === 1): ?>
+        <?php if ($showInlineStepOneLogin && $step === 2): ?>
             <div class="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-4 text-sm text-amber-100">
                 <p class="font-semibold text-amber-200"><?= h($inlineLoginError !== '' ? $inlineLoginError : 'We found your account. Please log in.') ?></p>
-                <form method="post" action="book_a_technician.php?type=new" class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <form method="post" action="book_a_technician.php?step=2" class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                     <input type="hidden" name="form_step" value="login">
                     <input type="hidden" name="login_context" value="step1_existing_account">
                     <input
@@ -604,8 +616,8 @@ require_once __DIR__ . '/templates/header.php';
             </div>
         <?php endif; ?>
 
-        <?php if ($step === 1): ?>
-            <form method="post" action="book_a_technician.php?type=new" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
+        <?php if ($step === 2): ?>
+            <form method="post" action="book_a_technician.php?step=2" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
                 <input type="hidden" name="form_step" value="1">
                 <div>
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
@@ -705,7 +717,7 @@ require_once __DIR__ . '/templates/header.php';
                     Continue to Service Speed →
                 </button>
             </form>
-        <?php else: ?>
+        <?php elseif ($step === 3): ?>
             <?php
                 $selectedServices = $booking['services'];
                 $currentSpeed = $booking['service_speed'] ?? 'standard';
@@ -760,7 +772,7 @@ require_once __DIR__ . '/templates/header.php';
                         </div>
 
                         <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-                            <a href="book_a_technician.php" class="inline-flex items-center justify-center rounded-lg border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-900">Book Another Repair</a>
+                            <a href="book_a_technician.php?step=2" class="inline-flex items-center justify-center rounded-lg border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-900">Book Another Repair</a>
                             <a href="/" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-cyan-400 btn-glow">Return Home</a>
                         </div>
                     </div>
@@ -826,12 +838,31 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
 
                     <div class="flex gap-3">
-                        <a href="book_a_technician.php" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
+                        <a href="book_a_technician.php?step=2" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
                         <button id="step-2-submit-btn" type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
                             <span id="step-2-submit-label">Book My Repair</span>
                         </button>
                     </div>
                 </form>
+                </div>
+            </div>
+        <?php else: ?>
+            <div class="relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-zinc-950 px-6 py-10 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_0_70px_rgba(8,145,178,0.12)] sm:px-8 sm:py-12">
+                <div class="confirmation-orb -top-16 right-0 h-40 w-40 bg-cyan-500/20"></div>
+                <div class="confirmation-orb bottom-0 left-0 h-36 w-36 bg-emerald-500/10"></div>
+                <div class="confirmation-grid absolute inset-0 opacity-40"></div>
+                <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent"></div>
+                <div class="relative flex flex-col items-center text-center">
+                    <span class="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200">
+                        <span class="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(103,232,249,0.9)]"></span>
+                        Booking Confirmed
+                    </span>
+                    <h2 class="mt-8 text-3xl font-black tracking-tight text-white sm:text-4xl">Your booking has been received</h2>
+                    <p class="mt-3 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base">Thank you. Our team will contact you soon with the next steps.</p>
+                    <div class="mt-8 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
+                        <a href="book_a_technician.php?step=2" class="inline-flex items-center justify-center rounded-lg border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-900">Book Another Repair</a>
+                        <a href="/" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-cyan-400 btn-glow">Return Home</a>
+                    </div>
                 </div>
             </div>
         <?php endif; ?>
@@ -843,7 +874,7 @@ require_once __DIR__ . '/templates/header.php';
     const otherServiceCheckbox = document.getElementById('service-other');
     const otherServiceWrap = document.getElementById('other-service-wrap');
     const otherServiceInput = document.getElementById('other-service-input');
-    const stepOneForm = document.querySelector('form[action="book_a_technician.php?type=new"]');
+    const stepOneForm = document.querySelector('form[action="book_a_technician.php?step=2"]');
     const phoneInput = document.getElementById('phone');
     const phoneErrorEl = document.getElementById('phone-error');
     const passwordInput = document.getElementById('password');
@@ -1080,34 +1111,7 @@ require_once __DIR__ . '/templates/header.php';
                     throw new Error(apiMessage);
                 }
 
-                const activePriority = priorityConfig[requestBody.priority] || priorityConfig.standard;
-                successHeading.textContent = activePriority.headline;
-                successText.textContent = activePriority.message;
-                successPriorityText.textContent = activePriority.detail;
-                successPriority.textContent = activePriority.label;
-                successPriority.className = 'inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-wide';
-                successPriority.classList.add(...activePriority.badgeClasses);
-                successDatesLabel.textContent = `Based on your ${activePriority.label} priority, here are your suggested service dates:`;
-
-                successDates.innerHTML = '';
-                const suggestedDates = Array.isArray(json.suggested_dates) ? json.suggested_dates : [];
-                if (suggestedDates.length > 0) {
-                    suggestedDates.forEach((dateStr) => {
-                        const item = document.createElement('li');
-                        item.className = 'flex items-center gap-3 rounded-xl border border-cyan-400/15 bg-cyan-400/5 px-4 py-3';
-                        item.innerHTML = `<span class="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-200"><svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg></span><span>${formatDate(dateStr)}</span>`;
-                        successDates.appendChild(item);
-                    });
-                } else {
-                    const item = document.createElement('li');
-                    item.className = 'rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-300';
-                    item.textContent = 'We’ll be in touch shortly to arrange a date.';
-                    successDates.appendChild(item);
-                }
-
-                bookingShell.classList.add('hidden');
-                successBox.classList.remove('hidden');
-                successBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                window.location.href = 'book_a_technician.php?step=4';
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Network error — please check your connection and try again.';
                 if (errorHeading) {

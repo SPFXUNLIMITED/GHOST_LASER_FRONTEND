@@ -3,7 +3,7 @@ session_start();
 
 // Redirect already-logged-in customers
 if (!empty($_SESSION['customer_id'])) {
-    $dest = !empty($_SESSION['book_dash_repair']) ? 'book_a_technician.php' : 'book_a_technician.php?type=new';
+    $dest = 'book_a_technician.php?step=2';
     header('Location: ' . $dest);
     exit;
 }
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $mode === 'login') {
             $_SESSION['customer_first_name'] = $customer['first_name'];
             $_SESSION['customer_last_name']  = $customer['last_name'];
             $_SESSION['customer_email']      = $customer['email'];
-            $dest = !empty($_SESSION['book_dash_repair']) ? 'book_a_technician.php' : 'book_a_technician.php?type=new';
+            $dest = 'book_a_technician.php?step=2';
             header('Location: ' . $dest);
             exit;
         } else {
@@ -94,7 +94,7 @@ require_once __DIR__ . '/templates/header.php';
 
             <div class="flex flex-col gap-4">
                 <!-- Register -->
-                <a href="book_dash_repair.php"
+                <a href="book_a_technician.php?step=2"
                    class="w-full inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-3 rounded-md transition-all btn-glow">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -104,7 +104,7 @@ require_once __DIR__ . '/templates/header.php';
                 </a>
 
                 <!-- Login -->
-                <a href="customer-login.php?mode=login"
+                <a href="customer-login.php?step=1&amp;mode=login"
                    class="w-full inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold text-sm px-4 py-3 rounded-md transition-all">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -139,7 +139,7 @@ require_once __DIR__ . '/templates/header.php';
             </div>
             <?php endif; ?>
 
-            <form method="POST" action="customer-login.php?mode=login">
+            <form method="POST" action="customer-login.php?step=1&amp;mode=login">
                 <div class="flex flex-col gap-5">
                     <!-- Email -->
                     <div>
