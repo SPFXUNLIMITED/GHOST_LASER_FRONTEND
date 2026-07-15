@@ -120,6 +120,12 @@ require_once __DIR__ . '/templates/header.php';
                                 Go to Technician Schedule
                             </a>
                             <a
+                                href="technician-dashboard.php"
+                                class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-4 py-3 text-sm font-semibold text-cyan-300 transition-all hover:border-cyan-400 hover:bg-cyan-500/20 hover:text-white"
+                            >
+                                Technician Dashboard
+                            </a>
+                            <a
                                 href="settings.php"
                                 class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition-all hover:border-cyan-400 hover:text-white"
                             >
