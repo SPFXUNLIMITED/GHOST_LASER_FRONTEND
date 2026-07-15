@@ -16,12 +16,158 @@ $logoHref        = '#';
 $extraHead       = <<<'HTML'
     <style>
         .glow-cyan { text-shadow: 0 0 30px rgba(6,182,212,0.6), 0 0 60px rgba(6,182,212,0.3); }
-        .glow-box { box-shadow: 0 0 0 1px rgba(6,182,212,0.2), 0 0 40px rgba(6,182,212,0.05); }
-        .glow-box:hover { box-shadow: 0 0 0 1px rgba(6,182,212,0.5), 0 0 40px rgba(6,182,212,0.15); }
         .btn-glow { box-shadow: 0 0 20px rgba(6,182,212,0.4); }
         .btn-glow:hover { box-shadow: 0 0 30px rgba(6,182,212,0.7); }
         .gradient-fade-bottom {
             background: linear-gradient(to bottom, transparent 60%, rgb(9,9,11) 100%);
+        }
+        .uiverse-card {
+            --uiverse-shape: polygon(0 0, 86% 0, 100% 14%, 100% 62%, 92% 67%, 93% 79%, 99% 82%, 99% 91%, 89% 100%, 0 100%);
+            position: relative;
+            min-height: 100%;
+            padding: 1px;
+            clip-path: var(--uiverse-shape);
+            -webkit-clip-path: var(--uiverse-shape);
+            background: rgba(17, 4, 27, 0.9);
+            isolation: isolate;
+            overflow: hidden;
+            filter: drop-shadow(22px 18px 30px rgba(64, 144, 181, 0.24)) drop-shadow(-18px -12px 24px rgba(158, 48, 169, 0.18));
+            transition: transform 0.3s ease, filter 0.3s ease;
+        }
+        .uiverse-card::before {
+            content: '';
+            position: absolute;
+            inset: -70%;
+            background:
+                conic-gradient(from 90deg, rgba(34, 211, 238, 0) 0deg, rgba(34, 211, 238, 0.95) 75deg, rgba(168, 85, 247, 0.98) 165deg, rgba(34, 211, 238, 0) 250deg, rgba(45, 212, 191, 0.9) 315deg, rgba(34, 211, 238, 0) 360deg);
+            animation: uiverse-card-rotate 5s linear infinite;
+            z-index: -3;
+        }
+        .uiverse-card::after {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            clip-path: var(--uiverse-shape);
+            -webkit-clip-path: var(--uiverse-shape);
+            background:
+                linear-gradient(180deg, rgba(54, 14, 70, 0.9), rgba(17, 4, 27, 0.98)),
+                repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 12px),
+                repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 12px);
+            box-shadow: inset 0 0 30px rgba(11, 2, 20, 0.9);
+            opacity: 0.98;
+            animation: uiverse-card-glitch 120ms linear infinite;
+            z-index: -2;
+        }
+        .uiverse-card:hover {
+            transform: translateY(-4px);
+            filter: drop-shadow(26px 20px 34px rgba(64, 144, 181, 0.32)) drop-shadow(-20px -14px 28px rgba(158, 48, 169, 0.24));
+        }
+        .uiverse-card__inner {
+            position: relative;
+            display: flex;
+            height: 100%;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.5rem;
+            clip-path: var(--uiverse-shape);
+            -webkit-clip-path: var(--uiverse-shape);
+            background:
+                radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 34%),
+                radial-gradient(circle at bottom right, rgba(168, 85, 247, 0.18), transparent 38%),
+                rgba(24, 6, 35, 0.94);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+        }
+        .uiverse-card__inner::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 30%),
+                linear-gradient(180deg, rgba(34, 211, 238, 0.08), transparent 55%);
+            pointer-events: none;
+        }
+        .uiverse-card__eyebrow,
+        .uiverse-card__title,
+        .uiverse-card__copy,
+        .uiverse-card__icon {
+            position: relative;
+            z-index: 1;
+        }
+        .uiverse-card__eyebrow {
+            display: inline-flex;
+            width: fit-content;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid rgba(103, 232, 249, 0.25);
+            background: linear-gradient(180deg, rgba(20, 8, 31, 0.9), rgba(49, 11, 61, 0.8));
+            color: #9ceeff;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.24em;
+            text-transform: uppercase;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+        .uiverse-card__icon {
+            display: inline-flex;
+            height: 3rem;
+            width: 3rem;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(103, 232, 249, 0.28);
+            background: linear-gradient(180deg, rgba(16, 23, 49, 0.9), rgba(14, 116, 144, 0.2));
+            color: #67e8f9;
+            box-shadow: inset 0 0 12px rgba(34, 211, 238, 0.15);
+        }
+        .uiverse-card__title {
+            color: #f8fafc;
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            line-height: 1.35;
+        }
+        .uiverse-card__copy {
+            color: #cbd5e1;
+            font-size: 0.92rem;
+            line-height: 1.7;
+        }
+        .uiverse-card--reason .uiverse-card__title {
+            font-size: 0.98rem;
+        }
+        .uiverse-card--reason .uiverse-card__copy {
+            font-size: 0.82rem;
+        }
+        @keyframes uiverse-card-rotate {
+            to {
+                transform: rotate(1turn);
+            }
+        }
+        @keyframes uiverse-card-glitch {
+            0%, 100% {
+                transform: translate(0, 0);
+            }
+            50% {
+                transform: translate(0.6px, -0.6px);
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .uiverse-card::before,
+            .uiverse-card::after {
+                animation: none;
+            }
+            .uiverse-card {
+                transition: none;
+            }
+        }
+        @media (max-width: 640px) {
+            .uiverse-card,
+            .uiverse-card::after,
+            .uiverse-card__inner {
+                clip-path: none;
+                -webkit-clip-path: none;
+                border-radius: 1.25rem;
+            }
         }
     </style>
 HTML;
@@ -173,14 +319,19 @@ require_once __DIR__ . '/templates/header.php';
                     ],
                 ];
                 foreach ($services as $s): ?>
-                <div class="group bg-zinc-900/60 border border-zinc-800 rounded-xl p-6 glow-box transition-all duration-300 hover:bg-zinc-900">
-                    <div class="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-5 group-hover:bg-cyan-500/20 transition-colors">
-                        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <?= $s['icon'] ?>
-                        </svg>
+                <div class="uiverse-card group">
+                    <div class="uiverse-card__inner">
+                        <div class="uiverse-card__eyebrow">
+                            Service
+                        </div>
+                        <div class="uiverse-card__icon">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <?= $s['icon'] ?>
+                            </svg>
+                        </div>
+                        <h3 class="uiverse-card__title"><?= htmlspecialchars($s['title']) ?></h3>
+                        <p class="uiverse-card__copy"><?= htmlspecialchars($s['desc']) ?></p>
                     </div>
-                    <h3 class="font-bold text-white text-base mb-2"><?= htmlspecialchars($s['title']) ?></h3>
-                    <p class="text-sm text-zinc-400 leading-relaxed"><?= htmlspecialchars($s['desc']) ?></p>
                 </div>
                 <?php endforeach; ?>
             </div>
@@ -213,10 +364,14 @@ require_once __DIR__ . '/templates/header.php';
                         ['num' => '04', 'title' => '90-Day Repair Warranty', 'desc' => 'Every repair is backed by our warranty. We stand by our work, period.'],
                     ];
                     foreach ($reasons as $r): ?>
-                    <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 glow-box transition-all duration-300">
-                        <p class="text-xs text-cyan-500 font-bold tracking-widest mb-3"><?= $r['num'] ?></p>
-                        <h3 class="font-bold text-white text-sm mb-1.5"><?= htmlspecialchars($r['title']) ?></h3>
-                        <p class="text-xs text-zinc-400 leading-relaxed"><?= htmlspecialchars($r['desc']) ?></p>
+                    <div class="uiverse-card uiverse-card--reason">
+                        <div class="uiverse-card__inner">
+                            <div class="uiverse-card__eyebrow">
+                                <?= $r['num'] ?>
+                            </div>
+                            <h3 class="uiverse-card__title"><?= htmlspecialchars($r['title']) ?></h3>
+                            <p class="uiverse-card__copy"><?= htmlspecialchars($r['desc']) ?></p>
+                        </div>
                     </div>
                     <?php endforeach; ?>
                 </div>
