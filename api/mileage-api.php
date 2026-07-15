@@ -45,6 +45,8 @@ $pdo->exec("
         start_lng          DECIMAL(10,7) NULL,
         end_lat            DECIMAL(10,7) NULL,
         end_lng            DECIMAL(10,7) NULL,
+        start_mileage      INT UNSIGNED  NULL COMMENT 'Odometer at departure',
+        end_mileage        INT UNSIGNED  NULL COMMENT 'Odometer at arrival',
         total_miles        DECIMAL(8,2)  NULL,
         status             ENUM('pending','complete') NOT NULL DEFAULT 'pending',
         created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -53,6 +55,21 @@ $pdo->exec("
         INDEX idx_trip_date (trip_date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 ");
+
+// ── Migrate: add mileage columns to existing tables ───────────────────────────
+foreach (['start_mileage INT UNSIGNED NULL COMMENT \'Odometer at departure\' AFTER end_lng',
+          'end_mileage   INT UNSIGNED NULL COMMENT \'Odometer at arrival\'   AFTER start_mileage'] as $colDef) {
+    $col = strtok($colDef, ' ');
+    $exists = $pdo->query(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME   = 'mileage_logs'
+           AND COLUMN_NAME  = '$col'"
+    )->fetchColumn();
+    if (!$exists) {
+        $pdo->exec("ALTER TABLE mileage_logs ADD COLUMN $colDef");
+    }
+}
 
 // ── Parse body ────────────────────────────────────────────────────────────────
 $raw    = file_get_contents('php://input');
@@ -142,6 +159,7 @@ if ($action === 'on_my_way') {
     $address          = trim((string) ($data['address'] ?? ''));
     $startLat         = validCoord((string) ($data['start_lat'] ?? ''));
     $startLng         = validCoord((string) ($data['start_lng'] ?? ''));
+    $startMileage     = isset($data['start_mileage']) ? (int) $data['start_mileage'] : null;
 
     if ($serviceRequestId <= 0) {
         http_response_code(400);
@@ -164,12 +182,13 @@ if ($action === 'on_my_way') {
     if ($row) {
         $stmt = $pdo->prepare(
             "UPDATE mileage_logs
-             SET client_name = :cn,
-                 address     = :addr,
-                 trip_date   = :td,
-                 start_time  = :st,
-                 start_lat   = :slat,
-                 start_lng   = :slng
+             SET client_name    = :cn,
+                 address        = :addr,
+                 trip_date      = :td,
+                 start_time     = :st,
+                 start_lat      = :slat,
+                 start_lng      = :slng,
+                 start_mileage  = :sm
              WHERE id = :id"
         );
         $stmt->execute([
@@ -179,15 +198,16 @@ if ($action === 'on_my_way') {
             ':st'   => $startTime,
             ':slat' => $startLat,
             ':slng' => $startLng,
+            ':sm'   => $startMileage,
             ':id'   => $row['id'],
         ]);
         $logId = $row['id'];
     } else {
         $stmt = $pdo->prepare(
             "INSERT INTO mileage_logs
-                (service_request_id, client_name, address, trip_date, start_time, start_lat, start_lng, status)
+                (service_request_id, client_name, address, trip_date, start_time, start_lat, start_lng, start_mileage, status)
              VALUES
-                (:sri, :cn, :addr, :td, :st, :slat, :slng, 'pending')"
+                (:sri, :cn, :addr, :td, :st, :slat, :slng, :sm, 'pending')"
         );
         $stmt->execute([
             ':sri'  => $serviceRequestId,
@@ -197,6 +217,7 @@ if ($action === 'on_my_way') {
             ':st'   => $startTime,
             ':slat' => $startLat,
             ':slng' => $startLng,
+            ':sm'   => $startMileage,
         ]);
         $logId = (int) $pdo->lastInsertId();
     }
@@ -217,6 +238,7 @@ if ($action === 'arrived') {
     $serviceRequestId = (int) ($data['service_request_id'] ?? 0);
     $endLat           = validCoord((string) ($data['end_lat'] ?? ''));
     $endLng           = validCoord((string) ($data['end_lng'] ?? ''));
+    $endMileage       = isset($data['end_mileage']) ? (int) $data['end_mileage'] : null;
 
     if ($serviceRequestId <= 0) {
         http_response_code(400);
@@ -259,6 +281,7 @@ if ($action === 'arrived') {
          SET end_time    = :et,
              end_lat     = :elat,
              end_lng     = :elng,
+             end_mileage = :em,
              total_miles = :miles,
              status      = 'complete'
          WHERE id = :id"
@@ -267,6 +290,7 @@ if ($action === 'arrived') {
         ':et'    => $endTime,
         ':elat'  => $endLat,
         ':elng'  => $endLng,
+        ':em'    => $endMileage,
         ':miles' => $totalMiles,
         ':id'    => $log['id'],
     ]);
