@@ -9,8 +9,8 @@
     "orientation": "portrait",
     "icons": [
         {
-            "src": "/ghost-logo2-32x32.png",
-            "sizes": "32x32",
+            "src": "/ghost-logo-250x250.png",
+            "sizes": "250x250",
             "type": "image/png"
         }
     ]
