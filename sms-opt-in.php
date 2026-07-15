@@ -3,7 +3,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
-$redirect = isset($_GET['redirect']) ? trim((string) $_GET['redirect']) : '';
+$redirect = isset($_GET['redirect']) ? trim((string) $_GET['redirect']) : 'customer-login.php';
 
 $pageTitle       = 'SMS Opt-In | Ghost Laser';
 $pageDescription = 'Opt in to receive SMS appointment confirmations and updates from Ghost Laser.';
@@ -105,15 +105,33 @@ require_once __DIR__ . '/templates/header.php';
                 </div>
 
                 <!-- CTA button -->
-                <a
-                    href="<?= htmlspecialchars($redirect !== '' ? $redirect : '/', ENT_QUOTES, 'UTF-8') ?>"
+                <button
+                    type="button"
+                    id="sms-agree-btn"
+                    data-redirect="<?= htmlspecialchars($redirect, ENT_QUOTES, 'UTF-8') ?>"
                     class="btn-glow flex w-full items-center justify-center gap-2.5 rounded-xl bg-cyan-500 px-6 py-4 text-base font-bold text-zinc-950 transition-all hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-zinc-900"
                 >
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
                     </svg>
                     I Agree &amp; Continue
-                </a>
+                </button>
+
+                <!-- No thanks -->
+                <div class="mt-4 text-center">
+                    <a href="<?= htmlspecialchars($redirect, ENT_QUOTES, 'UTF-8') ?>" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2">
+                        No thanks, continue without SMS
+                    </a>
+                </div>
+
+                <script>
+                document.getElementById('sms-agree-btn').addEventListener('click', function () {
+                    var expires = new Date();
+                    expires.setFullYear(expires.getFullYear() + 1);
+                    document.cookie = 'sms_consent=1; path=/; expires=' + expires.toUTCString() + '; SameSite=Lax';
+                    window.location.href = this.dataset.redirect;
+                });
+                </script>
 
                 <!-- Opt-out note -->
                 <p class="mt-5 text-center text-xs text-zinc-500">

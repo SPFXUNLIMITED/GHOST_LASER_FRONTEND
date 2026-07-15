@@ -6,7 +6,9 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 // Contact form submission feedback
 $contactStatus = isset($_GET['status']) ? $_GET['status'] : '';
 $contactMessage = isset($_GET['contact_message']) ? trim((string) $_GET['contact_message']) : '';
-$bookTechnicianUrl = !empty($_SESSION['customer_id']) ? 'book_a_technician.php?step=2' : 'customer-login.php?step=1';
+$bookTechnicianUrl = !empty($_SESSION['customer_id'])
+    ? 'book_a_technician.php?step=2'
+    : (!empty($_COOKIE['sms_consent']) ? 'customer-login.php' : '/sms-opt-in');
 
 $pageTitle       = 'Ghost Laser | Expert Laser Machine Repair';
 $pageDescription = 'Ghost Laser — precision laser cutting machine repair, calibration, and maintenance. Fast turnaround, trusted by professionals.';
