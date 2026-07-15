@@ -161,10 +161,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         'Date',
         'Client Name',
         'Address',
-        'Start Time (LA)',
-        'End Time (LA)',
-        'Starting Location (Lat,Lng)',
-        'Ending Location (Lat,Lng)',
+        'Time',
+        'Route',
         'Total Miles',
         'Job ID',
         'Status',
@@ -175,10 +173,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             fmtDate($row['trip_date']),
             $row['client_name'],
             $row['address'],
-            fmtDateTime($row['start_time']),
-            fmtDateTime($row['end_time']),
-            fmtCoords($row['start_lat'], $row['start_lng']),
-            fmtCoords($row['end_lat'], $row['end_lng']),
+            'Start: ' . fmtDateTime($row['start_time']) . ' / End: ' . fmtDateTime($row['end_time']),
+            'Start: ' . fmtCoords($row['start_lat'], $row['start_lng']) . ' / End: ' . fmtCoords($row['end_lat'], $row['end_lng']),
             $row['total_miles'] !== null ? number_format((float) $row['total_miles'], 2) : '',
             '#' . $row['service_request_id'],
             $row['status'],
@@ -520,10 +516,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         <th>Date</th>
                         <th>Client Name</th>
                         <th>Address</th>
-                        <th>Start Time (LA)</th>
-                        <th>End Time (LA)</th>
-                        <th>Starting Location</th>
-                        <th>Ending Location</th>
+                        <th>Time</th>
+                        <th>Route</th>
                         <th>Total Miles</th>
                         <th>Job ID</th>
                         <th>Status</th>
@@ -543,16 +537,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <?= htmlspecialchars($row['address'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
                             </td>
                             <td class="whitespace-nowrap">
-                                <?= htmlspecialchars(fmtDateTime($row['start_time']), ENT_QUOTES, 'UTF-8') ?>
-                            </td>
-                            <td class="whitespace-nowrap">
-                                <?= htmlspecialchars(fmtDateTime($row['end_time']), ENT_QUOTES, 'UTF-8') ?>
+                                <div class="text-xs text-zinc-400">Start: <?= htmlspecialchars(fmtDateTime($row['start_time']), ENT_QUOTES, 'UTF-8') ?></div>
+                                <div class="text-xs text-zinc-400">End: <?= htmlspecialchars(fmtDateTime($row['end_time']), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
                             <td class="coord-cell">
-                                <?= htmlspecialchars(fmtCoords($row['start_lat'], $row['start_lng']), ENT_QUOTES, 'UTF-8') ?>
-                            </td>
-                            <td class="coord-cell">
-                                <?= htmlspecialchars(fmtCoords($row['end_lat'], $row['end_lng']), ENT_QUOTES, 'UTF-8') ?>
+                                <div class="text-xs text-zinc-400">Start: <?= htmlspecialchars(fmtCoords($row['start_lat'], $row['start_lng']), ENT_QUOTES, 'UTF-8') ?></div>
+                                <div class="text-xs text-zinc-400">End: <?= htmlspecialchars(fmtCoords($row['end_lat'], $row['end_lng']), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
                             <td class="miles-cell">
                                 <?= htmlspecialchars(fmtMiles($row['total_miles']), ENT_QUOTES, 'UTF-8') ?>
