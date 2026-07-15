@@ -84,7 +84,7 @@ function techDashFormatAddress(array $job): string
 function techDashMapsUrl(array $job): string
 {
     $addr = techDashFormatAddress($job);
-    return 'https://maps.google.com/?q=' . rawurlencode($addr);
+    return 'https://waze.com/ul?q=' . rawurlencode($addr) . '&navigate=yes';
 }
 
 function techDashTimeWindow(?string $start, ?string $end): string
