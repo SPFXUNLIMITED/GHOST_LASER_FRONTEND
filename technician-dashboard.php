@@ -149,6 +149,7 @@ if ($adminUsername === '') {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap&v=1.2" rel="stylesheet">
     <style>
+        html, body { background: #02010a !important; }
         body { -webkit-tap-highlight-color: transparent; }
 
         .tech-badge {
@@ -310,10 +311,10 @@ if ($adminUsername === '') {
         }
     </style>
 </head>
-<body class="bg-zinc-950 text-white font-sans antialiased min-h-screen">
+<body class="text-white font-sans antialiased min-h-screen" style="background:#02010a;">
 
 <!-- ── Top bar ──────────────────────────────────────────────────────────── -->
-<header class="sticky top-0 z-40 bg-zinc-950/90 border-b border-zinc-800/60" style="backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);">
+<header class="sticky top-0 z-40 border-b border-zinc-800/60" style="background:rgba(2,1,10,0.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);">
     <div class="max-w-xl mx-auto px-4 flex items-center justify-between h-14">
         <a href="dashboard.php" class="flex items-center gap-2 group">
             <span class="w-6 h-6 rounded bg-cyan-500 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-400 transition-colors">
