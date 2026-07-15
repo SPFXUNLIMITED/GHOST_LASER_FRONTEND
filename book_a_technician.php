@@ -629,7 +629,7 @@ require_once __DIR__ . '/templates/header.php';
                             <input class="input-base" id="last_name" name="last_name" placeholder="Last Name *" required value="<?= h($_POST['last_name'] ?? '') ?>">
                         </div>
                         <div id="phone-consent" class="flex items-center">
-                            <p class="text-xs leading-relaxed text-zinc-500">By providing your phone number, you consent to receive SMS updates about your repair. Message and data rates may apply. Reply STOP to opt out.</p>
+                            <p class="text-xs leading-relaxed text-zinc-500">By providing your phone number, you consent to receive <a href="/sms-opt-in.php" class="text-cyan-500 hover:text-cyan-400 underline">SMS updates</a> about your repair. Message and data rates may apply. Reply STOP to opt out.</p>
                         </div>
                         <div>
                             <input class="input-base<?= $phoneError !== '' ? ' input-invalid' : '' ?>" type="tel" inputmode="tel" id="phone" name="phone" placeholder="Phone Number *" required value="<?= h(formatUsPhoneDisplay($_POST['phone'] ?? '')) ?>" aria-describedby="phone-consent phone-error" aria-invalid="<?= $phoneError !== '' ? 'true' : 'false' ?>">
