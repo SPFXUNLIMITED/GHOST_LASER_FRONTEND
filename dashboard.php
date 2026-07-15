@@ -40,8 +40,8 @@ $pwaHead         = <<<'HTML'
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#09090b">
-    <link rel="apple-touch-icon" href="/ghost-logo2-32x32.png">
-    <link rel="icon" type="image/png" href="/ghost-logo2-32x32.png">
+    <link rel="apple-touch-icon" href="/ghost-logo-250x250.png">
+    <link rel="icon" type="image/png" sizes="250x250" href="/ghost-logo-250x250.png">
     <link rel="manifest" href="/manifest.json">
 HTML;
 $extraHead       = <<<'HTML'
