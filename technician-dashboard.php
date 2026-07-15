@@ -691,6 +691,47 @@ require_once __DIR__ . '/templates/header.php';
     <?php endif; ?>
 </main>
 
+<!-- ── Mileage Entry Modal ───────────────────────────────────────────────── -->
+<div id="mileageModal" class="mileage-modal" role="dialog" aria-modal="true" aria-label="Enter truck mileage">
+    <div class="mileage-modal-inner">
+        <div class="mileage-modal-header">
+            <div class="mileage-modal-title">Odometer Reading</div>
+            <div class="mileage-modal-sub">Enter current truck mileage before departing</div>
+        </div>
+
+        <div class="nixie-display" id="nixieDisplay">
+            <span class="nixie-digit dim" id="nd0">0</span>
+            <span class="nixie-digit dim" id="nd1">0</span>
+            <span class="nixie-digit dim" id="nd2">0</span>
+            <span class="nixie-digit dim" id="nd3">0</span>
+            <span class="nixie-digit dim" id="nd4">0</span>
+            <span class="nixie-digit dim" id="nd5">0</span>
+        </div>
+
+        <div class="nixie-error" id="nixieError"></div>
+
+        <div class="keypad" id="mileageKeypad">
+            <button class="keypad-btn keypad-num" data-digit="7">7</button>
+            <button class="keypad-btn keypad-num" data-digit="8">8</button>
+            <button class="keypad-btn keypad-num" data-digit="9">9</button>
+            <button class="keypad-btn keypad-num" data-digit="4">4</button>
+            <button class="keypad-btn keypad-num" data-digit="5">5</button>
+            <button class="keypad-btn keypad-num" data-digit="6">6</button>
+            <button class="keypad-btn keypad-num" data-digit="1">1</button>
+            <button class="keypad-btn keypad-num" data-digit="2">2</button>
+            <button class="keypad-btn keypad-num" data-digit="3">3</button>
+            <button class="keypad-btn keypad-clear" id="keypadClear">CLR</button>
+            <button class="keypad-btn keypad-num" data-digit="0">0</button>
+            <button class="keypad-btn keypad-back" id="keypadBack">&#x232B;</button>
+        </div>
+
+        <div class="keypad-actions">
+            <button class="keypad-btn keypad-cancel" id="keypadCancel">Cancel</button>
+            <button class="keypad-btn keypad-confirm" id="keypadConfirm">Confirm</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     'use strict';
@@ -887,46 +928,5 @@ require_once __DIR__ . '/templates/header.php';
     });
 }());
 </script>
-
-<!-- ── Mileage Entry Modal ───────────────────────────────────────────────── -->
-<div id="mileageModal" class="mileage-modal" role="dialog" aria-modal="true" aria-label="Enter truck mileage">
-    <div class="mileage-modal-inner">
-        <div class="mileage-modal-header">
-            <div class="mileage-modal-title">Odometer Reading</div>
-            <div class="mileage-modal-sub">Enter current truck mileage before departing</div>
-        </div>
-
-        <div class="nixie-display" id="nixieDisplay">
-            <span class="nixie-digit dim" id="nd0">0</span>
-            <span class="nixie-digit dim" id="nd1">0</span>
-            <span class="nixie-digit dim" id="nd2">0</span>
-            <span class="nixie-digit dim" id="nd3">0</span>
-            <span class="nixie-digit dim" id="nd4">0</span>
-            <span class="nixie-digit dim" id="nd5">0</span>
-        </div>
-
-        <div class="nixie-error" id="nixieError"></div>
-
-        <div class="keypad" id="mileageKeypad">
-            <button class="keypad-btn keypad-num" data-digit="7">7</button>
-            <button class="keypad-btn keypad-num" data-digit="8">8</button>
-            <button class="keypad-btn keypad-num" data-digit="9">9</button>
-            <button class="keypad-btn keypad-num" data-digit="4">4</button>
-            <button class="keypad-btn keypad-num" data-digit="5">5</button>
-            <button class="keypad-btn keypad-num" data-digit="6">6</button>
-            <button class="keypad-btn keypad-num" data-digit="1">1</button>
-            <button class="keypad-btn keypad-num" data-digit="2">2</button>
-            <button class="keypad-btn keypad-num" data-digit="3">3</button>
-            <button class="keypad-btn keypad-clear" id="keypadClear">CLR</button>
-            <button class="keypad-btn keypad-num" data-digit="0">0</button>
-            <button class="keypad-btn keypad-back" id="keypadBack">&#x232B;</button>
-        </div>
-
-        <div class="keypad-actions">
-            <button class="keypad-btn keypad-cancel" id="keypadCancel">Cancel</button>
-            <button class="keypad-btn keypad-confirm" id="keypadConfirm">Confirm</button>
-        </div>
-    </div>
-</div>
 
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
