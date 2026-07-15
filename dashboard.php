@@ -60,6 +60,7 @@ $extraHead       = <<<'HTML'
             --mag:    #ff00aa;
             --void:   #02010a;
             --mono:   "Share Tech Mono", "Fira Code", Consolas, "Courier New", monospace;
+            --uiverse-clip: polygon(0 0, 85% 0, 100% 14%, 100% 60%, 92% 65%, 93% 77%, 99% 80%, 99% 90%, 89% 100%, 0 100%);
         }
 
         html, body {
@@ -134,54 +135,119 @@ $extraHead       = <<<'HTML'
         /* ── 4. CARD OUTER — spinning neon border + blinkShadowsFilter ──
                Technique: MijailVillegas card-content::before rotating gradient
                The 1px padding reveals the spinning element as a border. ── */
-        .card-spin-wrap {
+        .card-spin-wrap,
+        .danger-card,
+        .quick-card {
             position: relative;
-            overflow: hidden;
-            border-radius: 1rem;
-            padding: 1px;
-            animation: blinkShadowsFilter 6s ease-in infinite;
+            filter:
+                drop-shadow(46px 36px 24px rgba(64,144,181,0.35))
+                drop-shadow(-55px -40px 25px rgba(158,48,169,0.30));
+            animation: blinkShadowsFilter 8s ease-in infinite;
         }
-        .card-spin-wrap::before {
-            content: '';
-            position: absolute;
-            width: 250%; height: 250%;
-            top: -75%; left: -75%;
-            transform-origin: center;
-            background:
-                linear-gradient(to bottom,
-                    transparent 0%, transparent 35%,
-                    var(--toxic) 42%, var(--toxic) 50%,
-                    var(--blood) 56%, var(--blood) 64%,
-                    transparent 70%, transparent 100%),
-                linear-gradient(to left,
-                    transparent 0%, transparent 35%,
-                    var(--toxic) 42%, var(--toxic) 50%,
-                    var(--blood) 56%, var(--blood) 64%,
-                    transparent 70%, transparent 100%);
-            animation: rotateBorder 4s infinite linear;
-            z-index: 0;
-        }
-        @keyframes rotateBorder { 100% { transform: rotate(1turn); } }
-
-        /* MijailVillegas blinkShadowsFilter — drop-shadow color cycling */
         @keyframes blinkShadowsFilter {
-            0%,100% { filter: drop-shadow(0 0 30px rgba(0,255,245,0.45)) drop-shadow(0 0 60px rgba(255,0,60,0.22)); }
-            25%     { filter: drop-shadow(0 0 55px rgba(255,0,60,0.70)) drop-shadow(0 0 85px rgba(0,255,245,0.18)); }
-            50%     { filter: drop-shadow(0 0 42px rgba(0,255,245,0.48)) drop-shadow(0 0 28px rgba(255,0,170,0.48)); }
-            75%     { filter: drop-shadow(0 0 60px rgba(255,0,60,0.60)) drop-shadow(0 0 42px rgba(0,255,245,0.32)); }
+            50% {
+                filter:
+                    drop-shadow(36px 16px 22px rgba(64,144,181,0.32))
+                    drop-shadow(-45px -30px 20px rgba(158,48,169,0.28));
+            }
         }
 
         /* ── 5. CARD INNER ── */
-        .card-glow {
+        .card-glow,
+        .danger-card,
+        .quick-card {
             position: relative;
-            z-index: 1;
-            background: linear-gradient(140deg,
-                rgba(2,1,10,1.00)  0%,
-                rgba(5,2,18,0.98)  50%,
-                rgba(20,3,20,0.97) 100%);
-            border-radius: calc(1rem - 1px);
+            overflow: hidden;
+            background-color: hsl(296, 59%, 10%) !important;
+            clip-path: var(--uiverse-clip);
+            -webkit-clip-path: var(--uiverse-clip);
             border: none !important;
             box-shadow: none !important;
+            isolation: isolate;
+        }
+        .card-glow::before,
+        .danger-card::before,
+        .quick-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            width: 250%;
+            aspect-ratio: 1 / 1;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            background:
+                linear-gradient(to bottom,
+                    transparent,
+                    transparent,
+                    #66e0ff,
+                    #66e0ff,
+                    #e366ff,
+                    #e366ff,
+                    transparent,
+                    transparent),
+                linear-gradient(to left,
+                    transparent,
+                    transparent,
+                    #66e0ff,
+                    #66e0ff,
+                    #e366ff,
+                    #e366ff,
+                    transparent,
+                    transparent);
+            animation: rotateBorder 5s infinite linear;
+            border-radius: 30%;
+            filter: blur(6px) brightness(1.3);
+            clip-path: var(--uiverse-clip);
+            -webkit-clip-path: var(--uiverse-clip);
+        }
+        .card-glow::after,
+        .danger-card::after,
+        .quick-card::after {
+            content: '';
+            position: absolute;
+            top: 1%;
+            left: 1%;
+            width: 98%;
+            height: 98%;
+            z-index: 1;
+            pointer-events: none;
+            background:
+                repeating-linear-gradient(
+                    to bottom,
+                    transparent 0%,
+                    rgba(64, 144, 181, 0.6) 1px,
+                    rgb(0, 0, 0) 3px,
+                    rgba(64, 144, 181, 0.3) 5px,
+                    #153544 4px,
+                    transparent 0.5%
+                ),
+                repeating-linear-gradient(
+                    to left,
+                    hsl(295, 60%, 12%) 100%,
+                    hsla(295, 60%, 12%, 0.99) 100%
+                );
+            box-shadow: inset 0 0 30px 40px hsl(296, 59%, 10%);
+            clip-path: var(--uiverse-clip);
+            -webkit-clip-path: var(--uiverse-clip);
+            animation: cardBackglitch 94ms linear infinite;
+        }
+        .card-glow > *,
+        .danger-card > *,
+        .quick-card > * {
+            position: relative;
+            z-index: 3;
+        }
+        @keyframes rotateBorder {
+            to { transform: translate(-50%, -50%) rotate(1turn); }
+        }
+        @keyframes cardBackglitch {
+            0%, 100% { opacity: 1; }
+            10%, 90% { opacity: 0.9; }
+            25%, 85% { opacity: 0.95; }
+            50%, 60% { opacity: 0.98; }
         }
 
         /* ── 6. NEON BADGE ── */
@@ -369,31 +435,58 @@ $extraHead       = <<<'HTML'
 
         /* ── 9. SCHEDULE / QUICK CARDS ── */
         .danger-card {
-            background: rgba(2,1,10,0.92) !important;
-            border-color: rgba(0,255,245,0.28) !important;
-            box-shadow:
-                0 0 0 1px rgba(0,255,245,0.16),
-                0 0 30px rgba(0,255,245,0.08),
-                inset 0 0 20px rgba(0,255,245,0.03);
-            transition: all 0.2s ease;
+            transition: transform 0.2s ease, filter 0.2s ease;
         }
         .danger-card:hover {
-            border-color: rgba(0,255,245,0.75) !important;
-            box-shadow:
-                0 0 0 1px rgba(0,255,245,0.52),
-                0 0 58px rgba(0,255,245,0.28),
-                0 0 88px rgba(255,0,60,0.14),
-                inset 0 0 32px rgba(0,255,245,0.07);
             transform: translateY(-4px);
         }
 
         .quick-card {
-            background: rgba(2,1,10,0.88) !important;
-            border-color: rgba(255,0,60,0.30) !important;
-            box-shadow:
-                0 0 0 1px rgba(255,0,60,0.15),
-                0 0 24px rgba(255,0,60,0.07),
-                inset 0 0 18px rgba(255,0,60,0.04);
+            transition: transform 0.2s ease, filter 0.2s ease;
+        }
+        .quick-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .panel-stripe {
+            position: relative;
+            z-index: 4;
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            min-height: 2.7rem;
+            width: min(100%, 18rem);
+            padding: 0.55rem 0.9rem 0.55rem 1.15rem;
+            background:
+                linear-gradient(90deg,
+                    rgba(255, 254, 250, 0) 0%,
+                    rgba(102, 224, 255, 0.3) 27%,
+                    rgba(102, 224, 255, 0.3) 63%,
+                    rgba(255, 255, 255, 0) 100%),
+                linear-gradient(0deg,
+                    rgba(102, 224, 255, 0.3) 0%,
+                    rgba(255, 255, 255, 0) 10%,
+                    rgba(255, 255, 255, 0) 96%,
+                    rgba(102, 224, 255, 0.3) 100%);
+            clip-path: polygon(90% 0, 100% 100%, 0% 100%, 0% 0%);
+            -webkit-clip-path: polygon(90% 0, 100% 100%, 0% 100%, 0% 0%);
+        }
+
+        .card-icon-shell {
+            position: relative;
+            z-index: 4;
+            border: 1px solid rgba(102,224,255,0.28);
+            background: rgba(102,224,255,0.08);
+            box-shadow: 0 0 18px rgba(102,224,255,0.22);
+        }
+
+        .quick-action {
+            position: relative;
+            overflow: hidden;
+            justify-content: flex-start !important;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            clip-path: polygon(0 0, 100% 0, 97% 100%, 0 100%);
         }
 
         /* ── 10. HEADER ── */
@@ -483,8 +576,10 @@ require_once __DIR__ . '/templates/header.php';
                             class="danger-card group flex min-h-[220px] flex-col justify-between rounded-2xl border p-6 transition-all"
                         >
                             <div>
-                                <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400"
-                                      style="box-shadow:0 0 18px rgba(0,255,245,0.25);">
+                                <div class="panel-stripe text-xs font-semibold uppercase tracking-[0.28em] text-cyan-100/85">
+                                    Primary Access
+                                </div>
+                                <span class="card-icon-shell mt-5 inline-flex h-12 w-12 items-center justify-center rounded-xl text-cyan-400">
                                     <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z"/>
                                     </svg>
@@ -502,7 +597,10 @@ require_once __DIR__ . '/templates/header.php';
                         </a>
 
                         <div class="quick-card rounded-2xl border p-6">
-                            <h2 class="glitch-subtitle text-lg font-semibold" data-text="Quick Access">Quick Access</h2>
+                            <div class="panel-stripe text-xs font-semibold uppercase tracking-[0.28em] text-fuchsia-100/85">
+                                Utility Links
+                            </div>
+                            <h2 class="glitch-subtitle mt-5 text-lg font-semibold" data-text="Quick Access">Quick Access</h2>
                             <p class="mt-3 text-sm leading-6 text-zinc-500">
                                 You are signed in and ready to access the admin tools available in this portal.
                             </p>
@@ -510,25 +608,25 @@ require_once __DIR__ . '/templates/header.php';
                             <div class="mt-6 space-y-3">
                                 <a
                                     href="technician/schedule.php"
-                                    class="btn-glow inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-sm transition-all"
+                                    class="btn-glow quick-action inline-flex w-full items-center justify-center gap-2 rounded-md px-4 py-3 text-sm transition-all"
                                 >
                                     &gt;&gt; Go to Technician Schedule
                                 </a>
                                 <a
                                     href="technician-dashboard.php"
-                                    class="link-secondary inline-flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm transition-all"
+                                    class="link-secondary quick-action inline-flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm transition-all"
                                 >
                                     Technician Dashboard
                                 </a>
                                 <a
                                     href="settings.php"
-                                    class="link-ghost inline-flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm transition-all"
+                                    class="link-ghost quick-action inline-flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm transition-all"
                                 >
                                     Open Admin Settings
                                 </a>
                                 <a
                                     href="mileage-tracker.php"
-                                    class="link-ghost inline-flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm transition-all"
+                                    class="link-ghost quick-action inline-flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm transition-all"
                                 >
                                     IRS Mileage Tracker
                                 </a>
