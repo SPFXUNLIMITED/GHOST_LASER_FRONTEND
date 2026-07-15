@@ -119,38 +119,59 @@ if ($adminUsername === '') {
     $adminUsername = 'Admin';
 }
 ?>
-<!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<?php
+$pageTitle       = 'Technician Dashboard | Ghost Laser';
+$pageDescription = 'Ghost Laser technician daily job dashboard.';
+$pwaHead         = <<<'HTML'
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#09090b">
-    <link rel="apple-touch-icon" href="/ghost-logo2-32x32.png">
-    <link rel="icon" type="image/png" href="/ghost-logo2-32x32.png">
+    <link rel="apple-touch-icon" href="/ghost-logo-250x250.png">
+    <link rel="icon" type="image/png" sizes="250x250" href="/ghost-logo-250x250.png">
     <link rel="manifest" href="/manifest.json">
-    <title>Technician Dashboard | Ghost Laser</title>
-    <script src="https://cdn.tailwindcss.com?v=1.2"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        cyan: { 400: '#22d3ee', 500: '#06b6d4' }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    }
-                }
-            }
-        }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap&v=1.2" rel="stylesheet">
+HTML;
+$extraHead       = <<<'HTML'
     <style>
-        html, body { background: #02010a !important; }
+        :root {
+            --dash-bg: #09090f;
+            --dash-border: rgba(148, 163, 184, 0.22);
+            --dash-border-strong: rgba(96, 165, 250, 0.38);
+            --dash-text: #f8fafc;
+            --dash-muted: #94a3b8;
+            --dash-accent: #67e8f9;
+        }
+
+        html, body {
+            background:
+                radial-gradient(circle at top, rgba(34, 211, 238, 0.12), transparent 32%),
+                radial-gradient(circle at 85% 20%, rgba(59, 130, 246, 0.12), transparent 24%),
+                linear-gradient(180deg, #050816 0%, var(--dash-bg) 100%) !important;
+        }
+
         body { -webkit-tap-highlight-color: transparent; }
+
+        .dashboard-shell {
+            position: relative;
+        }
+
+        .dashboard-shell::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 18%),
+                linear-gradient(90deg, rgba(103, 232, 249, 0.06), transparent 45%);
+            opacity: 0.9;
+        }
+
+        .back-link {
+            color: #cbd5e1 !important;
+        }
+
+        .back-link:hover {
+            color: #ffffff !important;
+        }
 
         .tech-badge {
             display: inline-flex;
@@ -173,28 +194,41 @@ if ($adminUsername === '') {
             color: #d8b4fe;
         }
         .tech-badge-standard {
-            background: rgba(6,182,212,0.12);
-            border: 1px solid rgba(6,182,212,0.25);
-            color: #67e8f9;
+            background: rgba(103, 232, 249, 0.1);
+            border: 1px solid rgba(103, 232, 249, 0.25);
+            color: var(--dash-accent);
         }
 
         .job-card {
-            background: rgba(24,24,27,0.85);
-            border: 1px solid rgba(63,63,70,0.8);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--dash-border);
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(9, 14, 26, 0.94));
             border-radius: 0.875rem;
             padding: 1rem;
-            transition: border-color 0.15s;
+            transition: border-color 0.15s, box-shadow 0.15s;
         }
-        .job-card:active { border-color: rgba(6,182,212,0.5); }
+        .job-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(103, 232, 249, 0.06), transparent 42%);
+            pointer-events: none;
+        }
+        .job-card > * { position: relative; z-index: 1; }
+        .job-card:active {
+            border-color: rgba(103, 232, 249, 0.4);
+            box-shadow: 0 0 20px rgba(103, 232, 249, 0.08);
+        }
 
         .cluster-heading {
             font-size: 0.7rem;
             font-weight: 700;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            color: #71717a;
+            color: var(--dash-accent);
             padding-bottom: 0.5rem;
-            border-bottom: 1px solid rgba(63,63,70,0.5);
+            border-bottom: 1px solid var(--dash-border);
             margin-bottom: 0.75rem;
         }
 
@@ -229,13 +263,13 @@ if ($adminUsername === '') {
         .mileage-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
         .btn-on-way {
-            background: rgba(6,182,212,0.15);
-            border: 1px solid rgba(6,182,212,0.4);
-            color: #22d3ee;
+            background: rgba(103, 232, 249, 0.12);
+            border: 1px solid rgba(103, 232, 249, 0.38);
+            color: var(--dash-accent);
         }
         .btn-on-way.active {
-            background: rgba(6,182,212,0.3);
-            border-color: rgba(6,182,212,0.7);
+            background: rgba(103, 232, 249, 0.25);
+            border-color: rgba(103, 232, 249, 0.65);
         }
 
         .btn-arrived {
@@ -250,7 +284,7 @@ if ($adminUsername === '') {
 
         .mileage-status {
             font-size: 0.7rem;
-            color: #71717a;
+            color: var(--dash-muted);
             margin-top: 0.35rem;
             min-height: 1rem;
         }
@@ -264,9 +298,9 @@ if ($adminUsername === '') {
             gap: 0.4rem;
             padding: 0.55rem 1.1rem;
             border-radius: 0.625rem;
-            border: 1px solid rgba(63,63,70,0.9);
-            background: rgba(24,24,27,0.8);
-            color: #e4e4e7;
+            border: 1px solid var(--dash-border-strong);
+            background: rgba(15, 23, 42, 0.7);
+            color: var(--dash-accent);
             font-size: 0.875rem;
             font-weight: 600;
             text-decoration: none;
@@ -274,8 +308,8 @@ if ($adminUsername === '') {
             -webkit-tap-highlight-color: transparent;
         }
         .nav-btn:active {
-            border-color: rgba(6,182,212,0.5);
-            background: rgba(6,182,212,0.08);
+            border-color: rgba(103, 232, 249, 0.6);
+            background: rgba(103, 232, 249, 0.08);
         }
 
         .today-chip {
@@ -287,22 +321,22 @@ if ($adminUsername === '') {
             font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
-            background: rgba(6,182,212,0.15);
-            border: 1px solid rgba(6,182,212,0.3);
-            color: #22d3ee;
+            background: rgba(103, 232, 249, 0.12);
+            border: 1px solid rgba(103, 232, 249, 0.3);
+            color: var(--dash-accent);
         }
 
         .time-pill {
             display: inline-flex;
             align-items: center;
             gap: 0.25rem;
-            background: rgba(39,39,42,0.9);
-            border: 1px solid rgba(63,63,70,0.7);
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--dash-border);
             border-radius: 0.5rem;
             padding: 0.2rem 0.55rem;
             font-size: 0.78rem;
             font-weight: 600;
-            color: #a1a1aa;
+            color: var(--dash-muted);
             white-space: nowrap;
         }
 
@@ -310,26 +344,15 @@ if ($adminUsername === '') {
             .maps-link { font-size: 0.82rem; }
         }
     </style>
-</head>
-<body class="text-white font-sans antialiased min-h-screen" style="background:#02010a;">
-
-<!-- ── Top bar ──────────────────────────────────────────────────────────── -->
-<header class="sticky top-0 z-40 border-b border-zinc-800/60" style="background:rgba(2,1,10,0.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);">
-    <div class="max-w-xl mx-auto px-4 flex items-center justify-between h-14">
-        <a href="dashboard.php" class="flex items-center gap-2 group">
-            <span class="w-6 h-6 rounded bg-cyan-500 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-400 transition-colors">
-                <svg class="w-3.5 h-3.5 text-zinc-950" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 1C6.13 1 3 4.13 3 8v10l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V8C17 4.13 13.87 1 10 1z"/>
-                </svg>
-            </span>
-            <span class="text-white font-bold text-base tracking-tight">Ghost<span class="text-cyan-400">Laser</span></span>
-        </a>
-        <span class="text-xs text-zinc-400 font-medium">Technician Dashboard</span>
-    </div>
-</header>
+HTML;
+$headerRight     = <<<'HTML'
+    <a href="dashboard.php" class="back-link text-sm transition-colors">&larr; Back to Dashboard</a>
+HTML;
+require_once __DIR__ . '/templates/header.php';
+?>
 
 <!-- ── Main ─────────────────────────────────────────────────────────────── -->
-<main class="max-w-xl mx-auto px-4 pb-12 pt-5">
+<main class="dashboard-shell max-w-xl mx-auto px-4 pb-12 pt-24">
 
     <!-- Date navigation -->
     <div class="flex items-center justify-between gap-2 mb-5">
@@ -359,14 +382,14 @@ if ($adminUsername === '') {
     <?php if (empty($clusters)): ?>
         <!-- Empty state -->
         <div class="flex flex-col items-center justify-center py-16 text-center">
-            <div class="w-14 h-14 rounded-2xl bg-zinc-800/80 flex items-center justify-center mb-4">
-                <svg class="w-7 h-7 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="w-14 h-14 rounded-2xl border border-slate-700/50 bg-slate-800/40 flex items-center justify-center mb-4">
+                <svg class="w-7 h-7 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z"/>
                 </svg>
             </div>
-            <p class="text-zinc-300 font-semibold text-base">No jobs scheduled</p>
-            <p class="text-zinc-500 text-sm mt-1">No job clusters assigned for this day.</p>
-            <a href="technician/schedule.php" class="mt-5 inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-semibold text-zinc-200 hover:border-cyan-400 transition-colors">
+            <p class="text-slate-200 font-semibold text-base">No jobs scheduled</p>
+            <p class="text-slate-500 text-sm mt-1">No job clusters assigned for this day.</p>
+            <a href="technician/schedule.php" class="mt-5 inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:border-cyan-400 transition-colors">
                 Open Scheduling Dashboard
             </a>
         </div>
@@ -379,7 +402,7 @@ if ($adminUsername === '') {
         $clusterCount = count($clusters);
         ?>
         <div class="flex items-center gap-2 mb-4">
-            <span class="text-sm text-zinc-300 font-medium">
+            <span class="text-sm text-slate-300 font-medium">
                 <?= $totalJobs ?> job<?= $totalJobs !== 1 ? 's' : '' ?> across
                 <?= $clusterCount ?> cluster<?= $clusterCount !== 1 ? 's' : '' ?>
             </span>
@@ -409,7 +432,7 @@ if ($adminUsername === '') {
                             <!-- Row 1: stop number + priority + time -->
                             <div class="flex items-center justify-between gap-2 mb-2.5">
                                 <div class="flex items-center gap-2">
-                                    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-300">
+                                    <span class="flex-shrink-0 w-6 h-6 rounded-full border border-slate-600/60 bg-slate-800/60 flex items-center justify-center text-xs font-bold text-slate-300">
                                         <?= $jobIndex + 1 ?>
                                     </span>
                                     <?= techDashPriorityBadge($job['priority_level'] ?? 'standard') ?>
@@ -421,7 +444,7 @@ if ($adminUsername === '') {
                             </div>
 
                             <!-- Row 2: customer name -->
-                            <div class="text-sm font-semibold text-zinc-100 mb-1.5">
+                            <div class="text-sm font-semibold text-slate-100 mb-1.5">
                                 <?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>
                             </div>
 
@@ -433,15 +456,15 @@ if ($adminUsername === '') {
 
                             <!-- Row 4: problem summary (collapsed) -->
                             <?php if (!empty($job['problem_summary'])): ?>
-                                <div class="mt-2 pt-2 border-t border-zinc-800/70">
-                                    <p class="text-xs text-zinc-400 leading-relaxed line-clamp-2">
+                                <div class="mt-2 pt-2 border-t border-slate-700/40">
+                                    <p class="text-xs text-slate-400 leading-relaxed line-clamp-2">
                                         <?= htmlspecialchars($job['problem_summary'], ENT_QUOTES, 'UTF-8') ?>
                                     </p>
                                 </div>
                             <?php endif; ?>
 
                             <!-- Row 5: mileage tracking buttons -->
-                            <div class="mt-3 pt-3 border-t border-zinc-800/70">
+                            <div class="mt-3 pt-3 border-t border-slate-700/40">
                                 <div class="flex items-center gap-2">
                                     <button
                                         class="mileage-btn btn-on-way"
@@ -473,7 +496,7 @@ if ($adminUsername === '') {
         <?php endforeach; ?>
 
         <div class="mt-4 text-center">
-            <a href="technician/schedule.php" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+            <a href="technician/schedule.php" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">
                 &larr; Back to Scheduling Dashboard
             </a>
         </div>
@@ -587,5 +610,4 @@ if ($adminUsername === '') {
 }());
 </script>
 
-</body>
-</html>
+<?php require_once __DIR__ . '/templates/footer.php'; ?>
