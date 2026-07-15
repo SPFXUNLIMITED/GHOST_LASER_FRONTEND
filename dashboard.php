@@ -38,27 +38,152 @@ $pageTitle       = 'Admin Dashboard | Ghost Laser';
 $pageDescription = 'Ghost Laser admin dashboard.';
 $extraHead       = <<<'HTML'
     <style>
-        .btn-glow { box-shadow: 0 0 18px rgba(34,211,238,0.4), 0 0 30px rgba(236,72,153,0.2); }
-        .btn-glow:hover { box-shadow: 0 0 28px rgba(34,211,238,0.75), 0 0 44px rgba(236,72,153,0.35); }
-        .card-glow {
-            box-shadow: 0 0 0 1px rgba(34,211,238,0.18), 0 0 50px rgba(34,211,238,0.08), inset 0 0 32px rgba(236,72,153,0.08);
-            background: linear-gradient(140deg, rgba(10, 13, 26, 0.95) 0%, rgba(12, 18, 33, 0.85) 50%, rgba(28, 12, 34, 0.78) 100%);
+        /* ═══════════════════════════════════════════════════
+           GHOST LASER — PSYCHOTIC DASHBOARD SKIN v2
+           ═══════════════════════════════════════════════════ */
+
+        :root {
+            --toxic:   #00fff5;
+            --blood:   #ff003c;
+            --magenta: #ff00aa;
+            --red:     #ff1500;
+            --void:    #02010a;
         }
+
+        html, body { background-color: var(--void) !important; }
+
+        /* ── SCANLINES ── */
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0px,
+                transparent 2px,
+                rgba(0,0,0,0.55) 2px,
+                rgba(0,0,0,0.55) 4px
+            );
+            pointer-events: none;
+            z-index: 9998;
+            animation: scanroll 6s linear infinite;
+        }
+        @keyframes scanroll {
+            from { background-position: 0 0; }
+            to   { background-position: 0 200px; }
+        }
+
+        /* noise flicker on top of scanlines */
+        .scanlines::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+            pointer-events: none;
+            animation: noiseflicker 0.12s steps(1) infinite;
+        }
+        @keyframes noiseflicker {
+            0%   { opacity: 0.08; transform: translate(0, 0);    }
+            20%  { opacity: 0.11; transform: translate(-1px, 2px); }
+            40%  { opacity: 0.06; transform: translate(2px, -1px); }
+            60%  { opacity: 0.10; transform: translate(-2px,-1px); }
+            80%  { opacity: 0.07; transform: translate(1px,  0);  }
+            100% { opacity: 0.09; transform: translate(0,  1px); }
+        }
+
+        /* ── CARD WRAP ── */
+        .card-glow {
+            box-shadow:
+                0 0 0 1px rgba(0,255,245,0.30),
+                0 0 70px rgba(0,255,245,0.12),
+                0 0 140px rgba(255,0,60,0.08),
+                inset 0 0 50px rgba(255,0,170,0.05);
+            background: linear-gradient(
+                140deg,
+                rgba(2,1,10,0.99)  0%,
+                rgba(5,2,18,0.97)  50%,
+                rgba(20,3,20,0.95) 100%
+            );
+        }
+
+        /* ── AMBIENT ORBS ── */
+        .glow-orb-cyan {
+            background: radial-gradient(circle, rgba(0,255,245,0.18) 0%, transparent 70%) !important;
+            animation: orbpulse-cyan 3.5s ease-in-out infinite;
+        }
+        .glow-orb-blood {
+            background: radial-gradient(circle, rgba(255,0,60,0.20) 0%, transparent 70%) !important;
+            animation: orbpulse-blood 2.8s ease-in-out infinite alternate;
+        }
+        @keyframes orbpulse-cyan {
+            0%,100% { transform: scale(1);    opacity: 0.75; }
+            50%     { transform: scale(1.15); opacity: 1;    }
+        }
+        @keyframes orbpulse-blood {
+            from { transform: scale(0.88); opacity: 0.55; }
+            to   { transform: scale(1.18); opacity: 1.00; }
+        }
+
+        /* ── CYBER GRID ── */
+        .cyber-grid {
+            background-image:
+                linear-gradient(rgba(255,0,60,0.08) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,255,245,0.08) 1px, transparent 1px);
+            background-size: 38px 38px;
+        }
+
+        /* ── NEON BADGE ── */
+        .neon-badge {
+            border-color: rgba(255,0,60,0.60) !important;
+            background:   rgba(255,0,60,0.14) !important;
+            color: #ff003c !important;
+            box-shadow:
+                0 0 16px rgba(255,0,60,0.60),
+                0 0 36px rgba(255,0,60,0.25),
+                inset 0 0 14px rgba(255,0,60,0.12);
+            text-shadow: 0 0 10px #ff003c, 0 0 20px rgba(255,0,60,0.5);
+            letter-spacing: 0.28em;
+            animation: badgepulse 2s ease-in-out infinite;
+        }
+        @keyframes badgepulse {
+            0%,100% { box-shadow: 0 0 16px rgba(255,0,60,0.60), 0 0 36px rgba(255,0,60,0.25); }
+            50%     { box-shadow: 0 0 28px rgba(255,0,60,0.90), 0 0 60px rgba(255,0,60,0.45); }
+        }
+
+        /* ── GLITCH HEADINGS ── */
         .glitch-title,
         .glitch-subtitle {
             position: relative;
             display: inline-block;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.1em;
         }
+
         .glitch-title {
-            color: #f8fafc;
-            text-shadow: 0 0 14px rgba(34,211,238,0.35);
+            color: #ffffff;
+            text-shadow:
+                0 0 12px #00fff5,
+                0 0 35px rgba(0,255,245,0.55),
+                0 0 70px rgba(0,255,245,0.25),
+                3px  0 #ff003c,
+                -3px 0 #00fff5;
+            animation: titleflicker 4s steps(1) infinite;
         }
         .glitch-subtitle {
-            color: #d4d4d8;
-            text-shadow: 0 0 12px rgba(236,72,153,0.28);
+            color: #eeeeee;
+            text-shadow:
+                0 0 9px #00fff5,
+                0 0 22px rgba(0,255,245,0.40),
+                2px  0 #ff003c,
+                -2px 0 #00fff5;
+            animation: titleflicker 5s steps(1) infinite 0.7s;
         }
+
+        @keyframes titleflicker {
+            0%,18%,20%,22%,52%,54%,100% { opacity: 1; }
+            19%,21%,53% { opacity: 0.75; }
+        }
+
+        /* pseudo-element glitch layers */
         .glitch-title::before,
         .glitch-title::after,
         .glitch-subtitle::before,
@@ -68,45 +193,170 @@ $extraHead       = <<<'HTML'
             inset: 0;
             pointer-events: none;
             mix-blend-mode: screen;
-            opacity: 0.8;
         }
+
+        /* LAYER A — TOXIC CYAN */
         .glitch-title::before,
         .glitch-subtitle::before {
-            color: rgba(34,211,238,0.85);
-            transform: translate(-2px, 1px);
-            clip-path: polygon(0 6%, 100% 3%, 100% 34%, 0 38%);
-            animation: glitch-shift-a 1.3s infinite linear alternate-reverse;
+            color: #00fff5;
+            opacity: 0.92;
+            animation: glitch-a 0.85s infinite linear;
         }
+        /* LAYER B — BLOOD RED */
         .glitch-title::after,
         .glitch-subtitle::after {
-            color: rgba(236,72,153,0.85);
-            transform: translate(2px, -1px);
-            clip-path: polygon(0 62%, 100% 58%, 100% 98%, 0 95%);
-            animation: glitch-shift-b 1.6s infinite linear alternate-reverse;
+            color: #ff003c;
+            opacity: 0.88;
+            animation: glitch-b 0.65s infinite linear;
         }
-        .neon-badge {
-            border-color: rgba(236,72,153,0.35);
-            background: rgba(236,72,153,0.12);
-            color: rgb(244 114 182);
-            box-shadow: 0 0 20px rgba(236,72,153,0.18);
+
+        @keyframes glitch-a {
+            0%   { clip-path: polygon(0  2%,100%  4%,100% 16%,0 12%); transform: translate(-7px, 0)     skewX(-2deg); }
+            5%   { clip-path: polygon(0 50%,100% 47%,100% 58%,0 55%); transform: translate( 5px,-2px)   skewX( 3deg); }
+            10%  { clip-path: polygon(0 80%,100% 78%,100% 95%,0 92%); transform: translate(-4px, 3px)   skewX(-1deg); }
+            15%  { clip-path: polygon(0 20%,100% 18%,100% 32%,0 28%); transform: translate( 8px, 0)     skewX( 2deg); }
+            20%  { clip-path: polygon(0  0%,100%  0%,100%  8%,0  6%); transform: translate(-6px, 1px)   skewX(-3deg); }
+            25%  { clip-path: polygon(0 60%,100% 62%,100% 70%,0 68%); transform: translate( 4px,-4px)   skewX( 1deg); }
+            30%  { clip-path: polygon(0 35%,100% 33%,100% 50%,0 45%); transform: translate(-9px, 0)     skewX(-2deg); }
+            35%  { clip-path: polygon(0 72%,100% 70%,100% 88%,0 85%); transform: translate( 6px, 3px)   skewX( 3deg); }
+            40%  { clip-path: polygon(0  4%,100%  2%,100% 22%,0 18%); transform: translate(-5px,-2px)   skewX(-1deg); }
+            45%  { clip-path: polygon(0 90%,100% 88%,100%,0 100%);    transform: translate( 9px, 0)     skewX( 2deg); }
+            50%  { clip-path: polygon(0 44%,100% 42%,100% 56%,0 52%); transform: translate(-7px, 4px)   skewX(-2deg); }
+            55%  { clip-path: polygon(0 10%,100%  8%,100% 28%,0 24%); transform: translate( 5px,-3px)   skewX( 1deg); }
+            60%  { clip-path: polygon(0 66%,100% 64%,100% 78%,0 76%); transform: translate(-4px, 0)     skewX(-3deg); }
+            65%  { clip-path: polygon(0 28%,100% 26%,100% 38%,0 35%); transform: translate(10px,-2px)   skewX( 2deg); }
+            70%  { clip-path: polygon(0 82%,100% 80%,100% 92%,0 90%); transform: translate(-6px, 3px)   skewX(-1deg); }
+            75%  { clip-path: polygon(0  0%,100%  0%,100%  5%,0  4%); transform: translate( 4px, 0)     skewX( 3deg); }
+            80%  { clip-path: polygon(0 54%,100% 52%,100% 65%,0 62%); transform: translate(-8px,-3px)   skewX(-2deg); }
+            85%  { clip-path: polygon(0 38%,100% 36%,100% 48%,0 46%); transform: translate( 7px, 2px)   skewX( 1deg); }
+            90%  { clip-path: polygon(0 76%,100% 74%,100% 85%,0 82%); transform: translate(-5px,-4px)   skewX(-3deg); }
+            95%  { clip-path: polygon(0 14%,100% 12%,100% 26%,0 22%); transform: translate( 6px, 3px)   skewX( 2deg); }
+            100% { clip-path: polygon(0  2%,100%  4%,100% 16%,0 12%); transform: translate(-7px, 0)     skewX(-2deg); }
         }
-        .cyber-grid {
-            background-image:
-                linear-gradient(rgba(236,72,153,0.06) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(34,211,238,0.06) 1px, transparent 1px);
-            background-size: 42px 42px;
+
+        @keyframes glitch-b {
+            0%   { clip-path: polygon(0 55%,100% 52%,100% 72%,0 68%); transform: translate( 6px, 0)     skewX( 2deg); }
+            7%   { clip-path: polygon(0  8%,100%  6%,100% 20%,0 16%); transform: translate(-8px, 3px)   skewX(-3deg); }
+            14%  { clip-path: polygon(0 78%,100% 76%,100% 95%,0 92%); transform: translate(10px,-2px)   skewX( 1deg); }
+            21%  { clip-path: polygon(0 30%,100% 28%,100% 44%,0 40%); transform: translate(-5px, 4px)   skewX(-2deg); }
+            28%  { clip-path: polygon(0  0%,100%  0%,100% 10%,0  8%); transform: translate( 8px,-3px)   skewX( 3deg); }
+            35%  { clip-path: polygon(0 62%,100% 60%,100% 76%,0 72%); transform: translate(-4px, 0)     skewX(-1deg); }
+            42%  { clip-path: polygon(0 42%,100% 40%,100% 58%,0 54%); transform: translate( 6px, 3px)   skewX( 2deg); }
+            49%  { clip-path: polygon(0 85%,100% 83%,100% 98%,0 96%); transform: translate(-9px,-2px)   skewX(-3deg); }
+            56%  { clip-path: polygon(0 18%,100% 16%,100% 32%,0 28%); transform: translate( 5px, 2px)   skewX( 1deg); }
+            63%  { clip-path: polygon(0 70%,100% 68%,100% 82%,0 80%); transform: translate(-6px,-3px)   skewX(-2deg); }
+            70%  { clip-path: polygon(0  4%,100%  2%,100% 14%,0 12%); transform: translate( 7px, 0)     skewX( 3deg); }
+            77%  { clip-path: polygon(0 48%,100% 46%,100% 60%,0 56%); transform: translate(-8px, 4px)   skewX(-1deg); }
+            84%  { clip-path: polygon(0 22%,100% 20%,100% 38%,0 34%); transform: translate( 4px,-2px)   skewX( 2deg); }
+            91%  { clip-path: polygon(0 88%,100% 86%,100%,0 98%);     transform: translate(-7px, 3px)   skewX(-3deg); }
+            100% { clip-path: polygon(0 55%,100% 52%,100% 72%,0 68%); transform: translate( 6px, 0)     skewX( 2deg); }
         }
-        @keyframes glitch-shift-a {
-            0% { transform: translate(-2px, 0); }
-            35% { transform: translate(1px, -1px); }
-            70% { transform: translate(-1px, 1px); }
-            100% { transform: translate(-2px, -1px); }
+
+        /* ── PRIMARY BTN ── */
+        .btn-glow {
+            background: #00fff5 !important;
+            color: #02010a !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.05em;
+            box-shadow:
+                0 0 24px rgba(0,255,245,0.65),
+                0 0 50px rgba(0,255,245,0.30),
+                0 0 10px rgba(255,0,60,0.35);
         }
-        @keyframes glitch-shift-b {
-            0% { transform: translate(2px, 0); }
-            40% { transform: translate(-1px, 1px); }
-            75% { transform: translate(1px, -1px); }
-            100% { transform: translate(2px, 1px); }
+        .btn-glow:hover {
+            box-shadow:
+                0 0 40px rgba(0,255,245,0.90),
+                0 0 80px rgba(0,255,245,0.50),
+                0 0 20px rgba(255,0,60,0.55);
+        }
+
+        /* ── SCHEDULE CARD ── */
+        .danger-card {
+            border-color: rgba(0,255,245,0.32) !important;
+            box-shadow:
+                0 0 0 1px rgba(0,255,245,0.18),
+                0 0 35px rgba(0,255,245,0.10),
+                inset 0 0 24px rgba(0,255,245,0.03);
+            transition: all 0.2s ease;
+        }
+        .danger-card:hover {
+            border-color: rgba(0,255,245,0.75) !important;
+            box-shadow:
+                0 0 0 1px rgba(0,255,245,0.55),
+                0 0 55px rgba(0,255,245,0.28),
+                0 0 90px rgba(255,0,60,0.14),
+                inset 0 0 35px rgba(0,255,245,0.06);
+            transform: translateY(-4px);
+        }
+
+        /* ── QUICK ACCESS CARD ── */
+        .quick-card {
+            border-color: rgba(255,0,60,0.28) !important;
+            background: rgba(2,1,10,0.80) !important;
+            box-shadow:
+                0 0 0 1px rgba(255,0,60,0.15),
+                0 0 24px rgba(255,0,60,0.07),
+                inset 0 0 18px rgba(255,0,60,0.04);
+        }
+
+        /* ── SECONDARY BTN ── */
+        .link-secondary {
+            border-color: rgba(0,255,245,0.35) !important;
+            background:   rgba(0,255,245,0.08) !important;
+            color: #00fff5 !important;
+            box-shadow: 0 0 14px rgba(0,255,245,0.18);
+            transition: all 0.2s;
+        }
+        .link-secondary:hover {
+            border-color: rgba(0,255,245,0.80) !important;
+            background:   rgba(0,255,245,0.18) !important;
+            box-shadow: 0 0 28px rgba(0,255,245,0.42);
+            color: #ffffff !important;
+        }
+
+        /* ── GHOST BTNS ── */
+        .link-ghost {
+            border-color: rgba(255,0,60,0.25) !important;
+            color: #ff6680 !important;
+            transition: all 0.2s;
+        }
+        .link-ghost:hover {
+            border-color: rgba(255,0,60,0.70) !important;
+            color: #ff003c !important;
+            background: rgba(255,0,60,0.10) !important;
+            box-shadow: 0 0 18px rgba(255,0,60,0.35);
+        }
+
+        /* ── HEADER EXTRAS ── */
+        .back-link { color: #ff6680 !important; transition: all 0.2s; }
+        .back-link:hover {
+            color: #ff003c !important;
+            text-shadow: 0 0 10px #ff003c;
+        }
+
+        .logout-btn {
+            border-color: rgba(255,0,60,0.40) !important;
+            color: #ff6680 !important;
+            background: rgba(255,0,60,0.08) !important;
+            transition: all 0.2s;
+        }
+        .logout-btn:hover {
+            border-color: rgba(255,0,60,0.85) !important;
+            background: rgba(255,0,60,0.20) !important;
+            color: #ff003c !important;
+            box-shadow: 0 0 22px rgba(255,0,60,0.42);
+        }
+
+        /* ── WELCOME NAME ── */
+        .welcome-name {
+            color: #00fff5 !important;
+            text-shadow: 0 0 14px rgba(0,255,245,0.75), 0 0 28px rgba(0,255,245,0.35);
+        }
+
+        /* ── OPEN SCHEDULE ARROW LINK ── */
+        .open-schedule-link {
+            color: #00fff5 !important;
+            text-shadow: 0 0 10px rgba(0,255,245,0.55);
         }
     </style>
 HTML;
