@@ -116,6 +116,27 @@ try {
     $dbError = $e->getMessage();
 }
 
+// ── Delete handler ────────────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
+    $deleteId = (int) $_POST['delete_id'];
+    if ($deleteId > 0) {
+        try {
+            $delStmt = $pdo->prepare("DELETE FROM mileage_logs WHERE id = :id");
+            $delStmt->execute([':id' => $deleteId]);
+        } catch (PDOException $e) {
+            // silently ignore; redirect regardless
+        }
+    }
+    // PRG: redirect to same page with current filters
+    $qs = http_build_query(array_filter([
+        'start'  => $filterStart,
+        'end'    => $filterEnd,
+        'status' => $filterStatus,
+    ]));
+    header('Location: mileage-tracker.php' . ($qs !== '' ? '?' . $qs : ''));
+    exit;
+}
+
 // ── Totals ────────────────────────────────────────────────────────────────────
 $totalMiles = 0.0;
 $completedTrips = 0;
@@ -360,6 +381,24 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             transition: border-color 0.15s, background 0.15s;
         }
         .nav-btn:hover { border-color: rgba(6,182,212,0.4); background: rgba(6,182,212,0.06); }
+
+        .delete-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.65rem;
+            border-radius: 0.375rem;
+            border: 1px solid rgba(239,68,68,0.35);
+            background: rgba(239,68,68,0.08);
+            color: #fca5a5;
+            font-size: 0.72rem;
+            font-weight: 600;
+            cursor: pointer;
+            letter-spacing: 0.02em;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .delete-btn:hover { border-color: rgba(239,68,68,0.65); background: rgba(239,68,68,0.18); }
     </style>
 </head>
 <body class="bg-zinc-950 text-white font-sans antialiased min-h-screen">
@@ -488,6 +527,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         <th>Total Miles</th>
                         <th>Job ID</th>
                         <th>Status</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -526,6 +566,15 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <?php else: ?>
                                     <span class="badge-pending">Pending</span>
                                 <?php endif; ?>
+                            </td>
+                            <td class="whitespace-nowrap">
+                                <form method="POST" action="mileage-tracker.php<?= $filterStart !== '' || $filterEnd !== '' || $filterStatus !== '' ? '?' . htmlspecialchars(http_build_query(array_filter(['start' => $filterStart, 'end' => $filterEnd, 'status' => $filterStatus])), ENT_QUOTES, 'UTF-8') : '' ?>" style="display:inline;">
+                                    <input type="hidden" name="delete_id" value="<?= (int) $row['id'] ?>">
+                                    <button type="submit" class="delete-btn" onclick="return confirm('Are you sure you want to delete this mileage record? This action cannot be undone.')">
+                                        <svg style="width:0.7rem;height:0.7rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                        Delete
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                     <?php endforeach; ?>
