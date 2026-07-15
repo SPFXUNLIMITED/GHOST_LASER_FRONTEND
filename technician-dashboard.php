@@ -203,6 +203,53 @@ if ($adminUsername === '') {
         }
         .maps-link:active { color: #06b6d4; }
 
+        .mileage-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            border-radius: 0.5rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 0.45rem 0.9rem;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.15s, transform 0.1s;
+            -webkit-tap-highlight-color: transparent;
+            white-space: nowrap;
+        }
+        .mileage-btn:active { transform: scale(0.96); }
+        .mileage-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .btn-on-way {
+            background: rgba(6,182,212,0.15);
+            border: 1px solid rgba(6,182,212,0.4);
+            color: #22d3ee;
+        }
+        .btn-on-way.active {
+            background: rgba(6,182,212,0.3);
+            border-color: rgba(6,182,212,0.7);
+        }
+
+        .btn-arrived {
+            background: rgba(34,197,94,0.12);
+            border: 1px solid rgba(34,197,94,0.35);
+            color: #86efac;
+        }
+        .btn-arrived.active {
+            background: rgba(34,197,94,0.25);
+            border-color: rgba(34,197,94,0.65);
+        }
+
+        .mileage-status {
+            font-size: 0.7rem;
+            color: #71717a;
+            margin-top: 0.35rem;
+            min-height: 1rem;
+        }
+        .mileage-status.ok  { color: #86efac; }
+        .mileage-status.err { color: #fca5a5; }
+
         .nav-btn {
             display: inline-flex;
             align-items: center;
@@ -385,6 +432,33 @@ if ($adminUsername === '') {
                                     </p>
                                 </div>
                             <?php endif; ?>
+
+                            <!-- Row 5: mileage tracking buttons -->
+                            <div class="mt-3 pt-3 border-t border-zinc-800/70">
+                                <div class="flex items-center gap-2">
+                                    <button
+                                        class="mileage-btn btn-on-way"
+                                        data-action="on_my_way"
+                                        data-job-id="<?= (int) $job['service_request_id'] ?>"
+                                        data-client="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-address="<?= htmlspecialchars($fullAddress, ENT_QUOTES, 'UTF-8') ?>"
+                                        title="Record departure time and GPS coordinates"
+                                    >
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12l7-7m0 0l7 7m-7-7v14"/></svg>
+                                        On My Way
+                                    </button>
+                                    <button
+                                        class="mileage-btn btn-arrived"
+                                        data-action="arrived"
+                                        data-job-id="<?= (int) $job['service_request_id'] ?>"
+                                        title="Record arrival time, GPS coordinates, and calculate miles"
+                                    >
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                        Arrived
+                                    </button>
+                                </div>
+                                <div class="mileage-status" data-status-job="<?= (int) $job['service_request_id'] ?>"></div>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
@@ -399,6 +473,112 @@ if ($adminUsername === '') {
 
     <?php endif; ?>
 </main>
+
+<script>
+(function () {
+    'use strict';
+
+    // ── GPS helper ────────────────────────────────────────────────────────────
+    function getCoords() {
+        return new Promise(function (resolve, reject) {
+            if (!navigator.geolocation) {
+                reject(new Error('Geolocation is not supported by this browser.'));
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                },
+                function (err) {
+                    reject(new Error('Unable to get location: ' + err.message));
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
+    }
+
+    // ── Status helper ─────────────────────────────────────────────────────────
+    function setStatus(jobId, msg, type) {
+        var el = document.querySelector('[data-status-job="' + jobId + '"]');
+        if (!el) return;
+        el.textContent = msg;
+        el.className = 'mileage-status' + (type ? ' ' + type : '');
+    }
+
+    // ── API call ──────────────────────────────────────────────────────────────
+    function callMileageApi(payload, btn, jobId) {
+        btn.disabled = true;
+        setStatus(jobId, 'Getting GPS location…', '');
+
+        getCoords().then(function (coords) {
+            if (payload.action === 'on_my_way') {
+                payload.start_lat = coords.lat;
+                payload.start_lng = coords.lng;
+            } else {
+                payload.end_lat = coords.lat;
+                payload.end_lng = coords.lng;
+            }
+
+            setStatus(jobId, 'Saving…', '');
+
+            return fetch('/api/mileage-api.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        }).then(function (res) {
+            return res.json();
+        }).then(function (data) {
+            if (!data.success) {
+                setStatus(jobId, '✗ ' + (data.error || 'Error saving'), 'err');
+                btn.disabled = false;
+                return;
+            }
+
+            if (payload.action === 'on_my_way') {
+                btn.classList.add('active');
+                var arrivedBtn = btn.parentElement.querySelector('[data-action="arrived"]');
+                if (arrivedBtn) arrivedBtn.disabled = false;
+                setStatus(jobId, '✓ Departed at ' + data.start_time, 'ok');
+            } else {
+                btn.classList.add('active');
+                var miles = data.total_miles !== null && data.total_miles !== undefined
+                    ? ' — ' + data.total_miles + ' miles'
+                    : '';
+                setStatus(jobId, '✓ Arrived at ' + data.end_time + miles, 'ok');
+            }
+        }).catch(function (err) {
+            setStatus(jobId, '✗ ' + err.message, 'err');
+            btn.disabled = false;
+        });
+    }
+
+    // ── Attach listeners ──────────────────────────────────────────────────────
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.mileage-btn');
+        if (!btn || btn.disabled) return;
+
+        var action  = btn.dataset.action;
+        var jobId   = parseInt(btn.dataset.jobId, 10);
+
+        if (action === 'on_my_way') {
+            var payload = {
+                action:             'on_my_way',
+                service_request_id: jobId,
+                client_name:        btn.dataset.client  || '',
+                address:            btn.dataset.address || ''
+            };
+            callMileageApi(payload, btn, jobId);
+        } else if (action === 'arrived') {
+            var payload = {
+                action:             'arrived',
+                service_request_id: jobId
+            };
+            callMileageApi(payload, btn, jobId);
+        }
+    });
+}());
+</script>
 
 </body>
 </html>

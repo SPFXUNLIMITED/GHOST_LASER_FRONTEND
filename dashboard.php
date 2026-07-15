@@ -131,6 +131,12 @@ require_once __DIR__ . '/templates/header.php';
                             >
                                 Open Admin Settings
                             </a>
+                            <a
+                                href="mileage-tracker.php"
+                                class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-zinc-700 px-4 py-3 text-sm font-semibold text-zinc-200 transition-all hover:border-cyan-400 hover:text-white"
+                            >
+                                IRS Mileage Tracker
+                            </a>
                         </div>
                     </div>
                 </div>
