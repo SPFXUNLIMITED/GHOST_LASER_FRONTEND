@@ -897,7 +897,11 @@ require_once __DIR__ . '/templates/header.php';
         }
         var data = _modalData;
         closeMileageModal();
-        data.payload.mileage = mileage;
+        if (data.payload.action === 'on_my_way') {
+            data.payload.start_mileage = mileage;
+        } else {
+            data.payload.end_mileage = mileage;
+        }
         callMileageApi(data.payload, data.btn, data.jobId);
     });
 
@@ -923,7 +927,8 @@ require_once __DIR__ . '/templates/header.php';
                 action:             'arrived',
                 service_request_id: jobId
             };
-            callMileageApi(payload, btn, jobId);
+            btn.disabled = true;
+            openMileageModal(btn, jobId, payload);
         }
     });
 }());
