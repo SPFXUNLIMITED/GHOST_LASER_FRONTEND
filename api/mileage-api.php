@@ -1,0 +1,285 @@
+<?php
+/**
+ * api/mileage-api.php – Mileage tracking API for IRS-compliant mileage logs.
+ *
+ * POST actions:
+ *   on_my_way – Creates a pending mileage record with start data.
+ *   arrived   – Completes the record with end data and calculates miles.
+ *
+ * All timestamps are stored in America/Los_Angeles timezone.
+ */
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+header('Content-Type: application/json; charset=UTF-8');
+header('X-Content-Type-Options: nosniff');
+
+if (empty($_SESSION['admin_id'])) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+    exit;
+}
+
+require_once __DIR__ . '/../project/db.php';
+$cfg = require __DIR__ . '/../config.php';
+
+// ── Ensure mileage_logs table exists ─────────────────────────────────────────
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS mileage_logs (
+        id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        service_request_id INT UNSIGNED NOT NULL,
+        client_name        VARCHAR(255)  NOT NULL DEFAULT '',
+        address            VARCHAR(500)  NOT NULL DEFAULT '',
+        trip_date          DATE          NULL,
+        start_time         DATETIME      NULL COMMENT 'LA timezone',
+        end_time           DATETIME      NULL COMMENT 'LA timezone',
+        start_lat          DECIMAL(10,7) NULL,
+        start_lng          DECIMAL(10,7) NULL,
+        end_lat            DECIMAL(10,7) NULL,
+        end_lng            DECIMAL(10,7) NULL,
+        total_miles        DECIMAL(8,2)  NULL,
+        status             ENUM('pending','complete') NOT NULL DEFAULT 'pending',
+        created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_service_request (service_request_id),
+        INDEX idx_trip_date (trip_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+
+// ── Parse body ────────────────────────────────────────────────────────────────
+$raw    = file_get_contents('php://input');
+$data   = json_decode($raw, true);
+if (!is_array($data)) {
+    $data = $_POST;
+}
+
+$action = trim((string) ($data['action'] ?? ''));
+
+// ── Helper: get LA datetime ───────────────────────────────────────────────────
+function nowLa(): DateTimeImmutable
+{
+    return new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles'));
+}
+
+function laDateTimeString(): string
+{
+    return nowLa()->format('Y-m-d H:i:s');
+}
+
+function laDateString(): string
+{
+    return nowLa()->format('Y-m-d');
+}
+
+// ── Helper: validate coordinate ───────────────────────────────────────────────
+function validCoord(?string $v): ?float
+{
+    if ($v === null || $v === '') {
+        return null;
+    }
+    $f = filter_var($v, FILTER_VALIDATE_FLOAT);
+    return $f === false ? null : $f;
+}
+
+// ── Helper: calculate miles via Google Maps Distance Matrix ───────────────────
+function calculateMiles(
+    float  $startLat,
+    float  $startLng,
+    float  $endLat,
+    float  $endLng,
+    string $apiKey
+): ?float {
+    if ($apiKey === '') {
+        // Fallback: haversine straight-line distance (convert km → miles)
+        $earthKm = 6371;
+        $dLat    = deg2rad($endLat - $startLat);
+        $dLng    = deg2rad($endLng - $startLng);
+        $a       = sin($dLat / 2) ** 2
+                 + cos(deg2rad($startLat)) * cos(deg2rad($endLat)) * sin($dLng / 2) ** 2;
+        $km      = $earthKm * 2 * asin(sqrt($a));
+        return round($km * 0.621371, 2);
+    }
+
+    $url = 'https://maps.googleapis.com/maps/api/distancematrix/json?'
+         . http_build_query([
+             'origins'      => "{$startLat},{$startLng}",
+             'destinations' => "{$endLat},{$endLng}",
+             'mode'         => 'driving',
+             'units'        => 'imperial',
+             'key'          => $apiKey,
+         ]);
+
+    $ctx = stream_context_create(['http' => ['timeout' => 5]]);
+    $res = @file_get_contents($url, false, $ctx);
+    if ($res === false) {
+        return null;
+    }
+
+    $json = json_decode($res, true);
+    $meters = $json['rows'][0]['elements'][0]['distance']['value'] ?? null;
+    if ($meters === null) {
+        return null;
+    }
+
+    // Convert metres → miles
+    return round($meters / 1609.344, 2);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Action: on_my_way
+// ═════════════════════════════════════════════════════════════════════════════
+if ($action === 'on_my_way') {
+    $serviceRequestId = (int) ($data['service_request_id'] ?? 0);
+    $clientName       = trim((string) ($data['client_name'] ?? ''));
+    $address          = trim((string) ($data['address'] ?? ''));
+    $startLat         = validCoord((string) ($data['start_lat'] ?? ''));
+    $startLng         = validCoord((string) ($data['start_lng'] ?? ''));
+
+    if ($serviceRequestId <= 0) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Missing service_request_id']);
+        exit;
+    }
+
+    $startTime = laDateTimeString();
+    $tripDate  = laDateString();
+
+    // Upsert: if a pending record already exists for this job today, update it
+    $existing = $pdo->prepare(
+        "SELECT id FROM mileage_logs
+         WHERE service_request_id = :sri AND status = 'pending'
+         ORDER BY id DESC LIMIT 1"
+    );
+    $existing->execute([':sri' => $serviceRequestId]);
+    $row = $existing->fetch(PDO::FETCH_ASSOC);
+
+    if ($row) {
+        $stmt = $pdo->prepare(
+            "UPDATE mileage_logs
+             SET client_name = :cn,
+                 address     = :addr,
+                 trip_date   = :td,
+                 start_time  = :st,
+                 start_lat   = :slat,
+                 start_lng   = :slng
+             WHERE id = :id"
+        );
+        $stmt->execute([
+            ':cn'   => $clientName,
+            ':addr' => $address,
+            ':td'   => $tripDate,
+            ':st'   => $startTime,
+            ':slat' => $startLat,
+            ':slng' => $startLng,
+            ':id'   => $row['id'],
+        ]);
+        $logId = $row['id'];
+    } else {
+        $stmt = $pdo->prepare(
+            "INSERT INTO mileage_logs
+                (service_request_id, client_name, address, trip_date, start_time, start_lat, start_lng, status)
+             VALUES
+                (:sri, :cn, :addr, :td, :st, :slat, :slng, 'pending')"
+        );
+        $stmt->execute([
+            ':sri'  => $serviceRequestId,
+            ':cn'   => $clientName,
+            ':addr' => $address,
+            ':td'   => $tripDate,
+            ':st'   => $startTime,
+            ':slat' => $startLat,
+            ':slng' => $startLng,
+        ]);
+        $logId = (int) $pdo->lastInsertId();
+    }
+
+    echo json_encode([
+        'success'    => true,
+        'log_id'     => $logId,
+        'start_time' => $startTime,
+        'trip_date'  => $tripDate,
+    ]);
+    exit;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Action: arrived
+// ═════════════════════════════════════════════════════════════════════════════
+if ($action === 'arrived') {
+    $serviceRequestId = (int) ($data['service_request_id'] ?? 0);
+    $endLat           = validCoord((string) ($data['end_lat'] ?? ''));
+    $endLng           = validCoord((string) ($data['end_lng'] ?? ''));
+
+    if ($serviceRequestId <= 0) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Missing service_request_id']);
+        exit;
+    }
+
+    // Find the most recent pending record for this job
+    $stmt = $pdo->prepare(
+        "SELECT * FROM mileage_logs
+         WHERE service_request_id = :sri AND status = 'pending'
+         ORDER BY id DESC LIMIT 1"
+    );
+    $stmt->execute([':sri' => $serviceRequestId]);
+    $log = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$log) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'No pending on_my_way record found for this job. Please tap "On My Way" first.']);
+        exit;
+    }
+
+    $endTime    = laDateTimeString();
+    $totalMiles = null;
+
+    $apiKey = $cfg['google_maps']['api_key'] ?? '';
+
+    if ($log['start_lat'] !== null && $log['start_lng'] !== null && $endLat !== null && $endLng !== null) {
+        $totalMiles = calculateMiles(
+            (float) $log['start_lat'],
+            (float) $log['start_lng'],
+            $endLat,
+            $endLng,
+            $apiKey
+        );
+    }
+
+    $update = $pdo->prepare(
+        "UPDATE mileage_logs
+         SET end_time    = :et,
+             end_lat     = :elat,
+             end_lng     = :elng,
+             total_miles = :miles,
+             status      = 'complete'
+         WHERE id = :id"
+    );
+    $update->execute([
+        ':et'    => $endTime,
+        ':elat'  => $endLat,
+        ':elng'  => $endLng,
+        ':miles' => $totalMiles,
+        ':id'    => $log['id'],
+    ]);
+
+    echo json_encode([
+        'success'     => true,
+        'log_id'      => $log['id'],
+        'end_time'    => $endTime,
+        'total_miles' => $totalMiles,
+    ]);
+    exit;
+}
+
+// ── Unknown action ────────────────────────────────────────────────────────────
+http_response_code(400);
+echo json_encode(['success' => false, 'error' => 'Unknown action']);
