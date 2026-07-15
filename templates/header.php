@@ -29,10 +29,13 @@ if ($customerLoggedIn) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <?= $pwaHead ?? '' ?>
     <title><?= htmlspecialchars($pageTitle ?? 'Ghost Laser') ?></title>
+    <?php if (empty($pwaHead)): ?>
     <link rel="icon" type="image/png" href="<?= asset('ghost-logo2-32x32.png') ?>">
     <link rel="shortcut icon" type="image/png" href="<?= asset('ghost-logo2-32x32.png') ?>">
     <link rel="apple-touch-icon" href="<?= asset('ghost-logo2-32x32.png') ?>">
+    <?php endif; ?>
     <?php if (!empty($pageDescription)): ?>
     <meta name="description" content="<?= htmlspecialchars($pageDescription) ?>">
     <?php endif; ?>
