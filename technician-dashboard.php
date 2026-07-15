@@ -124,6 +124,10 @@ if ($adminUsername === '') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#09090b">
+    <link rel="manifest" href="/manifest.json">
     <title>Technician Dashboard | Ghost Laser</title>
     <script src="https://cdn.tailwindcss.com?v=1.2"></script>
     <script>

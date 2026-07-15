@@ -1,0 +1,17 @@
+{
+    "name": "Ghost Laser",
+    "short_name": "GhostLaser",
+    "description": "Ghost Laser technician and admin dashboard",
+    "start_url": "/dashboard.php",
+    "display": "fullscreen",
+    "background_color": "#09090b",
+    "theme_color": "#09090b",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/ghost-logo2-32x32.png",
+            "sizes": "32x32",
+            "type": "image/png"
+        }
+    ]
+}
