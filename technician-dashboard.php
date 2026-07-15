@@ -330,6 +330,201 @@ $extraHead       = <<<'HTML'
         @media (max-width: 480px) {
             .maps-link { font-size: 0.82rem; }
         }
+
+        /* ── Mileage Entry Modal ──────────────────────────────────────────── */
+        .mileage-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.97);
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        .mileage-modal.open { display: flex; }
+
+        .mileage-modal-inner {
+            width: 100%;
+            max-width: 360px;
+            margin: 0 1rem;
+            padding: 2rem 1.5rem 1.75rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+            background: linear-gradient(160deg, rgba(9,9,11,0.99), rgba(15,15,18,0.99));
+            border: 1px solid rgba(6,182,212,0.28);
+            border-radius: 1.25rem;
+            box-shadow:
+                0 0 0 1px rgba(6,182,212,0.08),
+                0 0 60px rgba(6,182,212,0.1),
+                0 0 120px rgba(6,182,212,0.04),
+                inset 0 0 40px rgba(0,0,0,0.6);
+        }
+
+        .mileage-modal-header { text-align: center; }
+        .mileage-modal-title {
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: rgba(6,182,212,0.65);
+        }
+        .mileage-modal-sub {
+            font-size: 0.68rem;
+            color: #52525b;
+            margin-top: 0.3rem;
+            letter-spacing: 0.06em;
+        }
+
+        .nixie-display {
+            display: flex;
+            gap: 0.2rem;
+            padding: 0.85rem 1.1rem;
+            background: #040406;
+            border: 1px solid rgba(6,182,212,0.18);
+            border-radius: 0.75rem;
+            box-shadow:
+                inset 0 3px 10px rgba(0,0,0,0.85),
+                0 0 20px rgba(249,115,22,0.04);
+        }
+        .nixie-digit {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Courier New', 'Lucida Console', monospace;
+            font-size: 3rem;
+            font-weight: 700;
+            width: 2.25rem;
+            color: #f97316;
+            text-shadow:
+                0 0 6px rgba(249,115,22,0.95),
+                0 0 18px rgba(249,115,22,0.55),
+                0 0 38px rgba(249,115,22,0.28);
+            line-height: 1;
+            letter-spacing: -0.02em;
+            transition: color 0.1s, text-shadow 0.1s;
+        }
+        .nixie-digit.dim {
+            color: rgba(249,115,22,0.18);
+            text-shadow: none;
+        }
+
+        .nixie-error {
+            font-size: 0.68rem;
+            color: #fca5a5;
+            min-height: 1rem;
+            text-align: center;
+            letter-spacing: 0.04em;
+        }
+
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.55rem;
+            width: 100%;
+        }
+        .keypad-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 3.4rem;
+            border-radius: 0.625rem;
+            font-weight: 700;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.08s, background 0.1s, border-color 0.1s;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        .keypad-btn:active { transform: scale(0.91); }
+
+        .keypad-num {
+            font-size: 1.3rem;
+            background: rgba(39,39,42,0.7);
+            border: 1px solid rgba(63,63,70,0.8);
+            color: #e4e4e7;
+        }
+        .keypad-num:hover {
+            background: rgba(63,63,70,0.65);
+            border-color: rgba(6,182,212,0.3);
+        }
+        .keypad-back {
+            font-size: 1.15rem;
+            background: rgba(39,39,42,0.7);
+            border: 1px solid rgba(63,63,70,0.8);
+            color: #a1a1aa;
+        }
+        .keypad-back:hover {
+            background: rgba(63,63,70,0.65);
+            border-color: rgba(6,182,212,0.3);
+        }
+        .keypad-clear {
+            font-size: 0.72rem;
+            letter-spacing: 0.1em;
+            background: rgba(39,39,42,0.7);
+            border: 1px solid rgba(63,63,70,0.8);
+            color: #a1a1aa;
+        }
+        .keypad-clear:hover {
+            border-color: rgba(239,68,68,0.4);
+            color: #fca5a5;
+        }
+
+        .keypad-actions {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 0.55rem;
+            width: 100%;
+        }
+        .keypad-cancel {
+            height: 3rem;
+            background: rgba(39,39,42,0.45);
+            border: 1px solid rgba(63,63,70,0.55);
+            color: #71717a;
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.07em;
+            border-radius: 0.625rem;
+            cursor: pointer;
+            transition: color 0.1s, border-color 0.1s, transform 0.08s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .keypad-cancel:hover { color: #a1a1aa; border-color: rgba(113,113,122,0.6); }
+        .keypad-cancel:active { transform: scale(0.96); }
+
+        .keypad-confirm {
+            height: 3rem;
+            background: linear-gradient(135deg, rgba(6,182,212,0.22), rgba(6,182,212,0.13));
+            border: 1px solid rgba(6,182,212,0.48);
+            color: #22d3ee;
+            font-size: 0.88rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            border-radius: 0.625rem;
+            cursor: pointer;
+            transition: all 0.1s;
+            box-shadow: 0 0 14px rgba(6,182,212,0.12);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .keypad-confirm:hover {
+            background: linear-gradient(135deg, rgba(6,182,212,0.32), rgba(6,182,212,0.22));
+            box-shadow: 0 0 26px rgba(6,182,212,0.28);
+        }
+        .keypad-confirm:active { transform: scale(0.97); }
+        .keypad-confirm:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        @keyframes nixie-shake {
+            0%, 100% { transform: translateX(0); }
+            20%       { transform: translateX(-6px); }
+            40%       { transform: translateX(6px); }
+            60%       { transform: translateX(-4px); }
+            80%       { transform: translateX(4px); }
+        }
+        .nixie-display.shake { animation: nixie-shake 0.32s ease; }
     </style>
 HTML;
 $headerRight     = <<<'HTML'
@@ -575,6 +770,96 @@ require_once __DIR__ . '/templates/header.php';
         });
     }
 
+    // ── Mileage Modal ─────────────────────────────────────────────────────────
+    var _modalData   = null; // { btn, jobId, payload }
+    var _mileageInput = '';
+    var DIGIT_COUNT  = 6;
+
+    function updateNixieDisplay() {
+        var padded = _mileageInput.padStart(DIGIT_COUNT, '0');
+        var firstNonZero = padded.search(/[1-9]/);
+        for (var i = 0; i < DIGIT_COUNT; i++) {
+            var el = document.getElementById('nd' + i);
+            if (!el) continue;
+            el.textContent = padded[i];
+            if (firstNonZero === -1 || i < firstNonZero) {
+                el.classList.add('dim');
+            } else {
+                el.classList.remove('dim');
+            }
+        }
+    }
+
+    function openMileageModal(btn, jobId, payload) {
+        _modalData    = { btn: btn, jobId: jobId, payload: payload };
+        _mileageInput = '';
+        updateNixieDisplay();
+        document.getElementById('nixieError').textContent = '';
+        var modal = document.getElementById('mileageModal');
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMileageModal() {
+        document.getElementById('mileageModal').classList.remove('open');
+        document.body.style.overflow = '';
+        _modalData    = null;
+        _mileageInput = '';
+    }
+
+    function shakeDisplay() {
+        var display = document.getElementById('nixieDisplay');
+        display.classList.remove('shake');
+        // Force reflow so the animation re-triggers
+        void display.offsetWidth;
+        display.classList.add('shake');
+    }
+
+    document.getElementById('keypadCancel').addEventListener('click', function () {
+        if (_modalData && _modalData.btn) {
+            _modalData.btn.disabled = false;
+        }
+        closeMileageModal();
+    });
+
+    document.getElementById('keypadClear').addEventListener('click', function () {
+        _mileageInput = '';
+        document.getElementById('nixieError').textContent = '';
+        updateNixieDisplay();
+    });
+
+    document.getElementById('keypadBack').addEventListener('click', function () {
+        _mileageInput = _mileageInput.slice(0, -1);
+        document.getElementById('nixieError').textContent = '';
+        updateNixieDisplay();
+    });
+
+    document.getElementById('mileageKeypad').addEventListener('click', function (e) {
+        var numBtn = e.target.closest('.keypad-num');
+        if (!numBtn) return;
+        if (_mileageInput.length >= DIGIT_COUNT) return;
+        var digit = numBtn.dataset.digit;
+        // Prevent leading zeros
+        if (_mileageInput === '' && digit === '0') return;
+        _mileageInput += digit;
+        document.getElementById('nixieError').textContent = '';
+        updateNixieDisplay();
+    });
+
+    document.getElementById('keypadConfirm').addEventListener('click', function () {
+        if (!_modalData) return;
+        var mileage = parseInt(_mileageInput, 10);
+        if (!_mileageInput || mileage < 1) {
+            document.getElementById('nixieError').textContent = 'Enter a valid mileage reading';
+            shakeDisplay();
+            return;
+        }
+        var data = _modalData;
+        closeMileageModal();
+        data.payload.mileage = mileage;
+        callMileageApi(data.payload, data.btn, data.jobId);
+    });
+
     // ── Attach listeners ──────────────────────────────────────────────────────
     document.addEventListener('click', function (e) {
         var btn = e.target.closest('.mileage-btn');
@@ -590,7 +875,8 @@ require_once __DIR__ . '/templates/header.php';
                 client_name:        btn.dataset.client  || '',
                 address:            btn.dataset.address || ''
             };
-            callMileageApi(payload, btn, jobId);
+            btn.disabled = true;
+            openMileageModal(btn, jobId, payload);
         } else if (action === 'arrived') {
             var payload = {
                 action:             'arrived',
@@ -601,5 +887,46 @@ require_once __DIR__ . '/templates/header.php';
     });
 }());
 </script>
+
+<!-- ── Mileage Entry Modal ───────────────────────────────────────────────── -->
+<div id="mileageModal" class="mileage-modal" role="dialog" aria-modal="true" aria-label="Enter truck mileage">
+    <div class="mileage-modal-inner">
+        <div class="mileage-modal-header">
+            <div class="mileage-modal-title">Odometer Reading</div>
+            <div class="mileage-modal-sub">Enter current truck mileage before departing</div>
+        </div>
+
+        <div class="nixie-display" id="nixieDisplay">
+            <span class="nixie-digit dim" id="nd0">0</span>
+            <span class="nixie-digit dim" id="nd1">0</span>
+            <span class="nixie-digit dim" id="nd2">0</span>
+            <span class="nixie-digit dim" id="nd3">0</span>
+            <span class="nixie-digit dim" id="nd4">0</span>
+            <span class="nixie-digit dim" id="nd5">0</span>
+        </div>
+
+        <div class="nixie-error" id="nixieError"></div>
+
+        <div class="keypad" id="mileageKeypad">
+            <button class="keypad-btn keypad-num" data-digit="7">7</button>
+            <button class="keypad-btn keypad-num" data-digit="8">8</button>
+            <button class="keypad-btn keypad-num" data-digit="9">9</button>
+            <button class="keypad-btn keypad-num" data-digit="4">4</button>
+            <button class="keypad-btn keypad-num" data-digit="5">5</button>
+            <button class="keypad-btn keypad-num" data-digit="6">6</button>
+            <button class="keypad-btn keypad-num" data-digit="1">1</button>
+            <button class="keypad-btn keypad-num" data-digit="2">2</button>
+            <button class="keypad-btn keypad-num" data-digit="3">3</button>
+            <button class="keypad-btn keypad-clear" id="keypadClear">CLR</button>
+            <button class="keypad-btn keypad-num" data-digit="0">0</button>
+            <button class="keypad-btn keypad-back" id="keypadBack">&#x232B;</button>
+        </div>
+
+        <div class="keypad-actions">
+            <button class="keypad-btn keypad-cancel" id="keypadCancel">Cancel</button>
+            <button class="keypad-btn keypad-confirm" id="keypadConfirm">Confirm</button>
+        </div>
+    </div>
+</div>
 
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
