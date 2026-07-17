@@ -962,8 +962,9 @@ require_once __DIR__ . '/templates/header.php';
                 state:         (bookingPayload.state || '').toUpperCase(),
                 zip:           bookingPayload.zip,
                 problem:       problemSections.join('\n\n'),
-                password:      bookingPayload.password      || '',
-                confirm_password: bookingPayload.confirm_password || '',
+			// No password fields for internal bookings
+				password:      '',
+				confirm_password: '',
                 priority:      speedPriorityMap[selectedSpeed] || 'standard',
                 website:       stepTwoForm.website.value.trim(),
                 services:      bookingPayload.services || [],
