@@ -9,6 +9,15 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 
+try {
+    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_brand VARCHAR(100) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_model VARCHAR(100) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_watts VARCHAR(50) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_age VARCHAR(50) DEFAULT NULL");
+} catch (Throwable $e) {
+    // Ignore schema sync errors so booking remains available.
+}
+
 if (empty($_SESSION['book_internal_customer_search_csrf'])) {
     $_SESSION['book_internal_customer_search_csrf'] = bin2hex(random_bytes(32));
 }
@@ -39,7 +48,7 @@ if ($isCustomerSearchRequest) {
     try {
         $like = '%' . $q . '%';
         $stmt = $pdo->prepare(
-            'SELECT id, first_name, last_name, company, email, phone, address, city, state, zip
+            'SELECT id, first_name, last_name, company, email, phone, address, city, state, zip, machine_brand, machine_model, machine_watts, machine_age
              FROM customers
              WHERE first_name LIKE :q
                 OR last_name LIKE :q
@@ -70,6 +79,10 @@ if ($isCustomerSearchRequest) {
             'city'          => (string) ($row['city'] ?? ''),
             'state'         => strtoupper((string) ($row['state'] ?? '')),
             'zip'           => (string) ($row['zip'] ?? ''),
+            'machine_brand' => (string) ($row['machine_brand'] ?? ''),
+            'machine_model' => (string) ($row['machine_model'] ?? ''),
+            'machine_watts' => (string) ($row['machine_watts'] ?? ''),
+            'machine_age'   => (string) ($row['machine_age'] ?? ''),
         ];
     }
     echo json_encode(['results' => $results]);
@@ -401,10 +414,10 @@ require_once __DIR__ . '/templates/header.php';
             <div>
                 <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Machine Details</p>
                 <div class="grid gap-5 sm:grid-cols-2">
-                    <input class="input-base" name="machine_brand" placeholder="Brand *" required value="<?= h($_POST['machine_brand'] ?? '') ?>">
-                    <input class="input-base" name="machine_model" placeholder="Model *" required value="<?= h($_POST['machine_model'] ?? '') ?>">
-                    <input class="input-base" type="number" min="1" name="watts" placeholder="Wattage (optional)" value="<?= h($_POST['watts'] ?? '') ?>">
-                    <input class="input-base" name="age" placeholder="Machine Age (optional)" value="<?= h($_POST['age'] ?? '') ?>">
+                <input class="input-base" id="machine_brand" name="machine_brand" placeholder="Brand *" required value="<?= h($_POST['machine_brand'] ?? '') ?>">
+                <input class="input-base" id="machine_model" name="machine_model" placeholder="Model *" required value="<?= h($_POST['machine_model'] ?? '') ?>">
+                <input class="input-base" type="number" min="1" id="watts" name="watts" placeholder="Wattage (optional)" value="<?= h($_POST['watts'] ?? '') ?>">
+                <input class="input-base" id="age" name="age" placeholder="Machine Age (optional)" value="<?= h($_POST['age'] ?? '') ?>">
                 </div>
             </div>
 
@@ -617,6 +630,10 @@ require_once __DIR__ . '/templates/header.php';
             city:       document.getElementById('city'),
             state:      document.getElementById('state'),
             zip:        document.getElementById('zip'),
+            machine_brand: document.getElementById('machine_brand'),
+            machine_model: document.getElementById('machine_model'),
+            watts:      document.getElementById('watts'),
+            age:        document.getElementById('age'),
         };
 
         if (!searchInput) return;
@@ -653,6 +670,10 @@ require_once __DIR__ . '/templates/header.php';
             if (fields.city)       fields.city.value       = customer.city    || '';
             if (fields.state)      fields.state.value      = (customer.state  || '').toUpperCase();
             if (fields.zip)        fields.zip.value        = customer.zip     || '';
+            if (fields.machine_brand) fields.machine_brand.value = customer.machine_brand || '';
+            if (fields.machine_model) fields.machine_model.value = customer.machine_model || '';
+            if (fields.watts)      fields.watts.value      = customer.machine_watts || '';
+            if (fields.age)        fields.age.value        = customer.machine_age || '';
 
             selectedLabel.textContent = `Customer loaded: ${fullName || 'Unknown'}${customer.company_name ? ' · ' + customer.company_name : ''}`;
             selectedBanner.classList.remove('hidden');
