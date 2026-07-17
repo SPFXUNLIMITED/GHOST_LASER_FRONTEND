@@ -7,6 +7,7 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/project/db.php';
+require_once __DIR__ . '/functions.php';
 
 // ── Helpers (defined early so CSV export can use them) ────────────────────────
 function fmtDateTime(?string $dt): string
@@ -195,21 +196,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mileage Tracker | Ghost Laser</title>
-    <script src="https://cdn.tailwindcss.com?v=1.2"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        cyan: { 400: '#22d3ee', 500: '#06b6d4' }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="<?= asset('assets/css/tailwind.css') ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap&v=1.2" rel="stylesheet">
     <style>

@@ -47,8 +47,9 @@ if ($isCustomerSearchRequest) {
     $rows = [];
     try {
         $like = '%' . $q . '%';
+        $searchColumns = getCustomerSearchSelectColumns($pdo);
         $stmt = $pdo->prepare(
-            'SELECT id, first_name, last_name, company, email, phone, address, city, state, zip, machine_brand, machine_model, machine_watts, machine_age
+            'SELECT ' . implode(', ', $searchColumns) . '
              FROM customers
              WHERE first_name LIKE :q
                 OR last_name LIKE :q
@@ -116,6 +117,29 @@ function formatUsPhoneDisplay($value) {
 
 function formatUsPhoneE164($digits) {
     return $digits === null ? null : '+1' . $digits;
+}
+
+function getCustomerSearchSelectColumns(PDO $pdo): array {
+    $baseColumns = ['id', 'first_name', 'last_name', 'company', 'email', 'phone', 'address', 'city', 'state', 'zip'];
+    $optionalColumns = ['machine_brand', 'machine_model', 'machine_watts', 'machine_age'];
+
+    try {
+        $availableColumns = $pdo->query('SHOW COLUMNS FROM customers')->fetchAll(PDO::FETCH_COLUMN);
+        if (!is_array($availableColumns) || $availableColumns === []) {
+            return $baseColumns;
+        }
+
+        $availableLookup = array_fill_keys($availableColumns, true);
+        foreach ($optionalColumns as $column) {
+            if (isset($availableLookup[$column])) {
+                $baseColumns[] = $column;
+            }
+        }
+    } catch (Throwable $e) {
+        // Fall back to the guaranteed customer fields when schema inspection is unavailable.
+    }
+
+    return $baseColumns;
 }
 
 // ── Data ───────────────────────────────────────────────────────────────────

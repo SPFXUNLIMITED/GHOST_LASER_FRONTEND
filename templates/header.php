@@ -39,30 +39,7 @@ if ($customerLoggedIn) {
     <?php if (!empty($pageDescription)): ?>
     <meta name="description" content="<?= htmlspecialchars($pageDescription) ?>">
     <?php endif; ?>
-    <script src="https://cdn.tailwindcss.com?v=1.2"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        cyan: {
-                            400: '#22d3ee',
-                            500: '#06b6d4',
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    },
-                    backgroundImage: {
-                        'grid-pattern': "linear-gradient(rgba(6,182,212,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.05) 1px, transparent 1px)",
-                    },
-                    backgroundSize: {
-                        'grid': '60px 60px',
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="<?= asset('assets/css/tailwind.css') ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap&v=1.2" rel="stylesheet">
     <style>
