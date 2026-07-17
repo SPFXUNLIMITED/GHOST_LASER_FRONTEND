@@ -47,18 +47,25 @@ if ($isCustomerSearchRequest) {
     $rows = [];
     try {
         $like = '%' . $q . '%';
+        $searchColumns = getCustomerSearchSelectColumns($pdo);
         $stmt = $pdo->prepare(
-            'SELECT id, first_name, last_name, company, email, phone, address, city, state, zip, machine_brand, machine_model, machine_watts, machine_age
+            'SELECT ' . implode(', ', $searchColumns) . '
              FROM customers
-             WHERE first_name LIKE :q
-                OR last_name LIKE :q
-                OR company LIKE :q
-                OR email LIKE :q
-                OR phone LIKE :q
+             WHERE first_name LIKE :first_name_q
+                OR last_name LIKE :last_name_q
+                OR company LIKE :company_q
+                OR email LIKE :email_q
+                OR phone LIKE :phone_q
              ORDER BY last_name, first_name
              LIMIT 8'
         );
-        $stmt->execute([':q' => $like]);
+        $stmt->execute([
+            ':first_name_q' => $like,
+            ':last_name_q'  => $like,
+            ':company_q'    => $like,
+            ':email_q'      => $like,
+            ':phone_q'      => $like,
+        ]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -116,6 +123,29 @@ function formatUsPhoneDisplay($value) {
 
 function formatUsPhoneE164($digits) {
     return $digits === null ? null : '+1' . $digits;
+}
+
+function getCustomerSearchSelectColumns(PDO $pdo): array {
+    $baseColumns = ['id', 'first_name', 'last_name', 'company', 'email', 'phone', 'address', 'city', 'state', 'zip'];
+    $optionalColumns = ['machine_brand', 'machine_model', 'machine_watts', 'machine_age'];
+
+    try {
+        $availableColumns = $pdo->query('SHOW COLUMNS FROM customers')->fetchAll(PDO::FETCH_COLUMN);
+        if (!is_array($availableColumns) || $availableColumns === []) {
+            return $baseColumns;
+        }
+
+        $availableLookup = array_fill_keys($availableColumns, true);
+        foreach ($optionalColumns as $column) {
+            if (isset($availableLookup[$column])) {
+                $baseColumns[] = $column;
+            }
+        }
+    } catch (Throwable $e) {
+        // Fall back to the guaranteed customer fields when schema inspection is unavailable.
+    }
+
+    return $baseColumns;
 }
 
 // ── Data ───────────────────────────────────────────────────────────────────

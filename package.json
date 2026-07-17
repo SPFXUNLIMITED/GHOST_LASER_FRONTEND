@@ -1,0 +1,13 @@
+{
+  "name": "ghost_laser_frontend",
+  "version": "1.0.0",
+  "description": "Build tooling for Ghost Laser frontend assets",
+  "private": true,
+  "scripts": {
+    "build:tailwind": "tailwindcss -i ./assets/css/tailwind-source.css -o ./assets/css/tailwind.css --minify"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  }
+}
