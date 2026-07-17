@@ -51,15 +51,21 @@ if ($isCustomerSearchRequest) {
         $stmt = $pdo->prepare(
             'SELECT ' . implode(', ', $searchColumns) . '
              FROM customers
-             WHERE first_name LIKE :q
-                OR last_name LIKE :q
-                OR company LIKE :q
-                OR email LIKE :q
-                OR phone LIKE :q
+             WHERE first_name LIKE :first_name_q
+                OR last_name LIKE :last_name_q
+                OR company LIKE :company_q
+                OR email LIKE :email_q
+                OR phone LIKE :phone_q
              ORDER BY last_name, first_name
              LIMIT 8'
         );
-        $stmt->execute([':q' => $like]);
+        $stmt->execute([
+            ':first_name_q' => $like,
+            ':last_name_q'  => $like,
+            ':company_q'    => $like,
+            ':email_q'      => $like,
+            ':phone_q'      => $like,
+        ]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         http_response_code(500);
