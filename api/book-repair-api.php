@@ -326,6 +326,13 @@ $zip           = str_field($body, 'zip');
 $country       = str_field($body, 'country') ?: 'USA';
 $priority      = str_field($body, 'priority') ?: 'standard';
 
+// Client-provided coordinates (pre-geocoded by the front-end)
+$client_lat = isset($body['latitude'])  && is_numeric($body['latitude'])  ? (float)$body['latitude']  : null;
+$client_lng = isset($body['longitude']) && is_numeric($body['longitude']) ? (float)$body['longitude'] : null;
+$client_coords_valid = ($client_lat !== null && $client_lng !== null
+    && $client_lat >= -90  && $client_lat <= 90
+    && $client_lng >= -180 && $client_lng <= 180);
+
 // ── Validate ──────────────────────────────────────────────────────────────────
 $errors       = [];
 $field_errors = [];
@@ -501,9 +508,13 @@ try {
         $country
     );
 
-    // Geocode the service address
-    $full_address = implode(', ', array_filter([$street, $city, $state, $zip, $country], fn($p) => $p !== ''));
-    $geo = $full_address !== '' ? geocode_address($full_address) : ['lat' => null, 'lng' => null, 'status' => 'failed'];
+    // Geocode the service address (use client-provided coords if valid, otherwise geocode server-side)
+    if ($client_coords_valid) {
+        $geo = ['lat' => $client_lat, 'lng' => $client_lng, 'status' => 'ok'];
+    } else {
+        $full_address = implode(', ', array_filter([$street, $city, $state, $zip, $country], fn($p) => $p !== ''));
+        $geo = $full_address !== '' ? geocode_address($full_address) : ['lat' => null, 'lng' => null, 'status' => 'failed'];
+    }
 
     $stmt = $pdo->prepare("
         INSERT INTO service_requests (

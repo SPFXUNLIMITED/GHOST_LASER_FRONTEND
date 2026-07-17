@@ -9,6 +9,41 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 
+// Load Google Maps API key for client-side geocoding proxy
+function loadGoogleMapsApiKey(): string {
+    static $key = null;
+    if ($key !== null) return $key;
+    // Check OS environment first
+    $envKey = getenv('GOOGLE_MAPS_API_KEY');
+    if ($envKey !== false && trim($envKey) !== '') {
+        $key = trim($envKey);
+        return $key;
+    }
+    // Fall back to api/.env file (same source used by api/book-repair-api.php)
+    $dotenvPath = __DIR__ . '/api/.env';
+    if (is_file($dotenvPath) && is_readable($dotenvPath)) {
+        $lines = file($dotenvPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (is_array($lines)) {
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || str_starts_with($line, '#')) continue;
+                if (!str_starts_with($line, 'GOOGLE_MAPS_API_KEY=')) continue;
+                $val = substr($line, strlen('GOOGLE_MAPS_API_KEY='));
+                $val = trim($val);
+                if (strlen($val) >= 2) {
+                    if ($val[0] === '"' && $val[-1] === '"') $val = substr($val, 1, -1);
+                    elseif ($val[0] === "'" && $val[-1] === "'") $val = substr($val, 1, -1);
+                }
+                $key = $val;
+                return $key;
+            }
+        }
+    }
+    $key = '';
+    return $key;
+}
+$googleMapsApiKey = loadGoogleMapsApiKey();
+
 try {
     $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_brand VARCHAR(100) DEFAULT NULL");
     $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_model VARCHAR(100) DEFAULT NULL");
@@ -218,6 +253,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'city'         => trim((string) ($_POST['city'] ?? '')),
             'state'        => strtoupper(trim((string) ($_POST['state'] ?? ''))),
             'zip'          => trim((string) ($_POST['zip'] ?? '')),
+            'latitude'     => trim((string) ($_POST['latitude'] ?? '')),
+            'longitude'    => trim((string) ($_POST['longitude'] ?? '')),
             'problem'      => trim((string) ($_POST['problem'] ?? '')),
             'services'     => $services,
             'other_service'=> $otherService,
@@ -255,6 +292,8 @@ if ($step === 2 && $booking) {
         'city'         => (string) ($booking['city']         ?? ''),
         'state'        => (string) ($booking['state']        ?? ''),
         'zip'          => (string) ($booking['zip']          ?? ''),
+        'latitude'     => (string) ($booking['latitude']     ?? ''),
+        'longitude'    => (string) ($booking['longitude']    ?? ''),
         'problem'      => (string) ($booking['problem']      ?? ''),
         'password'     => '',
         'confirm_password' => '',
@@ -435,6 +474,8 @@ require_once __DIR__ . '/templates/header.php';
                         <input class="input-base uppercase" id="state" name="state" maxlength="2" placeholder="State *" required value="<?= h($_POST['state'] ?? '') ?>">
                         <input class="input-base" id="zip" name="zip" placeholder="ZIP Code *" required value="<?= h($_POST['zip'] ?? '') ?>">
                     </div>
+                    <input type="hidden" id="latitude" name="latitude" value="<?= h($_POST['latitude'] ?? '') ?>">
+                    <input type="hidden" id="longitude" name="longitude" value="<?= h($_POST['longitude'] ?? '') ?>">
                 </div>
             </div>
 
@@ -640,6 +681,51 @@ require_once __DIR__ . '/templates/header.php';
 
 <script>
     const customerSearchCsrfToken = <?= json_encode($customerSearchCsrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const googleMapsApiKey = <?= json_encode($googleMapsApiKey, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+    // ── Google Maps geocoding ────────────────────────────────────────────────
+    const geocodeAddress = async () => {
+        const addrEl  = document.getElementById('address');
+        const cityEl  = document.getElementById('city');
+        const stateEl = document.getElementById('state');
+        const zipEl   = document.getElementById('zip');
+        const latEl   = document.getElementById('latitude');
+        const lngEl   = document.getElementById('longitude');
+
+        if (!latEl || !lngEl || !googleMapsApiKey) return;
+
+        const parts = [
+            (addrEl?.value  || '').trim(),
+            (cityEl?.value  || '').trim(),
+            (stateEl?.value || '').trim(),
+            (zipEl?.value   || '').trim(),
+        ].filter(Boolean);
+
+        // Need at least a street and one more component to be worth geocoding
+        if (parts.length < 2) return;
+
+        const fullAddress = parts.join(', ');
+        try {
+            const url = 'https://maps.googleapis.com/maps/api/geocode/json?' +
+                new URLSearchParams({ address: fullAddress, key: googleMapsApiKey });
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (data.status === 'OK' && data.results?.[0]?.geometry?.location) {
+                latEl.value = data.results[0].geometry.location.lat;
+                lngEl.value = data.results[0].geometry.location.lng;
+            } else {
+                latEl.value = '';
+                lngEl.value = '';
+            }
+        } catch {
+            // Non-fatal: coordinates will be geocoded server-side as a fallback
+        }
+    };
+
+    // Trigger geocoding when any address field loses focus
+    ['address', 'city', 'state', 'zip'].forEach(id => {
+        document.getElementById(id)?.addEventListener('blur', geocodeAddress);
+    });
 
     // ── Customer Search ──────────────────────────────────────────────────────
     (function () {
@@ -704,6 +790,9 @@ require_once __DIR__ . '/templates/header.php';
             if (fields.machine_model) fields.machine_model.value = customer.machine_model || '';
             if (fields.watts)      fields.watts.value      = customer.machine_watts || '';
             if (fields.age)        fields.age.value        = customer.machine_age || '';
+
+            // Geocode the loaded customer's address
+            geocodeAddress();
 
             selectedLabel.textContent = `Customer loaded: ${fullName || 'Unknown'}${customer.company_name ? ' · ' + customer.company_name : ''}`;
             selectedBanner.classList.remove('hidden');
@@ -961,6 +1050,8 @@ require_once __DIR__ . '/templates/header.php';
                 city:          bookingPayload.city,
                 state:         (bookingPayload.state || '').toUpperCase(),
                 zip:           bookingPayload.zip,
+                latitude:      bookingPayload.latitude  || null,
+                longitude:     bookingPayload.longitude || null,
                 problem:       problemSections.join('\n\n'),
 			// No password fields for internal bookings
 				password:      '',
