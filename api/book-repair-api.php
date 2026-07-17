@@ -365,7 +365,7 @@ if ($email === '') {
     $errors[] = $msg; $field_errors['email'] = $msg;
 }
 
-if (empty($_SESSION['customer_id'])) {
+if (empty($_SESSION['customer_id']) && empty($_SESSION['admin_id'])) {
     if ($password === '') {
         $msg = 'Password is required.';
         $errors[] = $msg; $field_errors['password'] = $msg;
