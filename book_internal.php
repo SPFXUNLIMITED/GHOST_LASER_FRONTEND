@@ -14,14 +14,6 @@ if (empty($_SESSION['book_internal_customer_search_csrf'])) {
 }
 $customerSearchCsrfToken = (string) $_SESSION['book_internal_customer_search_csrf'];
 
-// Check whether customers.company is available (schema can vary by environment)
-$customersHasCompanyColumn = true;
-try {
-    $pdo->query('SELECT company FROM customers LIMIT 1');
-} catch (Throwable $e) {
-    $customersHasCompanyColumn = false;
-}
-
 // ── AJAX: Live customer search ─────────────────────────────────────────────
 $isCustomerSearchRequest = (
     (isset($_GET['action']) && $_GET['action'] === 'customer_search')
@@ -38,42 +30,46 @@ if ($isCustomerSearchRequest) {
     }
 
     $q = trim((string) ($_GET['q'] ?? ''));
-    if ($q === '' || mb_strlen($q) < 2) {
+    if ($q === '' || strlen($q) < 2) {
         echo json_encode(['results' => []]);
         exit;
     }
-    $like = '%' . $q . '%';
-    $companySelect = $customersHasCompanyColumn ? 'company AS company_name' : "'' AS company_name";
-    $companyWhere = $customersHasCompanyColumn ? 'OR company LIKE :q' : '';
-    $stmt = $pdo->prepare(
-        "SELECT id, first_name, last_name, {$companySelect}, email, phone, address, city, state, zip
-         FROM customers
-         WHERE first_name LIKE :q
-            OR last_name  LIKE :q
-            OR CONCAT(first_name, \' \', last_name) LIKE :q
-            {$companyWhere}
-            OR email      LIKE :q
-            OR phone      LIKE :q
-         ORDER BY last_name, first_name
-         LIMIT 8"
-    );
-    $stmt->execute([':q' => $like]);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $rows = [];
+    try {
+        $like = '%' . $q . '%';
+        $stmt = $pdo->prepare(
+            'SELECT id, first_name, last_name, company, email, phone, address, city, state, zip
+             FROM customers
+             WHERE first_name LIKE :q
+                OR last_name LIKE :q
+                OR company LIKE :q
+                OR email LIKE :q
+                OR phone LIKE :q
+             ORDER BY last_name, first_name
+             LIMIT 8'
+        );
+        $stmt->execute([':q' => $like]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['results' => [], 'error' => 'Customer search failed.']);
+        exit;
+    }
+
     $results = [];
     foreach ($rows as $row) {
         $customerName = trim((string) (($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')));
         $results[] = [
             'id'            => (int) $row['id'],
             'customer_name' => $customerName,
-            'company_name'  => (string) ($row['company_name'] ?? ''),
+            'company_name'  => (string) ($row['company'] ?? ''),
             'phone'         => (string) ($row['phone'] ?? ''),
             'email'         => (string) ($row['email'] ?? ''),
             'address'       => (string) ($row['address'] ?? ''),
             'city'          => (string) ($row['city'] ?? ''),
             'state'         => strtoupper((string) ($row['state'] ?? '')),
             'zip'           => (string) ($row['zip'] ?? ''),
-            'first_name'    => (string) ($row['first_name'] ?? ''),
-            'last_name'     => (string) ($row['last_name'] ?? ''),
         ];
     }
     echo json_encode(['results' => $results]);
