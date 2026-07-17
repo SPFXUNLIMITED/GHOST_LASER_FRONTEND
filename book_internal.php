@@ -9,43 +9,71 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 
+if (empty($_SESSION['book_internal_customer_search_csrf'])) {
+    $_SESSION['book_internal_customer_search_csrf'] = bin2hex(random_bytes(32));
+}
+$customerSearchCsrfToken = (string) $_SESSION['book_internal_customer_search_csrf'];
+
+// Check whether customers.company is available (schema can vary by environment)
+$customersHasCompanyColumn = true;
+try {
+    $pdo->query('SELECT company FROM customers LIMIT 1');
+} catch (Throwable $e) {
+    $customersHasCompanyColumn = false;
+}
+
 // ── AJAX: Live customer search ─────────────────────────────────────────────
-if (isset($_GET['action']) && $_GET['action'] === 'customer_search') {
+$isCustomerSearchRequest = (
+    (isset($_GET['action']) && $_GET['action'] === 'customer_search')
+    || (isset($_GET['customer_search']) && (string) $_GET['customer_search'] === '1')
+);
+if ($isCustomerSearchRequest) {
     header('Content-Type: application/json');
+
+    $csrfHeader = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if ($csrfHeader === '' || !hash_equals($customerSearchCsrfToken, $csrfHeader)) {
+        http_response_code(403);
+        echo json_encode(['results' => [], 'error' => 'Invalid CSRF token.']);
+        exit;
+    }
+
     $q = trim((string) ($_GET['q'] ?? ''));
     if ($q === '' || mb_strlen($q) < 2) {
         echo json_encode(['results' => []]);
         exit;
     }
     $like = '%' . $q . '%';
+    $companySelect = $customersHasCompanyColumn ? 'company AS company_name' : "'' AS company_name";
+    $companyWhere = $customersHasCompanyColumn ? 'OR company LIKE :q' : '';
     $stmt = $pdo->prepare(
-        'SELECT id, first_name, last_name, email, phone, address, city, state, zip
+        "SELECT id, first_name, last_name, {$companySelect}, email, phone, address, city, state, zip
          FROM customers
          WHERE first_name LIKE :q
             OR last_name  LIKE :q
             OR CONCAT(first_name, \' \', last_name) LIKE :q
+            {$companyWhere}
             OR email      LIKE :q
             OR phone      LIKE :q
          ORDER BY last_name, first_name
-         LIMIT 20'
+         LIMIT 8"
     );
     $stmt->execute([':q' => $like]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $results = [];
     foreach ($rows as $row) {
+        $customerName = trim((string) (($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')));
         $results[] = [
-            'id'         => (int) $row['id'],
-            'first_name' => $row['first_name'] ?? '',
-            'last_name'  => $row['last_name']  ?? '',
-            'email'      => $row['email']      ?? '',
-            'phone'      => $row['phone']      ?? '',
-            'address'    => $row['address']    ?? '',
-            'city'       => $row['city']       ?? '',
-            'state'      => strtoupper((string) ($row['state'] ?? '')),
-            'zip'        => $row['zip']        ?? '',
-            'label'      => trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''))
-                            . ($row['phone'] ? ' · ' . $row['phone'] : '')
-                            . ($row['email'] ? ' · ' . $row['email'] : ''),
+            'id'            => (int) $row['id'],
+            'customer_name' => $customerName,
+            'company_name'  => (string) ($row['company_name'] ?? ''),
+            'phone'         => (string) ($row['phone'] ?? ''),
+            'email'         => (string) ($row['email'] ?? ''),
+            'address'       => (string) ($row['address'] ?? ''),
+            'city'          => (string) ($row['city'] ?? ''),
+            'state'         => strtoupper((string) ($row['state'] ?? '')),
+            'zip'           => (string) ($row['zip'] ?? ''),
+            'first_name'    => (string) ($row['first_name'] ?? ''),
+            'last_name'     => (string) ($row['last_name'] ?? ''),
         ];
     }
     echo json_encode(['results' => $results]);
@@ -138,6 +166,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         $_SESSION['book_internal_repair'] = [
             'first_name'   => trim((string) ($_POST['first_name'] ?? '')),
             'last_name'    => trim((string) ($_POST['last_name'] ?? '')),
+            'customer_id'  => trim((string) ($_POST['customer_id'] ?? '')),
+            'company_name' => trim((string) ($_POST['company_name'] ?? '')),
             'phone'        => formatUsPhoneDisplay($normalizedPhone),
             'phone_e164'   => formatUsPhoneE164($normalizedPhone),
             'email'        => trim((string) ($_POST['email'] ?? '')),
@@ -173,6 +203,8 @@ if ($step === 2 && $booking) {
     $stepTwoPayload = [
         'first_name'   => (string) ($booking['first_name']   ?? ''),
         'last_name'    => (string) ($booking['last_name']    ?? ''),
+        'customer_id'  => (string) ($booking['customer_id']  ?? ''),
+        'company_name' => (string) ($booking['company_name'] ?? ''),
         'phone'        => (string) ($booking['phone']        ?? ''),
         'phone_e164'   => (string) ($booking['phone_e164']   ?? ''),
         'email'        => (string) ($booking['email']        ?? ''),
@@ -239,7 +271,7 @@ $extraHead = <<<'HTML'
         pointer-events: none;
     }
     /* Customer search dropdown */
-    #cust-search-results {
+    #customerSuggestions {
         position: absolute;
         z-index: 50;
         left: 0; right: 0;
@@ -251,7 +283,7 @@ $extraHead = <<<'HTML'
         max-height: 280px;
         overflow-y: auto;
     }
-    #cust-search-results li {
+    #customerSuggestions li {
         padding: 0.65rem 1rem;
         font-size: 0.8rem;
         color: #d4d4d8;
@@ -259,10 +291,10 @@ $extraHead = <<<'HTML'
         border-bottom: 1px solid rgba(63,63,70,0.5);
         transition: background 0.1s;
     }
-    #cust-search-results li:last-child { border-bottom: none; }
-    #cust-search-results li:hover, #cust-search-results li.active { background: rgba(6,182,212,0.12); color: #22d3ee; }
-    #cust-search-results li .result-name { font-weight: 600; color: #f4f4f5; }
-    #cust-search-results li .result-meta { color: #71717a; margin-top: 1px; }
+    #customerSuggestions li:last-child { border-bottom: none; }
+    #customerSuggestions li:hover, #customerSuggestions li.active { background: rgba(6,182,212,0.12); color: #22d3ee; }
+    #customerSuggestions li .result-name { font-weight: 600; color: #f4f4f5; }
+    #customerSuggestions li .result-meta { color: #71717a; margin-top: 1px; }
 </style>
 HTML;
 
@@ -297,6 +329,7 @@ require_once __DIR__ . '/templates/header.php';
         <!-- ── STEP 1: Booking form ── -->
         <form method="post" action="book_internal.php?step=1" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
             <input type="hidden" name="form_step" value="1">
+            <input type="hidden" id="customer_id" name="customer_id" value="<?= h($_POST['customer_id'] ?? '') ?>">
 
             <!-- Customer Search -->
             <div>
@@ -310,14 +343,14 @@ require_once __DIR__ . '/templates/header.php';
                             </svg>
                         </span>
                         <input
-                            id="cust-search-input"
+                            id="customer_name"
                             type="text"
                             autocomplete="off"
-                            placeholder="Search by name, phone, or email&hellip;"
+                            placeholder="Search by name, company, phone, or email&hellip;"
                             class="input-base pl-9"
                         >
                     </div>
-                    <ul id="cust-search-results" class="hidden" role="listbox" aria-label="Customer search results"></ul>
+                    <ul id="customerSuggestions" class="hidden" role="listbox" aria-label="Customer search results"></ul>
                 </div>
                 <p class="mt-2 text-xs text-zinc-500">Select a customer to auto-fill their contact details. Leave blank to enter a new customer manually.</p>
                 <div id="cust-selected-banner" class="hidden mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-950/40 px-4 py-2.5 text-sm">
@@ -337,6 +370,9 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                     <div>
                         <input class="input-base" id="last_name" name="last_name" placeholder="Last Name *" required value="<?= h($_POST['last_name'] ?? '') ?>">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <input class="input-base" id="company_name" name="company_name" placeholder="Company Name (optional)" value="<?= h($_POST['company_name'] ?? '') ?>">
                     </div>
                     <div>
                         <input class="input-base<?= $phoneError !== '' ? ' input-invalid' : '' ?>" type="tel" inputmode="tel" id="phone" name="phone" placeholder="Phone Number *" required value="<?= h(formatUsPhoneDisplay($_POST['phone'] ?? '')) ?>" aria-describedby="phone-error" aria-invalid="<?= $phoneError !== '' ? 'true' : 'false' ?>">
@@ -564,15 +600,19 @@ require_once __DIR__ . '/templates/header.php';
 </section>
 
 <script>
+    const customerSearchCsrfToken = <?= json_encode($customerSearchCsrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
     // ── Customer Search ──────────────────────────────────────────────────────
     (function () {
-        const searchInput   = document.getElementById('cust-search-input');
-        const resultsList   = document.getElementById('cust-search-results');
+        const searchInput   = document.getElementById('customer_name');
+        const resultsList   = document.getElementById('customerSuggestions');
         const selectedBanner = document.getElementById('cust-selected-banner');
         const selectedLabel  = document.getElementById('cust-selected-label');
         const clearBtn       = document.getElementById('cust-clear-btn');
 
         const fields = {
+            customer_id: document.getElementById('customer_id'),
+            company_name: document.getElementById('company_name'),
             first_name: document.getElementById('first_name'),
             last_name:  document.getElementById('last_name'),
             phone:      document.getElementById('phone'),
@@ -592,12 +632,25 @@ require_once __DIR__ . '/templates/header.php';
         const clearSelection = () => {
             selectedBanner.classList.add('hidden');
             selectedLabel.textContent = '';
+            if (fields.customer_id) {
+                fields.customer_id.value = '';
+            }
         };
 
         const fillCustomer = (customer) => {
+            const fullName = (customer.customer_name || `${customer.first_name || ''} ${customer.last_name || ''}`).trim();
+            let firstName = customer.first_name || '';
+            let lastName = customer.last_name || '';
+            if (!firstName && !lastName && fullName !== '') {
+                const parts = fullName.split(/\s+/);
+                firstName = parts.shift() || '';
+                lastName = parts.join(' ');
+            }
             const phoneFormatted = formatUsPhoneDisplay(customer.phone || '');
-            if (fields.first_name) fields.first_name.value = customer.first_name || '';
-            if (fields.last_name)  fields.last_name.value  = customer.last_name  || '';
+            if (fields.customer_id) fields.customer_id.value = customer.id || '';
+            if (fields.first_name) fields.first_name.value = firstName;
+            if (fields.last_name)  fields.last_name.value  = lastName;
+            if (fields.company_name) fields.company_name.value = customer.company_name || '';
             if (fields.phone)      { fields.phone.value = phoneFormatted; syncPhoneValidationState(); }
             if (fields.email)      fields.email.value      = customer.email   || '';
             if (fields.address)    fields.address.value    = customer.address || '';
@@ -605,12 +658,11 @@ require_once __DIR__ . '/templates/header.php';
             if (fields.state)      fields.state.value      = (customer.state  || '').toUpperCase();
             if (fields.zip)        fields.zip.value        = customer.zip     || '';
 
-            const name = `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
-            selectedLabel.textContent = `Customer loaded: ${name}${customer.email ? ' (' + customer.email + ')' : ''}`;
+            selectedLabel.textContent = `Customer loaded: ${fullName || 'Unknown'}${customer.company_name ? ' · ' + customer.company_name : ''}`;
             selectedBanner.classList.remove('hidden');
             resultsList.classList.add('hidden');
             resultsList.innerHTML = '';
-            searchInput.value = '';
+            searchInput.value = fullName;
             activeIndex = -1;
         };
 
@@ -625,8 +677,9 @@ require_once __DIR__ . '/templates/header.php';
                 const li = document.createElement('li');
                 li.setAttribute('role', 'option');
                 li.dataset.idx = idx;
-                li.innerHTML = `<div class="result-name">${escHtml(customer.first_name + ' ' + customer.last_name)}</div>`
-                    + `<div class="result-meta">${customer.phone ? escHtml(customer.phone) + ' &nbsp;&middot;&nbsp; ' : ''}${escHtml(customer.email)}</div>`;
+                const companyMeta = customer.company_name ? `${escHtml(customer.company_name)} &nbsp;&middot;&nbsp; ` : '';
+                li.innerHTML = `<div class="result-name">${escHtml(customer.customer_name || ((customer.first_name || '') + ' ' + (customer.last_name || '')))}</div>`
+                    + `<div class="result-meta">${companyMeta}${customer.phone ? escHtml(customer.phone) + ' &nbsp;&middot;&nbsp; ' : ''}${escHtml(customer.email)}</div>`;
                 li.addEventListener('mousedown', (e) => {
                     e.preventDefault();
                     fillCustomer(customer);
@@ -650,12 +703,16 @@ require_once __DIR__ . '/templates/header.php';
             }
             debounceTimer = setTimeout(async () => {
                 try {
-                    const res = await fetch(`book_internal.php?action=customer_search&q=${encodeURIComponent(q)}`);
+                    const res = await fetch(`book_internal.php?customer_search=1&q=${encodeURIComponent(q)}`, {
+                        headers: {
+                            'X-CSRF-Token': customerSearchCsrfToken
+                        }
+                    });
                     const data = await res.json();
                     currentResults = data.results || [];
                     renderResults(currentResults);
                 } catch (_) { /* silent */ }
-            }, 220);
+            }, 180);
         });
 
         searchInput.addEventListener('keydown', (e) => {
