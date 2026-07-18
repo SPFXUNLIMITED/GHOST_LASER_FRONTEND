@@ -130,7 +130,7 @@ require_once __DIR__ . '/templates/header.php';
                             href="technician/schedule.php"
                             class="inline-flex w-full items-center gap-2 rounded-md bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2.5 transition-all btn-glow"
                         >
-                            Go to Technician Schedule
+                            Scheduling Dashboard
                         </a>
                         <a
                             href="technician-dashboard.php"
