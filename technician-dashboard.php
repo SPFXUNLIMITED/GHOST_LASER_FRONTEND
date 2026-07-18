@@ -1,4 +1,12 @@
 <?php
+// Extend session lifetime to 12 hours for technicians using this page while driving.
+ini_set('session.gc_maxlifetime', 43200);
+session_set_cookie_params([
+    'lifetime' => 43200,
+    'path'     => '/',
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 
 if (empty($_SESSION['admin_id'])) {
@@ -68,6 +76,38 @@ foreach ($rawJobs as $job) {
     $clusters[$cid]['jobs'][] = $job;
 }
 $clusters = array_values($clusters);
+
+// ── Load trip states for the selected date ───────────────────────────────────
+// Keyed by service_request_id; allows the UI to restore button states after
+// a logout/reload without losing "on my way" or "arrived" progress.
+$tripStates = [];
+if (!empty($rawJobs)) {
+    try {
+        $jobIds       = array_map('intval', array_column($rawJobs, 'service_request_id'));
+        $placeholders = implode(',', array_fill(0, count($jobIds), '?'));
+        $tsStmt       = $pdo->prepare(
+            "SELECT service_request_id, status, start_time, end_time, total_miles
+               FROM mileage_logs
+              WHERE service_request_id IN ($placeholders)
+                AND trip_date = ?
+              ORDER BY id DESC"
+        );
+        $tsStmt->execute(array_merge($jobIds, [$dateKey]));
+        foreach ($tsStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $sid = (int) $row['service_request_id'];
+            if (!isset($tripStates[$sid])) {   // keep only the most-recent record
+                $tripStates[$sid] = [
+                    'status'      => $row['status'],
+                    'start_time'  => $row['start_time'],
+                    'end_time'    => $row['end_time'],
+                    'total_miles' => $row['total_miles'],
+                ];
+            }
+        }
+    } catch (PDOException $e) {
+        // mileage_logs table not yet created — states default to empty.
+    }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function techDashFormatAddress(array $job): string
@@ -691,6 +731,11 @@ require_once __DIR__ . '/templates/header.php';
     <?php endif; ?>
 </main>
 
+<!-- ── Trip state data (for restoring button states after logout/reload) ────── -->
+<script>
+var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+</script>
+
 <!-- ── Mileage Entry Modal ───────────────────────────────────────────────── -->
 <div id="mileageModal" class="mileage-modal" role="dialog" aria-modal="true" aria-label="Enter truck mileage">
     <div class="mileage-modal-inner">
@@ -810,6 +855,47 @@ require_once __DIR__ . '/templates/header.php';
             btn.disabled = false;
         });
     }
+
+    // ── Restore trip states on page load ─────────────────────────────────────
+    // Runs once at startup; re-applies active/disabled states from the DB so a
+    // reload or re-login after a logout does not reset "On My Way" progress.
+    function formatDbTime(dt) {
+        if (!dt) { return ''; }
+        var timePart = dt.length >= 16 ? dt.substring(11, 16) : '';
+        if (!timePart) { return dt; }
+        var parts  = timePart.split(':');
+        var h      = parseInt(parts[0], 10);
+        var m      = parseInt(parts[1], 10);
+        var period = h >= 12 ? 'PM' : 'AM';
+        var disp   = h % 12 || 12;
+        return disp + ':' + (m < 10 ? '0' + m : '' + m) + ' ' + period;
+    }
+
+    function initTripStates() {
+        var states = window.TRIP_STATES;
+        if (!states) { return; }
+        Object.keys(states).forEach(function (jobId) {
+            var state      = states[jobId];
+            var onWayBtn   = document.querySelector('[data-action="on_my_way"][data-job-id="' + jobId + '"]');
+            var arrivedBtn = document.querySelector('[data-action="arrived"][data-job-id="' + jobId + '"]');
+
+            if (state.status === 'pending') {
+                // Departed — waiting for arrival
+                if (onWayBtn)   { onWayBtn.classList.add('active');   onWayBtn.disabled = true; }
+                var depTime = formatDbTime(state.start_time);
+                setStatus(jobId, '\u2713 Departed' + (depTime ? ' at ' + depTime : ''), 'ok');
+            } else if (state.status === 'complete') {
+                // Both actions recorded
+                if (onWayBtn)   { onWayBtn.classList.add('active');   onWayBtn.disabled = true; }
+                if (arrivedBtn) { arrivedBtn.classList.add('active'); arrivedBtn.disabled = true; }
+                var arrTime = formatDbTime(state.end_time);
+                var miles   = state.total_miles ? ' \u2014 ' + state.total_miles + ' miles' : '';
+                setStatus(jobId, '\u2713 Arrived' + (arrTime ? ' at ' + arrTime : '') + miles, 'ok');
+            }
+        });
+    }
+
+    initTripStates();
 
     // ── Mileage Modal ─────────────────────────────────────────────────────────
     var _modalData   = null; // { btn, jobId, payload }
