@@ -45,6 +45,8 @@ $scheduledJobsStmt = $pdo->prepare("
         c.first_name,
         c.last_name,
         c.phone,
+        c.email,
+        c.company,
         c.address,
         c.city,
         c.state,
@@ -305,6 +307,12 @@ $extraHead       = <<<'HTML'
             border: 1px solid rgba(56, 189, 248, 0.28);
         }
         .sms-link:active { transform: scale(0.96); background: rgba(56, 189, 248, 0.20); }
+        .vcf-link {
+            color: #c4b5fd;
+            background: rgba(167, 139, 250, 0.10);
+            border: 1px solid rgba(167, 139, 250, 0.28);
+        }
+        .vcf-link:active { transform: scale(0.96); background: rgba(167, 139, 250, 0.20); }
 
         .nav-btns {
             display: flex;
@@ -765,6 +773,16 @@ require_once __DIR__ . '/templates/header.php';
                                     <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z"/></svg>
                                     I'm on my way!
                                 </a>
+                                <button type="button" class="vcf-link"
+                                    onclick="saveContact(this)"
+                                    data-name="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                    data-phone="+<?= htmlspecialchars($phoneDigits, ENT_QUOTES, 'UTF-8') ?>"
+                                    data-email="<?= htmlspecialchars(trim((string)($job['email'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
+                                    data-company="<?= htmlspecialchars(trim((string)($job['company'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
+                                >
+                                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                    Save Contact
+                                </button>
                             </div>
                             <?php endif; ?>
 
@@ -1123,6 +1141,39 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         }
     });
 }());
+
+function saveContact(btn) {
+    var name    = btn.dataset.name    || '';
+    var phone   = btn.dataset.phone   || '';
+    var email   = btn.dataset.email   || '';
+    var company = btn.dataset.company || '';
+
+    // Split name into first/last for vCard N field
+    var parts = name.trim().split(/\s+/);
+    var last  = parts.length > 1 ? parts.pop() : '';
+    var first = parts.join(' ');
+
+    var lines = [
+        'BEGIN:VCARD',
+        'VERSION:3.0',
+        'N:' + last + ';' + first + ';;;',
+        'FN:' + name
+    ];
+    if (company) lines.push('ORG:' + company);
+    if (phone)   lines.push('TEL;TYPE=CELL:' + phone);
+    if (email)   lines.push('EMAIL:' + email);
+    lines.push('END:VCARD');
+
+    var blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/vcard;charset=utf-8' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href     = url;
+    a.download = (name || 'contact').replace(/[^a-z0-9_\-]/gi, '_') + '.vcf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 </script>
 
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
