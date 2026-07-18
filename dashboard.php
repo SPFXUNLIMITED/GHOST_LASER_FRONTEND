@@ -79,9 +79,9 @@ require_once __DIR__ . '/templates/header.php';
             <!-- Header row -->
             <div class="flex flex-col gap-2 mb-10">
                 <span class="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-cyan-400 w-fit">
-                    Admin Dashboard
+                    Technical Operations
                 </span>
-                <h1 class="text-3xl font-bold tracking-tight md:text-5xl">Technician Operations</h1>
+                <h1 class="text-3xl font-bold tracking-tight md:text-5xl">Admin Dashboard</h1>
                 <p class="text-zinc-400 mt-1">
                     Welcome back, <span class="text-white font-semibold"><?= htmlspecialchars($adminUsername, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></span>.
                     Keep scheduling, technician access, and admin utilities organized from one control panel.
