@@ -581,7 +581,7 @@ require_once __DIR__ . '/templates/header.php';
 
                     <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
                         <a href="book_internal.php?step=1" class="inline-flex items-center justify-center rounded-lg border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-900">Book Another Repair</a>
-                        <a href="dashboard.php" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-cyan-400 btn-glow">Back to Dashboard</a>
+                        <a href="technician/schedule.php" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-cyan-400 btn-glow">Scheduling Dashboard</a>
                     </div>
                 </div>
             </div>
@@ -671,7 +671,7 @@ require_once __DIR__ . '/templates/header.php';
                 <p class="mt-3 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base">The service request has been created and will appear in the technician schedule.</p>
                 <div class="mt-8 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
                     <a href="book_internal.php?step=1" class="inline-flex items-center justify-center rounded-lg border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-900">Book Another Repair</a>
-                    <a href="dashboard.php" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-cyan-400 btn-glow">Back to Dashboard</a>
+                    <a href="technician/schedule.php" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-cyan-400 btn-glow">Scheduling Dashboard</a>
                 </div>
             </div>
         </div>
