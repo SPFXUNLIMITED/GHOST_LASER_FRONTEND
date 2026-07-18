@@ -142,7 +142,7 @@ require_once __DIR__ . '/templates/header.php';
                             href="settings.php"
                             class="inline-flex w-full items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/60 hover:border-zinc-600 hover:bg-zinc-800 text-zinc-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
-                            Open Admin Settings
+                            Settings
                         </a>
                         <a
                             href="mileage-tracker.php"
