@@ -10,6 +10,7 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.gc_maxlifetime', 43200); // 12 hours — matches technician-dashboard.php
     session_start();
 }
 
