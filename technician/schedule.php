@@ -1205,7 +1205,7 @@ require_once __DIR__ . '/../templates/header.php';
                 name="insert_test_data"
                 value="1"
                 class="inline-flex w-full items-center justify-center rounded-lg bg-amber-500 px-4 py-2.5 text-xs font-semibold text-zinc-950 transition hover:bg-amber-400"
-                onclick="return confirm('Insert 8 test customers and service requests?');"
+                onclick="return confirm('Are you sure you want to insert 8 test customers and service requests?');"
             >
                 Insert Test Data
             </button>
