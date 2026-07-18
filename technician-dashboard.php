@@ -274,6 +274,24 @@ $extraHead       = <<<'HTML'
             word-break: break-word;
         }
 
+        .phone-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: #86efac;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-decoration: none;
+            padding: 0.25rem 0.6rem;
+            background: rgba(74, 222, 128, 0.10);
+            border: 1px solid rgba(74, 222, 128, 0.28);
+            border-radius: 0.4rem;
+            margin-top: 0.45rem;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.15s, transform 0.1s;
+        }
+        .phone-link:active { transform: scale(0.96); background: rgba(74, 222, 128, 0.20); }
+
         .nav-btns {
             display: flex;
             gap: 0.5rem;
@@ -706,10 +724,31 @@ require_once __DIR__ . '/templates/header.php';
                                 </span>
                             </div>
 
-                            <!-- Row 2: customer name -->
+                            <!-- Row 2: customer name + phone -->
                             <div class="text-sm font-semibold text-zinc-100 mb-1.5">
                                 <?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>
                             </div>
+                            <?php
+                                $rawPhone = trim((string) ($job['phone'] ?? ''));
+                                // Strip non-digit characters for the tel: href
+                                $phoneDigits = preg_replace('/\D/', '', $rawPhone);
+                                // Format for display: (555) 123-4567
+                                if (strlen($phoneDigits) === 10) {
+                                    $phoneDisplay = '(' . substr($phoneDigits, 0, 3) . ') ' . substr($phoneDigits, 3, 3) . '-' . substr($phoneDigits, 6);
+                                } elseif (strlen($phoneDigits) === 11 && $phoneDigits[0] === '1') {
+                                    $phoneDisplay = '+1 (' . substr($phoneDigits, 1, 3) . ') ' . substr($phoneDigits, 4, 3) . '-' . substr($phoneDigits, 7);
+                                } else {
+                                    $phoneDisplay = $rawPhone;
+                                }
+                            ?>
+                            <?php if ($phoneDigits !== ''): ?>
+                            <div class="mb-1">
+                                <a href="tel:+<?= htmlspecialchars($phoneDigits, ENT_QUOTES, 'UTF-8') ?>" class="phone-link">
+                                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                                    <?= htmlspecialchars($phoneDisplay, ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            </div>
+                            <?php endif; ?>
 
                             <!-- Row 3: address + navigation buttons -->
                             <div class="mb-2">
