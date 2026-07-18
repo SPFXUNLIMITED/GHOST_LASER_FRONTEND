@@ -121,10 +121,16 @@ function techDashFormatAddress(array $job): string
     return $parts ? implode(', ', $parts) : 'Address unavailable';
 }
 
-function techDashMapsUrl(array $job): string
+function techDashWazeUrl(array $job): string
 {
     $addr = techDashFormatAddress($job);
     return 'https://waze.com/ul?q=' . rawurlencode($addr) . '&navigate=yes';
+}
+
+function techDashGoogleMapsUrl(array $job): string
+{
+    $addr = techDashFormatAddress($job);
+    return 'https://maps.google.com/?q=' . rawurlencode($addr);
 }
 
 function techDashTimeWindow(?string $start, ?string $end): string
@@ -259,17 +265,46 @@ $extraHead       = <<<'HTML'
             margin-bottom: 0.75rem;
         }
 
-        .maps-link {
+        .address-text {
             display: inline-flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 0.3rem;
-            color: #22d3ee;
-            font-weight: 600;
-            text-decoration: none;
+            color: #a1a1aa;
             font-size: 0.875rem;
             word-break: break-word;
         }
-        .maps-link:active { color: #06b6d4; }
+
+        .nav-btns {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.4rem;
+        }
+        .nav-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.35rem 0.75rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: opacity 0.15s, transform 0.1s;
+            -webkit-tap-highlight-color: transparent;
+            white-space: nowrap;
+        }
+        .nav-btn:active { transform: scale(0.96); }
+        .btn-waze {
+            background: rgba(0, 190, 240, 0.12);
+            border: 1px solid rgba(0, 190, 240, 0.38);
+            color: #67e8f9;
+        }
+        .btn-gmaps {
+            background: rgba(52, 211, 153, 0.12);
+            border: 1px solid rgba(52, 211, 153, 0.35);
+            color: #6ee7b7;
+        }
 
         .mileage-btn {
             display: inline-flex;
@@ -368,7 +403,7 @@ $extraHead       = <<<'HTML'
         }
 
         @media (max-width: 480px) {
-            .maps-link { font-size: 0.82rem; }
+            .address-text { font-size: 0.82rem; }
         }
 
         /* ── Mileage Entry Modal ──────────────────────────────────────────── */
@@ -648,7 +683,8 @@ require_once __DIR__ . '/templates/header.php';
                     <?php foreach ($cluster['jobs'] as $jobIndex => $job): ?>
                         <?php
                         $fullAddress = techDashFormatAddress($job);
-                        $mapsUrl     = techDashMapsUrl($job);
+                        $wazeUrl     = techDashWazeUrl($job);
+                        $gmapsUrl    = techDashGoogleMapsUrl($job);
                         $timeWindow  = techDashTimeWindow($job['time_window_start'] ?? null, $job['time_window_end'] ?? null);
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
                         if ($customerName === '') {
@@ -675,11 +711,23 @@ require_once __DIR__ . '/templates/header.php';
                                 <?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>
                             </div>
 
-                            <!-- Row 3: address (clickable Maps link) -->
-                            <a href="<?= htmlspecialchars($mapsUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="maps-link mb-2 block">
-                                <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                                <?= htmlspecialchars($fullAddress, ENT_QUOTES, 'UTF-8') ?>
-                            </a>
+                            <!-- Row 3: address + navigation buttons -->
+                            <div class="mb-2">
+                                <div class="address-text">
+                                    <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                    <?= htmlspecialchars($fullAddress, ENT_QUOTES, 'UTF-8') ?>
+                                </div>
+                                <div class="nav-btns">
+                                    <a href="<?= htmlspecialchars($wazeUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="nav-btn btn-waze">
+                                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 7.28C19.54 3.1 15.82 0 11.36 0 6.17 0 1.96 4.21 1.96 9.4c0 2.78 1.22 5.28 3.16 7.01-.06.34-.31 1.37-.84 1.9-.1.1-.07.27.06.33.85.36 3.46.95 5.87-1.13.76.15 1.54.23 2.35.23.31 0 .62-.01.92-.04 4.16-.37 7.56-3.37 8.24-7.45.15-.91.17-1.36.08-2.97h-.26z"/></svg>
+                                        Waze
+                                    </a>
+                                    <a href="<?= htmlspecialchars($gmapsUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="nav-btn btn-gmaps">
+                                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
+                                        Google Maps
+                                    </a>
+                                </div>
+                            </div>
 
                             <!-- Row 4: problem summary (collapsed) -->
                             <?php if (!empty($job['problem_summary'])): ?>
