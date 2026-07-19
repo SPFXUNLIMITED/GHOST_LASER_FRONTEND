@@ -169,15 +169,23 @@ if ($apiKey === '') {
     exit;
 }
 
-$response = fetchDistanceMatrix([
+$baseQuery = [
     'origins' => sprintf('%.7F,%.7F', $originLat, $originLng),
     'destinations' => $destination,
     'mode' => 'driving',
-    'departure_time' => 'now',
-    'traffic_model' => 'best_guess',
     'units' => 'imperial',
     'key' => $apiKey,
-]);
+];
+
+// Try with traffic-aware parameters first (requires billing); fall back to basic driving time.
+$response = fetchDistanceMatrix(array_merge($baseQuery, [
+    'departure_time' => 'now',
+    'traffic_model' => 'best_guess',
+]));
+
+if (!is_array($response) || ($response['status'] ?? '') !== 'OK') {
+    $response = fetchDistanceMatrix($baseQuery);
+}
 
 if (!is_array($response) || ($response['status'] ?? '') !== 'OK') {
     http_response_code(502);
