@@ -171,6 +171,7 @@ if ($adminUsername === '') {
 $pageTitle       = 'Technician Dashboard | Ghost Laser';
 $pageDescription = 'Ghost Laser technician daily job dashboard.';
 $pwaHead         = <<<'HTML'
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#09090b">
     <link rel="apple-touch-icon" href="/ghost-logo-250x250.png">
