@@ -282,7 +282,7 @@ $extraHead       = <<<'HTML'
             gap: 0.4rem;
             margin-top: 0.45rem;
         }
-        .phone-link, .sms-link {
+        .phone-link, .sms-link, .vcf-link, .eta-copy-btn {
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
@@ -291,6 +291,10 @@ $extraHead       = <<<'HTML'
             text-decoration: none;
             padding: 0.25rem 0.6rem;
             border-radius: 0.4rem;
+            border: 1px solid transparent;
+            background: transparent;
+            cursor: pointer;
+            font-family: inherit;
             -webkit-tap-highlight-color: transparent;
             transition: background 0.15s, transform 0.1s;
             white-space: nowrap;
@@ -313,6 +317,24 @@ $extraHead       = <<<'HTML'
             border: 1px solid rgba(167, 139, 250, 0.28);
         }
         .vcf-link:active { transform: scale(0.96); background: rgba(167, 139, 250, 0.20); }
+        .eta-copy-btn {
+            color: #f9a8d4;
+            background: rgba(244, 114, 182, 0.10);
+            border: 1px solid rgba(244, 114, 182, 0.28);
+        }
+        .eta-copy-btn:active { transform: scale(0.96); background: rgba(244, 114, 182, 0.20); }
+        .eta-copy-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        .eta-status {
+            font-size: 0.75rem;
+            color: var(--dash-muted);
+            margin-top: 0.35rem;
+            min-height: 1rem;
+        }
+        .eta-status.ok  { color: #86efac; }
+        .eta-status.err { color: #fca5a5; }
 
         .nav-btns {
             display: flex;
@@ -723,6 +745,7 @@ require_once __DIR__ . '/templates/header.php';
                     <?php foreach ($cluster['jobs'] as $jobIndex => $job): ?>
                         <?php
                         $fullAddress = techDashFormatAddress($job);
+                        $hasAddress  = $fullAddress !== 'Address unavailable';
                         $wazeUrl     = techDashWazeUrl($job);
                         $gmapsUrl    = techDashGoogleMapsUrl($job);
                         $timeWindow  = techDashTimeWindow($job['time_window_start'] ?? null, $job['time_window_end'] ?? null);
@@ -763,8 +786,8 @@ require_once __DIR__ . '/templates/header.php';
                                     $phoneDisplay = $rawPhone;
                                 }
                             ?>
-                            <?php if ($phoneDigits !== ''): ?>
                             <div class="phone-btns mb-1">
+                                <?php if ($phoneDigits !== ''): ?>
                                 <a href="tel:+<?= htmlspecialchars($phoneDigits, ENT_QUOTES, 'UTF-8') ?>" class="phone-link">
                                     <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
                                     <?= htmlspecialchars($phoneDisplay, ENT_QUOTES, 'UTF-8') ?>
@@ -783,8 +806,20 @@ require_once __DIR__ . '/templates/header.php';
                                     <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                                     Save Contact
                                 </button>
+                                <?php endif; ?>
+                                <button
+                                    type="button"
+                                    class="eta-copy-btn"
+                                    onclick="copyEtaMessage(this)"
+                                    data-job-id="<?= (int) $job['service_request_id'] ?>"
+                                    data-destination="<?= htmlspecialchars($fullAddress, ENT_QUOTES, 'UTF-8') ?>"
+                                    <?= $hasAddress ? '' : 'disabled title="Customer address unavailable"' ?>
+                                >
+                                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-8-4h8m2 12H6a2 2 0 01-2-2V6a2 2 0 012-2h8.586A2 2 0 0116 4.586L19.414 8A2 2 0 0120 9.414V18a2 2 0 01-2 2z"/></svg>
+                                    Copy ETA Message
+                                </button>
                             </div>
-                            <?php endif; ?>
+                            <div class="eta-status" data-eta-job="<?= (int) $job['service_request_id'] ?>"></div>
 
                             <!-- Row 3: address + navigation buttons -->
                             <div class="mb-2">
@@ -929,6 +964,43 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         if (!el) return;
         el.textContent = msg;
         el.className = 'mileage-status' + (type ? ' ' + type : '');
+    }
+
+    function setEtaStatus(jobId, msg, type) {
+        var el = document.querySelector('[data-eta-job="' + jobId + '"]');
+        if (!el) return;
+        el.textContent = msg;
+        el.className = 'eta-status' + (type ? ' ' + type : '');
+    }
+
+    function copyTextToClipboard(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(text);
+        }
+
+        return new Promise(function (resolve, reject) {
+            var textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+
+            try {
+                var copied = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                if (!copied) {
+                    reject(new Error('Unable to copy ETA message'));
+                    return;
+                }
+                resolve();
+            } catch (err) {
+                document.body.removeChild(textarea);
+                reject(new Error('Unable to copy ETA message'));
+            }
+        });
     }
 
     // ── API call ──────────────────────────────────────────────────────────────
@@ -1140,6 +1212,47 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
             openMileageModal(btn, jobId, payload);
         }
     });
+
+    window.copyEtaMessage = function (btn) {
+        var jobId = parseInt(btn.dataset.jobId || '0', 10);
+        var destination = btn.dataset.destination || '';
+
+        if (!jobId || !destination || destination === 'Address unavailable') {
+            return;
+        }
+
+        btn.disabled = true;
+        setEtaStatus(jobId, 'Getting GPS location…', '');
+
+        getCoords().then(function (coords) {
+            setEtaStatus(jobId, 'Calculating ETA…', '');
+
+            return fetch('/api/technician-eta-api.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    origin_lat: coords.lat,
+                    origin_lng: coords.lng,
+                    destination: destination
+                })
+            });
+        }).then(function (res) {
+            return res.json().then(function (data) {
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Unable to calculate ETA');
+                }
+                return data;
+            });
+        }).then(function (data) {
+            return copyTextToClipboard(data.message).then(function () {
+                setEtaStatus(jobId, data.eta_label + ' — copied', 'ok');
+            });
+        }).catch(function (err) {
+            setEtaStatus(jobId, '✗ ' + err.message, 'err');
+        }).finally(function () {
+            btn.disabled = false;
+        });
+    };
 }());
 
 function saveContact(btn) {
@@ -1174,6 +1287,7 @@ function saveContact(btn) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
+
 </script>
 
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
