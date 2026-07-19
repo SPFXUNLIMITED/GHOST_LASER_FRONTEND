@@ -71,7 +71,7 @@ $lng  = isset($req['origin_lng'])  ? $req['origin_lng']  : null;
 $dest = isset($req['destination']) ? trim($req['destination']) : '';
 
 if (!$lat || !$lng || !$dest) {
-    echo json_encode(['success' => true, 'message' => "I'm on my way! I should be there shortly."]);
+    echo json_encode(['success' => true, 'message' => "Ghost Laser Technician: I'm on my way! I should be there shortly."]);
     exit;
 }
 
@@ -94,7 +94,7 @@ if (
     $data['rows'][0]['elements'][0]['status'] === 'OK'
 ) {
     $minutes = (int) round($data['rows'][0]['elements'][0]['duration']['value'] / 60);
-    $message = "I'm on my way! I should be there in about {$minutes} minutes.";
+    $message = "Ghost Laser Technician: I'm on my way! I should be there in about {$minutes} minutes.";
 }
 
 echo json_encode(['success' => true, 'message' => $message]);
