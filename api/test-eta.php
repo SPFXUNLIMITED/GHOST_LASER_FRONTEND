@@ -7,8 +7,8 @@ $envFile = __DIR__ . '/.env';
 if (file_exists($envFile)) {
     $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
-        if (strpos($line, 'GOOGLE_API_KEY=') === 0) {
-            $key = trim(substr($line, 15));
+        if (strpos($line, 'GOOGLE_MAPS_API_KEY=') === 0) {
+            $key = trim(substr($line, 20));
             break;
         }
     }
@@ -22,9 +22,9 @@ if (empty($key)) {
 $input = file_get_contents('php://input');
 $req = json_decode($input, true);
 
-$lat = isset($req['lat']) ? $req['lat'] : null;
-$lng = isset($req['lng']) ? $req['lng'] : null;
-$dest = isset($req['dest']) ? trim($req['dest']) : '';
+$lat = isset($req['origin_lat']) ? $req['origin_lat'] : null;
+$lng = isset($req['origin_lng']) ? $req['origin_lng'] : null;
+$dest = isset($req['destination']) ? trim($req['destination']) : '';
 
 if (!$lat || !$lng || !$dest) {
     echo '{"success":true,"message":"I\'m on my way! I should be there shortly."}';
