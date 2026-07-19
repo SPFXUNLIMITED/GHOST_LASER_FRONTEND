@@ -282,7 +282,7 @@ $extraHead       = <<<'HTML'
             gap: 0.4rem;
             margin-top: 0.45rem;
         }
-        .phone-link, .sms-link, .vcf-link, .eta-copy-btn {
+        .phone-link, .sms-link, .vcf-link {
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
@@ -311,22 +311,16 @@ $extraHead       = <<<'HTML'
             border: 1px solid rgba(56, 189, 248, 0.28);
         }
         .sms-link:active { transform: scale(0.96); background: rgba(56, 189, 248, 0.20); }
+        .sms-link:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
         .vcf-link {
             color: #c4b5fd;
             background: rgba(167, 139, 250, 0.10);
             border: 1px solid rgba(167, 139, 250, 0.28);
         }
         .vcf-link:active { transform: scale(0.96); background: rgba(167, 139, 250, 0.20); }
-        .eta-copy-btn {
-            color: #f9a8d4;
-            background: rgba(244, 114, 182, 0.10);
-            border: 1px solid rgba(244, 114, 182, 0.28);
-        }
-        .eta-copy-btn:active { transform: scale(0.96); background: rgba(244, 114, 182, 0.20); }
-        .eta-copy-btn:disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-        }
         .eta-status {
             font-size: 0.75rem;
             color: var(--dash-muted);
@@ -792,10 +786,16 @@ require_once __DIR__ . '/templates/header.php';
                                     <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
                                     <?= htmlspecialchars($phoneDisplay, ENT_QUOTES, 'UTF-8') ?>
                                 </a>
-                                <a href="sms:+<?= htmlspecialchars($phoneDigits, ENT_QUOTES, 'UTF-8') ?>?body=Ghost%20Laser%20Technician:%20I%27m%20on%20my%20way%21" class="sms-link">
+                                <button type="button" class="sms-link"
+                                    onclick="sendEtaSms(this)"
+                                    data-phone="<?= htmlspecialchars($phoneDigits, ENT_QUOTES, 'UTF-8') ?>"
+                                    data-destination="<?= htmlspecialchars($fullAddress, ENT_QUOTES, 'UTF-8') ?>"
+                                    data-job-id="<?= (int) $job['service_request_id'] ?>"
+                                    <?= $hasAddress ? '' : 'disabled title="Customer address unavailable"' ?>
+                                >
                                     <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z"/></svg>
                                     I'm on my way!
-                                </a>
+                                </button>
                                 <button type="button" class="vcf-link"
                                     onclick="saveContact(this)"
                                     data-name="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
@@ -807,17 +807,6 @@ require_once __DIR__ . '/templates/header.php';
                                     Save Contact
                                 </button>
                                 <?php endif; ?>
-                                <button
-                                    type="button"
-                                    class="eta-copy-btn"
-                                    onclick="copyEtaMessage(this)"
-                                    data-job-id="<?= (int) $job['service_request_id'] ?>"
-                                    data-destination="<?= htmlspecialchars($fullAddress, ENT_QUOTES, 'UTF-8') ?>"
-                                    <?= $hasAddress ? '' : 'disabled title="Customer address unavailable"' ?>
-                                >
-                                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-8-4h8m2 12H6a2 2 0 01-2-2V6a2 2 0 012-2h8.586A2 2 0 0116 4.586L19.414 8A2 2 0 0120 9.414V18a2 2 0 01-2 2z"/></svg>
-                                    Copy ETA Message
-                                </button>
                             </div>
                             <div class="eta-status" data-eta-job="<?= (int) $job['service_request_id'] ?>"></div>
 
@@ -971,36 +960,6 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         if (!el) return;
         el.textContent = msg;
         el.className = 'eta-status' + (type ? ' ' + type : '');
-    }
-
-    function copyTextToClipboard(text) {
-        if (navigator.clipboard && window.isSecureContext) {
-            return navigator.clipboard.writeText(text);
-        }
-
-        return new Promise(function (resolve, reject) {
-            var textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.setAttribute('readonly', '');
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            document.body.appendChild(textarea);
-            textarea.focus();
-            textarea.select();
-
-            try {
-                var copied = document.execCommand('copy');
-                document.body.removeChild(textarea);
-                if (!copied) {
-                    reject(new Error('Unable to copy ETA message'));
-                    return;
-                }
-                resolve();
-            } catch (err) {
-                document.body.removeChild(textarea);
-                reject(new Error('Unable to copy ETA message'));
-            }
-        });
     }
 
     // ── API call ──────────────────────────────────────────────────────────────
@@ -1213,11 +1172,12 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         }
     });
 
-    window.copyEtaMessage = function (btn) {
-        var jobId = parseInt(btn.dataset.jobId || '0', 10);
+    window.sendEtaSms = function (btn) {
+        var jobId       = parseInt(btn.dataset.jobId || '0', 10);
+        var phone       = btn.dataset.phone || '';
         var destination = btn.dataset.destination || '';
 
-        if (!jobId || !destination || destination === 'Address unavailable') {
+        if (!jobId || !phone || !destination || destination === 'Address unavailable') {
             return;
         }
 
@@ -1244,9 +1204,10 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
                 return data;
             });
         }).then(function (data) {
-            return copyTextToClipboard(data.message).then(function () {
-                setEtaStatus(jobId, data.eta_label + ' — copied', 'ok');
-            });
+            var etaTime = data.eta_label.replace(' away', '');
+            var smsBody = 'Your Ghost Laser technician is on the way and will arrive in about ' + etaTime + '.';
+            setEtaStatus(jobId, data.eta_label, 'ok');
+            window.location.href = 'sms:+' + phone + '?body=' + encodeURIComponent(smsBody);
         }).catch(function (err) {
             setEtaStatus(jobId, '✗ ' + err.message, 'err');
         }).finally(function () {
