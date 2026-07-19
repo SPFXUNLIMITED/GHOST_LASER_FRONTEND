@@ -41,7 +41,7 @@ $message = "I'm on my way! I should be there shortly.";
 if ($data && isset($data['rows'][0]['elements'][0]) && $data['rows'][0]['elements'][0]['status'] === 'OK') {
     $seconds = $data['rows'][0]['elements'][0]['duration']['value'];
     $minutes = round($seconds / 60);
-    $message = "I'm on my way! I should be there in about " . $minutes . " minutes.";
+    $message = "Ghost Laser Technician: I'm on my way! I should be there in about " . $minutes . " minutes.";
 }
 
 echo json_encode([
