@@ -1172,55 +1172,22 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         }
     });
 
-    window.sendEtaSms = function (btn) {
-        var jobId       = parseInt(btn.dataset.jobId || '0', 10);
-        var phone       = btn.dataset.phone || '';
-        var destination = btn.dataset.destination || '';
+	window.sendEtaSms = function sendEtaSms(btn) {
+		var phone = btn.dataset.phone || '';
+		var name = btn.dataset.name || '';
 
-        if (!jobId || !phone || !destination || destination === 'Address unavailable') {
-            return;
-        }
+		if (!phone) {
+			alert("Phone number is missing.");
+			return;
+		}
 
-        btn.disabled = true;
-        setEtaStatus(jobId, 'Getting GPS location…', '');
+		var message = name ? 
+			"I'm on my way to see " + name + "!" : 
+			"I'm on my way!";
 
-        getCoords().then(function (coords) {
-            setEtaStatus(jobId, 'Calculating ETA…', '');
-
-            var etaPayload = {
-                origin_lat: coords.lat,
-                origin_lng: coords.lng,
-                destination: destination
-            };
-
-            var etaRequest = {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify(etaPayload)
-            };
-
-            return fetch('/api/technician-eta-api.php', etaRequest);
-        }).then(function (res) {
-            return res.json().then(function (data) {
-                if (!res.ok || !data.success) {
-                    throw new Error(data.error || 'Unable to calculate ETA');
-                }
-                return data;
-            });
-        }).then(function (data) {
-            var etaTime = data.eta_label.replace(' away', '');
-            var smsBody = 'Your Ghost Laser technician is on the way and will arrive in about ' + etaTime + '.';
-            setEtaStatus(jobId, data.eta_label, 'ok');
-            window.location.href = 'sms:+' + phone + '?body=' + encodeURIComponent(smsBody);
-        }).catch(function (err) {
-            setEtaStatus(jobId, '✗ ' + err.message, 'err');
-        }).finally(function () {
-            btn.disabled = false;
-        });
-    };
+		var smsBody = encodeURIComponent(message);
+		window.location.href = 'sms:' + phone + '?body=' + smsBody;
+	};
 }());
 
 function saveContact(btn) {
