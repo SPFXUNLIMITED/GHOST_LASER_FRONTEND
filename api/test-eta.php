@@ -22,9 +22,9 @@ if (empty($key)) {
 $input = file_get_contents('php://input');
 $req = json_decode($input, true);
 
-$lat = isset($req) ? $req : null;
-$lng = isset($req) ? $req : null;
-$dest = isset($req) ? trim($req) : '';
+$lat = isset($req['lat']) ? $req['lat'] : null;
+$lng = isset($req['lng']) ? $req['lng'] : null;
+$dest = isset($req['dest']) ? trim($req['dest']) : '';
 
 if (!$lat || !$lng || !$dest) {
     echo '{"success":true,"message":"I\'m on my way! I should be there shortly."}';
@@ -38,7 +38,8 @@ $data = json_decode($response, true);
 
 $message = "I'm on my way! I should be there shortly.";
 
-if ($data && isset($data [0] [0]['status' 0] [0 0]['elements'][0]  ;
+if ($data && isset($data['rows'][0]['elements'][0]) && $data['rows'][0]['elements'][0]['status'] === 'OK') {
+    $seconds = $data['rows'][0]['elements'][0]['duration']['value'];
     $minutes = round($seconds / 60);
     $message = "I'm on my way! I should be there in about " . $minutes . " minutes.";
 }
