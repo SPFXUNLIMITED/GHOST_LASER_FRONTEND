@@ -1188,7 +1188,7 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 		btn.disabled = true;
 
 		getCoords().then(function (coords) {
-			return fetch('/api/test-eta.php', {
+			return fetch('/api/get-eta.php', {
 				method:  'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body:    JSON.stringify({
