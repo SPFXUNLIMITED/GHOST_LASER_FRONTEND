@@ -1173,20 +1173,42 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
     });
 
 	window.sendEtaSms = function sendEtaSms(btn) {
-		var phone = btn.dataset.phone || '';
-		var name = btn.dataset.name || '';
+		var phone       = btn.dataset.phone       || '';
+		var destination = btn.dataset.destination || '';
 
 		if (!phone) {
-			alert("Phone number is missing.");
+			alert('Phone number is missing.');
+			return;
+		}
+		if (!destination) {
+			alert('Customer address is unavailable.');
 			return;
 		}
 
-		var message = name ? 
-			"I'm on my way to see " + name + "!" : 
-			"I'm on my way!";
+		btn.disabled = true;
 
-		var smsBody = encodeURIComponent(message);
-		window.location.href = 'sms:' + phone + '?body=' + smsBody;
+		getCoords().then(function (coords) {
+			return fetch('/api/test-eta.php', {
+				method:  'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body:    JSON.stringify({
+					origin_lat:  coords.lat,
+					origin_lng:  coords.lng,
+					destination: destination
+				})
+			});
+		}).then(function (response) {
+			return response.json();
+		}).then(function (data) {
+			btn.disabled = false;
+			if (!data.message) {
+				throw new Error(data.error || 'Unable to calculate ETA.');
+			}
+			window.location.href = 'sms:' + phone + '?body=' + encodeURIComponent(data.message);
+		}).catch(function (err) {
+			btn.disabled = false;
+			alert(err.message || 'Error getting ETA. Please try again.');
+		});
 	};
 }());
 
