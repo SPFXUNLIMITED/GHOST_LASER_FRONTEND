@@ -1193,11 +1193,16 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
                 destination: destination
             };
 
-            return fetch('/api/technician-eta-api.php', {
+            var etaRequest = {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
                 body: JSON.stringify(etaPayload)
-            });
+            };
+
+            return fetch('/api/technician-eta-api.php', etaRequest);
         }).then(function (res) {
             return res.json().then(function (data) {
                 if (!res.ok || !data.success) {
