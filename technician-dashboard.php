@@ -1172,53 +1172,48 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         }
     });
 
-    window.sendEtaSms = function (btn) {
-        var jobId       = parseInt(btn.dataset.jobId || '0', 10);
-        var phone       = btn.dataset.phone || '';
-        var destination = btn.dataset.destination || '';
+    window.sendEtaSms = function sendEtaSms(btn) {
+        var phone = btn.dataset.phone;
+        var destination = btn.dataset.destination;
+        var jobId = btn.dataset.jobId;
 
-        if (!jobId || !phone || !destination || destination === 'Address unavailable') {
+        if (!destination || destination === 'Address unavailable') {
+            alert("Customer address is not available.");
             return;
         }
 
         btn.disabled = true;
-        setEtaStatus(jobId, 'Getting GPS location…', '');
+        btn.style.opacity = '0.6';
 
-        getCoords().then(function (coords) {
-            setEtaStatus(jobId, 'Calculating ETA…', '');
-
-            var etaPayload = {
+        getCoords().then(function(coords) {
+            var payload = {
                 origin_lat: coords.lat,
                 origin_lng: coords.lng,
                 destination: destination
             };
 
-            var etaRequest = {
+            return fetch('/api/technician-eta-api.php', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(etaPayload)
-            };
-
-            return fetch('/api/technician-eta-api.php', etaRequest);
-        }).then(function (res) {
-            return res.json().then(function (data) {
-                if (!res.ok || !data.success) {
-                    throw new Error(data.error || 'Unable to calculate ETA');
-                }
-                return data;
+                body: JSON.stringify(payload)
             });
-        }).then(function (data) {
-            var etaTime = data.eta_label.replace(' away', '');
-            var smsBody = 'Your Ghost Laser technician is on the way and will arrive in about ' + etaTime + '.';
-            setEtaStatus(jobId, data.eta_label, 'ok');
-            window.location.href = 'sms:+' + phone + '?body=' + encodeURIComponent(smsBody);
-        }).catch(function (err) {
-            setEtaStatus(jobId, '✗ ' + err.message, 'err');
-        }).finally(function () {
+        }).then(function(res) {
+            return res.json();
+        }).then(function(data) {
+            if (!data.success) {
+                alert('Error: ' + (data.error || 'Could not calculate ETA'));
+                return;
+            }
+
+            var smsBody = encodeURIComponent(data.message);
+            window.location.href = 'sms:' + phone + '?body=' + smsBody;
+        }).catch(function(err) {
+            alert('Error: ' + err.message);
+        }).finally(function() {
             btn.disabled = false;
+            btn.style.opacity = '';
         });
     };
 }());
