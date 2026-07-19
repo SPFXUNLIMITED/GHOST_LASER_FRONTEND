@@ -1187,14 +1187,16 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         getCoords().then(function (coords) {
             setEtaStatus(jobId, 'Calculating ETA…', '');
 
+            var etaPayload = {
+                origin_lat: coords.lat,
+                origin_lng: coords.lng,
+                destination: destination
+            };
+
             return fetch('/api/technician-eta-api.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    origin_lat: coords.lat,
-                    origin_lng: coords.lng,
-                    destination: destination
-                })
+                body: JSON.stringify(etaPayload)
             });
         }).then(function (res) {
             return res.json().then(function (data) {
