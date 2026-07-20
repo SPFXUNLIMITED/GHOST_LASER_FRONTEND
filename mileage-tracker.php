@@ -304,6 +304,11 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             transition: background 0.12s;
         }
         tbody tr:hover { background: rgba(39,39,42,0.55); }
+        tbody tr.log-row { cursor: pointer; }
+        tbody tr.log-row:focus-visible {
+            outline: 2px solid rgba(34,211,238,0.65);
+            outline-offset: -2px;
+        }
 
         tbody td {
             padding: 0.65rem 0.85rem;
@@ -386,6 +391,103 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             transition: border-color 0.15s, background 0.15s;
         }
         .delete-btn:hover { border-color: rgba(239,68,68,0.65); background: rgba(239,68,68,0.18); }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 70;
+            background: rgba(9,9,11,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1.25rem;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        .modal-backdrop.is-open { display: flex; }
+
+        .detail-modal {
+            width: min(780px, 100%);
+            max-height: min(84vh, 820px);
+            overflow: hidden;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63,63,70,0.9);
+            background: linear-gradient(180deg, rgba(24,24,27,0.98), rgba(10,10,12,0.98));
+            box-shadow: 0 18px 48px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-modal-header {
+            padding: 1rem 1.1rem 0.85rem;
+            border-bottom: 1px solid rgba(63,63,70,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .detail-modal-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #f4f4f5;
+        }
+
+        .detail-modal-subtitle {
+            margin-top: 0.2rem;
+            font-size: 0.8rem;
+            color: #a1a1aa;
+        }
+
+        .detail-close {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.5rem;
+            border: 1px solid rgba(63,63,70,0.9);
+            background: rgba(24,24,27,0.75);
+            color: #d4d4d8;
+            font-size: 1.1rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .detail-close:hover { border-color: rgba(6,182,212,0.4); color: #22d3ee; }
+
+        .detail-modal-body {
+            padding: 0.95rem 1.1rem 1.15rem;
+            overflow: auto;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 0.65rem;
+        }
+
+        .detail-item {
+            border: 1px solid rgba(63,63,70,0.75);
+            border-radius: 0.65rem;
+            background: rgba(24,24,27,0.55);
+            padding: 0.7rem;
+            min-height: 4rem;
+        }
+
+        .detail-key {
+            color: #71717a;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.35rem;
+        }
+
+        .detail-value {
+            color: #e4e4e7;
+            font-size: 0.82rem;
+            line-height: 1.4;
+            word-break: break-word;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
     </style>
 </head>
 <body class="bg-zinc-950 text-white font-sans antialiased min-h-screen">
@@ -517,7 +619,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 </thead>
                 <tbody>
                     <?php foreach ($logs as $row): ?>
-                        <tr>
+                        <tr class="log-row" data-log-id="<?= (int) $row['id'] ?>" tabindex="0" role="button" aria-label="Open full trip details for record #<?= (int) $row['id'] ?>">
                             <td class="text-zinc-200 font-medium whitespace-nowrap">
                                 <?= htmlspecialchars(fmtDate($row['trip_date']), ENT_QUOTES, 'UTF-8') ?>
                             </td>
@@ -551,7 +653,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                             <td class="whitespace-nowrap">
                                 <form method="POST" action="mileage-tracker.php<?= $filterStart !== '' || $filterEnd !== '' || $filterStatus !== '' ? '?' . htmlspecialchars(http_build_query(array_filter(['start' => $filterStart, 'end' => $filterEnd, 'status' => $filterStatus])), ENT_QUOTES, 'UTF-8') : '' ?>" style="display:inline;">
                                     <input type="hidden" name="delete_id" value="<?= (int) $row['id'] ?>">
-                                    <button type="submit" class="delete-btn" onclick="return confirm('Are you sure you want to delete this mileage record? This action cannot be undone.')">
+                                    <button type="submit" class="delete-btn" onclick="event.stopPropagation(); return confirm('Are you sure you want to delete this mileage record? This action cannot be undone.')">
                                         <svg style="width:0.7rem;height:0.7rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                         Delete
                                     </button>
@@ -579,6 +681,113 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     <?php endif; ?>
 
 </main>
+
+<?php if (!empty($logs)): ?>
+    <div id="trip-detail-modal" class="modal-backdrop" aria-hidden="true">
+        <div class="detail-modal" role="dialog" aria-modal="true" aria-labelledby="trip-detail-title">
+            <div class="detail-modal-header">
+                <div>
+                    <h2 id="trip-detail-title" class="detail-modal-title">Trip Record Details</h2>
+                    <div class="detail-modal-subtitle" id="trip-detail-subtitle">Complete raw row data</div>
+                </div>
+                <button type="button" class="detail-close" id="trip-detail-close" aria-label="Close details modal">&times;</button>
+            </div>
+            <div class="detail-modal-body">
+                <div id="trip-detail-grid" class="detail-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const rowsData = <?= json_encode($logs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+            const rowMap = new Map();
+            rowsData.forEach((record, index) => {
+                rowMap.set(String(record.id ?? index), record);
+            });
+
+            const modal = document.getElementById('trip-detail-modal');
+            const modalClose = document.getElementById('trip-detail-close');
+            const modalGrid = document.getElementById('trip-detail-grid');
+            const modalSubtitle = document.getElementById('trip-detail-subtitle');
+            const clickableRows = document.querySelectorAll('tr.log-row[data-log-id]');
+            let lastActiveRow = null;
+
+            const escapeHtml = (value) => String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+
+            const normalizeValue = (value) => {
+                if (value === null || value === '') return '—';
+                if (typeof value === 'object') return JSON.stringify(value);
+                return String(value);
+            };
+
+            const toLabel = (key) => key
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, (char) => char.toUpperCase());
+
+            const renderDetails = (record) => {
+                const fields = Object.entries(record);
+                modalGrid.innerHTML = fields.map(([key, value]) => (
+                    `<div class="detail-item">
+                        <div class="detail-key">${escapeHtml(toLabel(key))}</div>
+                        <div class="detail-value">${escapeHtml(normalizeValue(value))}</div>
+                    </div>`
+                )).join('');
+            };
+
+            const closeModal = () => {
+                modal.classList.remove('is-open');
+                modal.setAttribute('aria-hidden', 'true');
+                document.body.style.overflow = '';
+                if (lastActiveRow) {
+                    lastActiveRow.focus();
+                    lastActiveRow = null;
+                }
+            };
+
+            const openModal = (rowEl) => {
+                const record = rowMap.get(rowEl.dataset.logId);
+                if (!record) return;
+                lastActiveRow = rowEl;
+                renderDetails(record);
+                modalSubtitle.textContent = `Record #${record.id ?? '—'} • Job #${record.service_request_id ?? '—'}`;
+                modal.classList.add('is-open');
+                modal.setAttribute('aria-hidden', 'false');
+                document.body.style.overflow = 'hidden';
+                modalClose.focus();
+            };
+
+            clickableRows.forEach((rowEl) => {
+                rowEl.addEventListener('click', (event) => {
+                    if (event.target.closest('button, a, input, select, textarea, form, label')) return;
+                    openModal(rowEl);
+                });
+
+                rowEl.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openModal(rowEl);
+                    }
+                });
+            });
+
+            modalClose.addEventListener('click', closeModal);
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) closeModal();
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+                    closeModal();
+                }
+            });
+        })();
+    </script>
+<?php endif; ?>
 
 </body>
 </html>
