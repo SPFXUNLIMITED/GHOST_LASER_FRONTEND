@@ -859,7 +859,7 @@ require_once __DIR__ . '/templates/header.php';
                                         class="mileage-btn btn-arrived"
                                         data-action="arrived"
                                         data-job-id="<?= (int) $job['service_request_id'] ?>"
-                                        title="Record arrival time, GPS coordinates, and calculate miles"
+                                        title="Record arrival time, GPS coordinates, and ending odometer"
                                     >
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                                         Arrived
@@ -937,7 +937,7 @@ require_once __DIR__ . '/templates/header.php';
                                 class="mileage-btn btn-arrived"
                                 data-action="arrived"
                                 data-job-id="0"
-                                title="Record arrival time, GPS coordinates, and calculate miles"
+                                title="Record arrival time, GPS coordinates, and ending odometer"
                             >
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                                 Arrived
@@ -1079,7 +1079,7 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
                 setStatus(jobId, '✓ Departed at ' + data.start_time, 'ok');
             } else {
                 btn.classList.add('active');
-                var miles = data.total_miles !== null && data.total_miles !== undefined
+                var miles = hasMiles(data.total_miles)
                     ? ' — ' + data.total_miles + ' miles'
                     : '';
                 setStatus(jobId, '✓ Arrived at ' + data.end_time + miles, 'ok');
@@ -1105,6 +1105,10 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         return disp + ':' + (m < 10 ? '0' + m : '' + m) + ' ' + period;
     }
 
+    function hasMiles(value) {
+        return value !== null && value !== undefined && value !== '';
+    }
+
     function initTripStates() {
         var states = window.TRIP_STATES;
         if (!states) { return; }
@@ -1123,7 +1127,7 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
                 if (onWayBtn)   { onWayBtn.classList.add('active');   onWayBtn.disabled = true; }
                 if (arrivedBtn) { arrivedBtn.classList.add('active'); arrivedBtn.disabled = true; }
                 var arrTime = formatDbTime(state.end_time);
-                var miles   = state.total_miles ? ' \u2014 ' + state.total_miles + ' miles' : '';
+                var miles   = hasMiles(state.total_miles) ? ' \u2014 ' + state.total_miles + ' miles' : '';
                 setStatus(jobId, '\u2713 Arrived' + (arrTime ? ' at ' + arrTime : '') + miles, 'ok');
             }
         });
@@ -1156,6 +1160,12 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         _mileageInput = '';
         updateNixieDisplay();
         document.getElementById('nixieError').textContent = '';
+        document.querySelector('.mileage-modal-title').textContent = payload.action === 'on_my_way'
+            ? 'Starting Odometer'
+            : 'Ending Odometer';
+        document.querySelector('.mileage-modal-sub').textContent = payload.action === 'on_my_way'
+            ? 'Enter current truck mileage before departing'
+            : 'Enter current truck mileage after arriving';
         var modal = document.getElementById('mileageModal');
         modal.classList.add('open');
         document.body.style.overflow = 'hidden';

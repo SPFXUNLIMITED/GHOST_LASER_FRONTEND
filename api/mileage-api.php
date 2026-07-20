@@ -30,7 +30,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 require_once __DIR__ . '/../project/db.php';
-$cfg = require __DIR__ . '/../config.php';
 
 // ── Ensure mileage_logs table exists ─────────────────────────────────────────
 $pdo->exec("
@@ -105,50 +104,6 @@ function validCoord(?string $v): ?float
     }
     $f = filter_var($v, FILTER_VALIDATE_FLOAT);
     return $f === false ? null : $f;
-}
-
-// ── Helper: calculate miles via Google Maps Distance Matrix ───────────────────
-function calculateMiles(
-    float  $startLat,
-    float  $startLng,
-    float  $endLat,
-    float  $endLng,
-    string $apiKey
-): ?float {
-    if ($apiKey === '') {
-        // Fallback: haversine straight-line distance (convert km → miles)
-        $earthKm = 6371;
-        $dLat    = deg2rad($endLat - $startLat);
-        $dLng    = deg2rad($endLng - $startLng);
-        $a       = sin($dLat / 2) ** 2
-                 + cos(deg2rad($startLat)) * cos(deg2rad($endLat)) * sin($dLng / 2) ** 2;
-        $km      = $earthKm * 2 * asin(sqrt($a));
-        return round($km * 0.621371, 2);
-    }
-
-    $url = 'https://maps.googleapis.com/maps/api/distancematrix/json?'
-         . http_build_query([
-             'origins'      => "{$startLat},{$startLng}",
-             'destinations' => "{$endLat},{$endLng}",
-             'mode'         => 'driving',
-             'units'        => 'imperial',
-             'key'          => $apiKey,
-         ]);
-
-    $ctx = stream_context_create(['http' => ['timeout' => 5]]);
-    $res = @file_get_contents($url, false, $ctx);
-    if ($res === false) {
-        return null;
-    }
-
-    $json = json_decode($res, true);
-    $meters = $json['rows'][0]['elements'][0]['distance']['value'] ?? null;
-    if ($meters === null) {
-        return null;
-    }
-
-    // Convert metres → miles
-    return round($meters / 1609.344, 2);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -262,20 +217,21 @@ if ($action === 'arrived') {
         exit;
     }
 
-    $endTime    = laDateTimeString();
-    $totalMiles = null;
-
-    $apiKey = $cfg['google_maps']['api_key'] ?? '';
-
-    if ($log['start_lat'] !== null && $log['start_lng'] !== null && $endLat !== null && $endLng !== null) {
-        $totalMiles = calculateMiles(
-            (float) $log['start_lat'],
-            (float) $log['start_lng'],
-            $endLat,
-            $endLng,
-            $apiKey
-        );
+    if ($log['start_mileage'] === null || $endMileage === null) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Both start and end odometer readings are required.']);
+        exit;
     }
+
+    $startMileage = (int) $log['start_mileage'];
+    if ($endMileage < $startMileage) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'End mileage cannot be less than start mileage.']);
+        exit;
+    }
+
+    $endTime    = laDateTimeString();
+    $totalMiles = round((float) ($endMileage - $startMileage), 2);
 
     $update = $pdo->prepare(
         "UPDATE mileage_logs
