@@ -79,36 +79,40 @@ foreach ($rawJobs as $job) {
 }
 $clusters = array_values($clusters);
 
+// ── Load scheduling settings (provides shop_address for Returning Home card) ─
+$schedSettings = getSchedulingSettings($pdo);
+$shopAddress   = $schedSettings['shop_address'];
+
 // ── Load trip states for the selected date ───────────────────────────────────
 // Keyed by service_request_id; allows the UI to restore button states after
 // a logout/reload without losing "on my way" or "arrived" progress.
+// service_request_id = 0 is the reserved sentinel for the return-home trip.
 $tripStates = [];
-if (!empty($rawJobs)) {
-    try {
-        $jobIds       = array_map('intval', array_column($rawJobs, 'service_request_id'));
-        $placeholders = implode(',', array_fill(0, count($jobIds), '?'));
-        $tsStmt       = $pdo->prepare(
-            "SELECT service_request_id, status, start_time, end_time, total_miles
-               FROM mileage_logs
-              WHERE service_request_id IN ($placeholders)
-                AND trip_date = ?
-              ORDER BY id DESC"
-        );
-        $tsStmt->execute(array_merge($jobIds, [$dateKey]));
-        foreach ($tsStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $sid = (int) $row['service_request_id'];
-            if (!isset($tripStates[$sid])) {   // keep only the most-recent record
-                $tripStates[$sid] = [
-                    'status'      => $row['status'],
-                    'start_time'  => $row['start_time'],
-                    'end_time'    => $row['end_time'],
-                    'total_miles' => $row['total_miles'],
-                ];
-            }
+try {
+    $jobIds       = !empty($rawJobs) ? array_map('intval', array_column($rawJobs, 'service_request_id')) : [];
+    $allIds       = array_merge([0], $jobIds); // always include the return-home sentinel
+    $placeholders = implode(',', array_fill(0, count($allIds), '?'));
+    $tsStmt       = $pdo->prepare(
+        "SELECT service_request_id, status, start_time, end_time, total_miles
+           FROM mileage_logs
+          WHERE service_request_id IN ($placeholders)
+            AND trip_date = ?
+          ORDER BY id DESC"
+    );
+    $tsStmt->execute(array_merge($allIds, [$dateKey]));
+    foreach ($tsStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $sid = (int) $row['service_request_id'];
+        if (!isset($tripStates[$sid])) {   // keep only the most-recent record
+            $tripStates[$sid] = [
+                'status'      => $row['status'],
+                'start_time'  => $row['start_time'],
+                'end_time'    => $row['end_time'],
+                'total_miles' => $row['total_miles'],
+            ];
         }
-    } catch (PDOException $e) {
-        // mileage_logs table not yet created — states default to empty.
     }
+} catch (PDOException $e) {
+    // mileage_logs table not yet created — states default to empty.
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -868,6 +872,75 @@ require_once __DIR__ . '/templates/header.php';
                 </div>
             </div>
         <?php endforeach; ?>
+
+        <!-- ── Returning Home card ──────────────────────────────────────────── -->
+        <?php
+        $hubWazeUrl  = 'https://waze.com/ul?q=' . rawurlencode($shopAddress) . '&navigate=yes';
+        $hubGmapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' . rawurlencode($shopAddress);
+        ?>
+        <div class="mb-7">
+            <div class="cluster-heading">End of Day — Returning to Base</div>
+            <div class="space-y-3">
+                <div class="job-card">
+                    <!-- Row 1: home icon + label -->
+                    <div class="flex items-center justify-between gap-2 mb-2.5">
+                        <div class="flex items-center gap-2">
+                            <span class="flex-shrink-0 w-6 h-6 rounded-full border border-zinc-600/60 bg-zinc-800/60 flex items-center justify-center text-xs font-bold text-zinc-300">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: heading -->
+                    <div class="text-sm font-semibold text-zinc-100 mb-1.5">Returning Home</div>
+
+                    <!-- Row 3: address + navigation buttons -->
+                    <div class="mb-2">
+                        <div class="address-text">
+                            <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            <?= htmlspecialchars($shopAddress, ENT_QUOTES, 'UTF-8') ?>
+                        </div>
+                        <div class="nav-btns">
+                            <a href="<?= htmlspecialchars($hubWazeUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="nav-btn btn-waze">
+                                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 7.28C19.54 3.1 15.82 0 11.36 0 6.17 0 1.96 4.21 1.96 9.4c0 2.78 1.22 5.28 3.16 7.01-.06.34-.31 1.37-.84 1.9-.1.1-.07.27.06.33.85.36 3.46.95 5.87-1.13.76.15 1.54.23 2.35.23.31 0 .62-.01.92-.04 4.16-.37 7.56-3.37 8.24-7.45.15-.91.17-1.36.08-2.97h-.26z"/></svg>
+                                Waze
+                            </a>
+                            <a href="<?= htmlspecialchars($hubGmapsUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="nav-btn btn-gmaps">
+                                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
+                                Google Maps
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Mileage tracking buttons -->
+                    <div class="mt-3 pt-3 border-t border-zinc-700/40">
+                        <div class="flex items-center gap-2">
+                            <button
+                                class="mileage-btn btn-on-way"
+                                data-action="on_my_way"
+                                data-job-id="0"
+                                data-client="Returning Home"
+                                data-address="<?= htmlspecialchars($shopAddress, ENT_QUOTES, 'UTF-8') ?>"
+                                title="Record departure time and GPS coordinates"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12l7-7m0 0l7 7m-7-7v14"/></svg>
+                                On My Way
+                            </button>
+                            <button
+                                class="mileage-btn btn-arrived"
+                                data-action="arrived"
+                                data-job-id="0"
+                                title="Record arrival time, GPS coordinates, and calculate miles"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                Arrived
+                            </button>
+                        </div>
+                        <div class="mileage-status" data-status-job="0"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div class="mt-4 text-center">
             <a href="technician/schedule.php" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">

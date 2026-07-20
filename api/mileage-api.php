@@ -162,7 +162,7 @@ if ($action === 'on_my_way') {
     $startLng         = validCoord((string) ($data['start_lng'] ?? ''));
     $startMileage     = isset($data['start_mileage']) ? (int) $data['start_mileage'] : null;
 
-    if ($serviceRequestId <= 0) {
+    if ($serviceRequestId < 0) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Missing service_request_id']);
         exit;
@@ -241,7 +241,7 @@ if ($action === 'arrived') {
     $endLng           = validCoord((string) ($data['end_lng'] ?? ''));
     $endMileage       = isset($data['end_mileage']) ? (int) $data['end_mileage'] : null;
 
-    if ($serviceRequestId <= 0) {
+    if ($serviceRequestId < 0) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Missing service_request_id']);
         exit;
