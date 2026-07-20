@@ -32,16 +32,24 @@ function fmtDate(?string $dt): string
     }
 }
 
-function fmtCoords(?string $lat, ?string $lng): string
+function fmtOdometer($mileage): string
 {
-    if ($lat === null || $lng === null) return '—';
-    return number_format((float) $lat, 6) . ', ' . number_format((float) $lng, 6);
+    if ($mileage === null || $mileage === '') return '—';
+    return number_format((float) $mileage, 0) . ' mi';
 }
 
-function fmtMiles(?string $m): string
+function mileageFromOdometer($startMileage, $endMileage): ?float
 {
-    if ($m === null) return '—';
-    return number_format((float) $m, 2) . ' mi';
+    if ($startMileage === null || $startMileage === '' || $endMileage === null || $endMileage === '') {
+        return null;
+    }
+    return (float) $endMileage - (float) $startMileage;
+}
+
+function fmtMiles($mileage): string
+{
+    if ($mileage === null || $mileage === '') return '—';
+    return number_format((float) $mileage, 2) . ' mi';
 }
 
 $adminUsername = trim((string) ($_SESSION['admin_username'] ?? 'Admin'));
@@ -95,6 +103,8 @@ try {
             start_lng          DECIMAL(10,7) NULL,
             end_lat            DECIMAL(10,7) NULL,
             end_lng            DECIMAL(10,7) NULL,
+            start_mileage      INT UNSIGNED  NULL COMMENT 'Odometer at departure',
+            end_mileage        INT UNSIGNED  NULL COMMENT 'Odometer at arrival',
             total_miles        DECIMAL(8,2)  NULL,
             status             ENUM('pending','complete') NOT NULL DEFAULT 'pending',
             created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -142,8 +152,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
 $totalMiles = 0.0;
 $completedTrips = 0;
 foreach ($logs as $row) {
-    if ($row['status'] === 'complete' && $row['total_miles'] !== null) {
-        $totalMiles   += (float) $row['total_miles'];
+    $tripMiles = mileageFromOdometer($row['start_mileage'] ?? null, $row['end_mileage'] ?? null);
+    if ($row['status'] === 'complete' && $tripMiles !== null) {
+        $totalMiles   += $tripMiles;
         $completedTrips++;
     }
 }
@@ -164,8 +175,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         'Address',
         'Start Time (LA)',
         'End Time (LA)',
-        'Starting Location (Lat,Lng)',
-        'Ending Location (Lat,Lng)',
+        'Starting Odometer',
+        'Ending Odometer',
         'Total Miles',
         'Job ID',
         'Status',
@@ -178,9 +189,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             $row['address'],
             fmtDateTime($row['start_time']),
             fmtDateTime($row['end_time']),
-            fmtCoords($row['start_lat'], $row['start_lng']),
-            fmtCoords($row['end_lat'], $row['end_lng']),
-            $row['total_miles'] !== null ? number_format((float) $row['total_miles'], 2) : '',
+            $row['start_mileage'] ?? '',
+            $row['end_mileage'] ?? '',
+            (($tripMiles = mileageFromOdometer($row['start_mileage'] ?? null, $row['end_mileage'] ?? null)) !== null) ? number_format($tripMiles, 2) : '',
             '#' . $row['service_request_id'],
             $row['status'],
         ]);
@@ -344,7 +355,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             color: #fde68a;
         }
 
-        .coord-cell {
+        .odometer-cell {
             font-size: 0.72rem;
             color: #71717a;
             font-family: ui-monospace, monospace;
@@ -610,7 +621,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         <th>Client Name</th>
                         <th>Address</th>
                         <th>Time</th>
-                        <th>Route</th>
+                        <th>Starting Odometer</th>
+                        <th>Ending Odometer</th>
                         <th>Total Miles</th>
                         <th>Job ID</th>
                         <th>Status</th>
@@ -619,6 +631,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 </thead>
                 <tbody>
                     <?php foreach ($logs as $row): ?>
+                        <?php $tripMiles = mileageFromOdometer($row['start_mileage'] ?? null, $row['end_mileage'] ?? null); ?>
                         <tr class="log-row" data-log-id="<?= (int) $row['id'] ?>" tabindex="0" role="button" aria-label="Open full trip details for record #<?= (int) $row['id'] ?>">
                             <td class="text-zinc-200 font-medium whitespace-nowrap">
                                 <?= htmlspecialchars(fmtDate($row['trip_date']), ENT_QUOTES, 'UTF-8') ?>
@@ -633,12 +646,14 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <div class="text-xs text-zinc-400">Start: <?= htmlspecialchars(fmtDateTime($row['start_time']), ENT_QUOTES, 'UTF-8') ?></div>
                                 <div class="text-xs text-zinc-400">End: <?= htmlspecialchars(fmtDateTime($row['end_time']), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
-                            <td class="coord-cell">
-                                <div class="text-xs text-zinc-400">Start: <?= htmlspecialchars(fmtCoords($row['start_lat'], $row['start_lng']), ENT_QUOTES, 'UTF-8') ?></div>
-                                <div class="text-xs text-zinc-400">End: <?= htmlspecialchars(fmtCoords($row['end_lat'], $row['end_lng']), ENT_QUOTES, 'UTF-8') ?></div>
+                            <td class="odometer-cell">
+                                <?= htmlspecialchars(fmtOdometer($row['start_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?>
+                            </td>
+                            <td class="odometer-cell">
+                                <?= htmlspecialchars(fmtOdometer($row['end_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?>
                             </td>
                             <td class="miles-cell">
-                                <?= htmlspecialchars(fmtMiles($row['total_miles']), ENT_QUOTES, 'UTF-8') ?>
+                                <?= htmlspecialchars(fmtMiles($tripMiles), ENT_QUOTES, 'UTF-8') ?>
                             </td>
                             <td class="text-zinc-400 font-mono text-xs whitespace-nowrap">
                                 #<?= (int) $row['service_request_id'] ?>
