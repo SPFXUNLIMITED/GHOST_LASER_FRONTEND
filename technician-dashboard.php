@@ -869,7 +869,7 @@ require_once __DIR__ . '/templates/header.php';
                                         data-phone="<?= htmlspecialchars($phoneDigits, ENT_QUOTES, 'UTF-8') ?>"
                                     >
                                         <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z"/></svg>
-                                        Notify Customer
+                                        Notify Arrival
                                     </button>
                                 </div>
                                 <div class="mileage-status" data-status-job="<?= (int) $job['service_request_id'] ?>"></div>
