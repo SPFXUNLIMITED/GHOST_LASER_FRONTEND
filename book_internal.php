@@ -8,7 +8,7 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/project/db.php';
-require_once __DIR__ . '/travel_settings.php';
+require_once __DIR__ . '/travel-helper.php';
 
 // Load Google Maps API key for client-side geocoding proxy
 function loadGoogleMapsApiKey(): string {
