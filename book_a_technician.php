@@ -235,11 +235,28 @@ foreach ($_dbServices as $_svc) {
     }
 }
 unset($_dbServices, $_svc, $_key);
-$speedOptions = [
-    'standard' => ['label' => 'Standard', 'multiplier' => 1.00],
-    'rush' => ['label' => 'VIP', 'multiplier' => 1.35],
-    'emergency' => ['label' => 'Emergency', 'multiplier' => 1.75],
-];
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS service_speeds (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        speed_key VARCHAR(50) NOT NULL UNIQUE,
+        display_name VARCHAR(100) NOT NULL,
+        price_multiplier DECIMAL(5,2) NOT NULL DEFAULT 1.00,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+");
+if ((int) $pdo->query("SELECT COUNT(*) FROM service_speeds")->fetchColumn() === 0) {
+    $pdo->exec("INSERT INTO service_speeds (speed_key, display_name, price_multiplier, sort_order) VALUES
+        ('standard', 'Standard', 1.00, 1),
+        ('rush', 'VIP', 1.35, 2),
+        ('emergency', 'Emergency', 1.75, 3)");
+}
+$speedOptions = [];
+foreach ($pdo->query("SELECT speed_key, display_name, price_multiplier FROM service_speeds ORDER BY sort_order ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC) as $_spd) {
+    $speedOptions[$_spd['speed_key']] = ['label' => $_spd['display_name'], 'multiplier' => (float) $_spd['price_multiplier']];
+}
+unset($_spd);
 
 $step = isset($_GET['step']) ? (int) $_GET['step'] : 2;
 if (!in_array($step, [2, 3, 4], true)) {

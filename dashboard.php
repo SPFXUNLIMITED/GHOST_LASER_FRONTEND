@@ -106,12 +106,18 @@ require_once __DIR__ . '/templates/header.php';
                             Manage operational configuration pages for scheduling, services, and other admin tools.
                         </p>
                     </div>
-                    <div class="mt-8">
+                    <div class="mt-8 space-y-2">
                         <a
                             href="service-settings.php"
                             class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2.5 transition-all btn-glow"
                         >
                             Service Settings
+                        </a>
+                        <a
+                            href="speed-settings.php"
+                            class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/60 hover:border-cyan-500/40 hover:bg-zinc-800 text-zinc-200 font-medium text-sm px-4 py-2.5 transition-all"
+                        >
+                            Speed Settings
                         </a>
                     </div>
                 </div>
