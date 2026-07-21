@@ -119,6 +119,12 @@ require_once __DIR__ . '/templates/header.php';
                         >
                             Speed Settings
                         </a>
+                        <a
+                            href="settings.php"
+                            class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/60 hover:border-cyan-500/40 hover:bg-zinc-800 text-zinc-200 font-medium text-sm px-4 py-2.5 transition-all"
+                        >
+                            Schedule Settings
+                        </a>
                     </div>
                 </div>
 
@@ -144,12 +150,6 @@ require_once __DIR__ . '/templates/header.php';
                             class="inline-flex w-full items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/60 hover:border-cyan-500/40 hover:bg-zinc-800 text-zinc-200 font-medium text-sm px-4 py-2.5 transition-all"
                         >
                             Technician Dashboard
-                        </a>
-                        <a
-                            href="settings.php"
-                            class="inline-flex w-full items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/60 hover:border-zinc-600 hover:bg-zinc-800 text-zinc-300 font-medium text-sm px-4 py-2.5 transition-all"
-                        >
-                            Settings
                         </a>
                         <a
                             href="mileage-tracker.php"
