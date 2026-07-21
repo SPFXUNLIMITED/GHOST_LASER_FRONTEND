@@ -207,18 +207,34 @@ require_once __DIR__ . '/templates/header.php';
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
+            console.log('[PWA] beforeinstallprompt captured; install prompt is ready.');
             if (installBtn) installBtn.hidden = false;
         });
 
         if (installBtn) {
             installBtn.addEventListener('click', async () => {
-                if (!deferredPrompt) return;
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    installBtn.hidden = true;
+                if (!deferredPrompt) {
+                    console.error('[PWA] Install Admin App tapped, but no deferred prompt is available. The beforeinstallprompt event may not have fired yet.');
+                    return;
                 }
-                deferredPrompt = null;
+
+                const promptEvent = deferredPrompt;
+
+                try {
+                    console.log('[PWA] Install Admin App tapped; showing install prompt.');
+                    await promptEvent.prompt();
+                    const { outcome } = await promptEvent.userChoice;
+                    console.log(`[PWA] Install prompt outcome: ${outcome}`);
+                    if (outcome === 'accepted') {
+                        installBtn.hidden = true;
+                    }
+                } catch (error) {
+                    console.error('[PWA] Failed to show install prompt:', error);
+                } finally {
+                    if (deferredPrompt === promptEvent) {
+                        deferredPrompt = null;
+                    }
+                }
             });
         }
 
