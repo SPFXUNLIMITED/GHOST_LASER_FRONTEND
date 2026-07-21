@@ -673,7 +673,7 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                     <p class="text-xs font-semibold uppercase tracking-widest text-cyan-400">Choose Service Speed</p>
                     <?php foreach ($speedOptions as $speedKey => $speed): ?>
-                        <?php $speedTotal = round(($baseTotal * $speed['multiplier']) + $travelFee, 2); ?>
+                        <?php $speedTotal = round($baseTotal * $speed['multiplier'], 2); ?>
                         <label class="speed-option flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 cursor-pointer">
                             <span class="flex items-center gap-2">
                                 <input type="radio" name="service_speed" value="<?= h($speedKey) ?>" <?= $currentSpeed === $speedKey ? 'checked' : '' ?>>
