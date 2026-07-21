@@ -238,8 +238,8 @@ unset($_spd);
 
 $travelSettings = getTravelSettings($pdo);
 $travelPricePerMile = (float) ($travelSettings['price_per_mile'] ?? 2.00);
-$travelMiles = 60.0;
-$travelDistanceIsEstimate = true;
+$travelMiles = null;
+$travelDistanceError = null;
 
 $step = isset($_GET['step']) ? (int) $_GET['step'] : 1;
 if (!in_array($step, [1, 2, 3], true)) {
@@ -320,12 +320,11 @@ if ($step === 2 && $booking) {
         $booking['state']   ?? '',
         $booking['zip']     ?? '',
     ]));
-    if ($baseLocation !== '' && $customerAddress !== '') {
-        $oneWayMiles = calculateDrivingDistanceMiles($baseLocation, $customerAddress, $googleMapsApiKey);
-        if ($oneWayMiles !== null) {
-            $travelMiles = round($oneWayMiles * 2, 1); // round trip
-            $travelDistanceIsEstimate = false;
-        }
+    $distanceResult = calculateDrivingDistanceMiles($baseLocation, $customerAddress, $googleMapsApiKey);
+    if (is_float($distanceResult)) {
+        $travelMiles = round($distanceResult * 2, 1); // round trip
+    } else {
+        $travelDistanceError = $distanceResult['error'] ?? 'api_error';
     }
 }
 
@@ -594,11 +593,9 @@ require_once __DIR__ . '/templates/header.php';
                 $baseTotal += $serviceBasePrices[$serviceKey] ?? 0;
             }
             $serviceTotal = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
-            $travelFee = round($travelMiles * $travelPricePerMile, 2);
+            $travelFee = $travelMiles !== null ? round($travelMiles * $travelPricePerMile, 2) : 0.0;
             $total = round($serviceTotal + $travelFee, 2);
-            $travelMilesLabel = $travelDistanceIsEstimate
-                ? number_format($travelMiles, 0) . ' miles (est.)'
-                : number_format($travelMiles, 1) . ' miles round trip';
+            $travelMilesLabel = $travelMiles !== null ? number_format($travelMiles, 1) . ' miles round trip' : '';
         ?>
         <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
             <div id="step-2-success" class="hidden relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-zinc-950 px-6 py-8 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_0_70px_rgba(8,145,178,0.12)] sm:px-8 sm:py-10">
@@ -696,15 +693,27 @@ require_once __DIR__ . '/templates/header.php';
                             <span class="text-zinc-300">Service Total</span>
                             <span id="current-service-total" class="font-semibold text-zinc-100">$<?= number_format($serviceTotal, 2) ?></span>
                         </div>
+                        <?php if ($travelDistanceError): ?>
+                        <div class="flex items-center justify-between gap-4">
+                            <span class="text-red-400">Travel Fee</span>
+                            <span id="current-travel-fee" class="text-red-400">TBD</span>
+                        </div>
+                        <?php else: ?>
                         <div class="flex items-center justify-between gap-4">
                             <span class="text-zinc-300">Travel Fee (<?= h($travelMilesLabel) ?> × $<?= number_format($travelPricePerMile, 2) ?>/mile)</span>
                             <span id="current-travel-fee" class="font-semibold text-zinc-100">$<?= number_format($travelFee, 2) ?></span>
                         </div>
+                        <?php endif; ?>
                         <div class="flex items-center justify-between gap-4 border-t border-cyan-500/20 pt-2">
-                            <span class="text-zinc-300">Grand Total</span>
+                            <span class="text-zinc-300">Grand Total<?= $travelDistanceError ? ' <span class="text-xs font-normal text-red-400">(excl. travel)</span>' : '' ?></span>
                             <span id="current-total" class="font-semibold text-cyan-300">$<?= number_format($total, 2) ?></span>
                         </div>
                     </div>
+                    <?php if ($travelDistanceError): ?>
+                    <div class="rounded-lg border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+                        <?= h(travelDistanceErrorMessage($travelDistanceError)) ?>
+                    </div>
+                    <?php endif; ?>
 
                     <div class="flex gap-3">
                         <a href="book_internal.php?step=1" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
@@ -1024,7 +1033,8 @@ require_once __DIR__ . '/templates/header.php';
     const speedPriorityMap = { standard: 'standard', rush: 'vip', emergency: 'emergency' };
     const travelMiles = <?= json_encode($travelMiles, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const travelPricePerMile = <?= json_encode($travelPricePerMile, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-    const travelMilesLabel = <?= json_encode($travelMilesLabel ?? (number_format($travelMiles, 0) . ' miles (est.)'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const travelMilesLabel = <?= json_encode($travelMilesLabel ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const travelDistanceError = <?= json_encode($travelDistanceError ?? null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
     if (stepTwoForm && bookingPayload) {
         const serviceTotalEl = document.getElementById('current-service-total');
@@ -1074,10 +1084,12 @@ require_once __DIR__ . '/templates/header.php';
             bookingPayload.service_speed = selectedSpeed;
             const baseTotal = (bookingPayload.services || []).reduce((sum, key) => sum + (serviceBasePrices[key] || 0), 0);
             bookingPayload.service_total = Number((baseTotal * (speedOptions[selectedSpeed]?.multiplier || 1)).toFixed(2));
-            bookingPayload.travel_fee = Number((travelMiles * travelPricePerMile).toFixed(2));
+            bookingPayload.travel_fee = travelMiles !== null ? Number((travelMiles * travelPricePerMile).toFixed(2)) : 0;
             bookingPayload.total_price = Number((bookingPayload.service_total + bookingPayload.travel_fee).toFixed(2));
             serviceTotalEl.textContent = `$${bookingPayload.service_total.toFixed(2)}`;
-            travelFeeEl.textContent = `$${bookingPayload.travel_fee.toFixed(2)}`;
+            if (travelMiles !== null) {
+                travelFeeEl.textContent = `$${bookingPayload.travel_fee.toFixed(2)}`;
+            }
             totalEl.textContent = `$${bookingPayload.total_price.toFixed(2)}`;
         };
 
@@ -1113,7 +1125,9 @@ require_once __DIR__ . '/templates/header.php';
                 bookingPayload.other_service ? `Other service details: ${bookingPayload.other_service}` : null,
                 `Service speed: ${selectedSpeedLabel}`,
                 `Service total: $${bookingPayload.service_total.toFixed(2)}`,
-                `Travel fee (${travelMilesLabel} @ $${travelPricePerMile.toFixed(2)}/mile): $${bookingPayload.travel_fee.toFixed(2)}`,
+                travelDistanceError
+                    ? `Travel fee: unable to calculate (${travelDistanceError}) — contact us for a quote`
+                    : `Travel fee (${travelMilesLabel} @ $${travelPricePerMile.toFixed(2)}/mile): $${bookingPayload.travel_fee.toFixed(2)}`,
                 `Grand total: $${bookingPayload.total_price.toFixed(2)}`,
                 '--- Internal Booking (phone-in) ---',
             ].filter(Boolean);

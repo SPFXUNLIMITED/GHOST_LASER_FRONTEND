@@ -100,14 +100,23 @@ function updateTravelSettings(PDO $pdo, array $settings): void
 
 /**
  * Calls the Google Maps Distance Matrix API and returns the one-way driving
- * distance in miles between $origin and $destination, or null on failure.
+ * distance in miles between $origin and $destination.
  *
- * Multiply the result by 2 for a round-trip distance.
+ * Returns a float (miles) on success, or an array ['error' => '<code>'] on failure.
+ * Error codes: 'api_key_missing', 'base_location_missing', 'invalid_address', 'api_error'.
+ *
+ * Multiply a successful result by 2 for a round-trip distance.
  */
-function calculateDrivingDistanceMiles(string $origin, string $destination, string $apiKey): ?float
+function calculateDrivingDistanceMiles(string $origin, string $destination, string $apiKey): float|array
 {
-    if ($apiKey === '' || $origin === '' || $destination === '') {
-        return null;
+    if ($apiKey === '') {
+        return ['error' => 'api_key_missing'];
+    }
+    if ($origin === '') {
+        return ['error' => 'base_location_missing'];
+    }
+    if ($destination === '') {
+        return ['error' => 'invalid_address'];
     }
 
     $url = 'https://maps.googleapis.com/maps/api/distancematrix/json?' . http_build_query([
@@ -132,20 +141,37 @@ function calculateDrivingDistanceMiles(string $origin, string $destination, stri
 
     if ($curlErr || $response === false) {
         error_log('travel-helper.php calculateDrivingDistanceMiles curl error: ' . $curlErr);
-        return null;
+        return ['error' => 'api_error'];
     }
 
     $data    = json_decode((string) $response, true);
     $element = $data['rows'][0]['elements'][0] ?? null;
-    if (!is_array($element) || ($element['status'] ?? '') !== 'OK') {
-        error_log('travel-helper.php calculateDrivingDistanceMiles API status: ' . ($element['status'] ?? ($data['status'] ?? 'unknown')));
-        return null;
+    $status  = is_array($element) ? ($element['status'] ?? '') : '';
+
+    if ($status !== 'OK') {
+        error_log('travel-helper.php calculateDrivingDistanceMiles API status: ' . ($status ?: ($data['status'] ?? 'unknown')));
+        return in_array($status, ['ZERO_RESULTS', 'NOT_FOUND'], true)
+            ? ['error' => 'invalid_address']
+            : ['error' => 'api_error'];
     }
 
     $meters = (float) ($element['distance']['value'] ?? 0);
     if ($meters <= 0) {
-        return null;
+        return ['error' => 'api_error'];
     }
 
     return $meters / 1609.344; // metres → miles
+}
+
+/**
+ * Returns a human-readable error message for a travel distance error code.
+ */
+function travelDistanceErrorMessage(string $errorCode): string
+{
+    return match ($errorCode) {
+        'base_location_missing' => "Unable to calculate travel distance \u{2014} the shop\u{2019}s base location has not been configured. Please contact us for a quote.",
+        'api_key_missing'       => "Unable to calculate travel distance \u{2014} the distance service is not configured. Please contact us for a quote.",
+        'invalid_address'       => "Unable to calculate travel distance \u{2014} your address could not be found. Please check your address or contact us for a quote.",
+        default                 => 'Unable to calculate travel distance. Please contact us for a quote.',
+    };
 }
