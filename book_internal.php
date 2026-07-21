@@ -671,7 +671,7 @@ require_once __DIR__ . '/templates/header.php';
                         </label>
                         <p class="input-base opacity-70 cursor-not-allowed"><?= h($booking['phone'] ?? '') ?></p>
                     </div>
-                    <p class="text-xs font-semibold uppercase tracking-widest text-cyan-400">Choose Service Speed</p>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-cyan-400">How soon do you need the appointment?</p>
                     <?php foreach ($speedOptions as $speedKey => $speed): ?>
                         <?php $speedTotal = round($baseTotal * $speed['multiplier'], 2); ?>
                         <label class="speed-option flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 cursor-pointer">
