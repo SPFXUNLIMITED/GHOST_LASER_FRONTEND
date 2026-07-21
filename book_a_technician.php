@@ -11,6 +11,37 @@ try {
     // Column may already exist — ignore
 }
 
+function loadGoogleMapsApiKey(): string {
+    static $key = null;
+    if ($key !== null) return $key;
+    $envKey = getenv('GOOGLE_MAPS_API_KEY');
+    if ($envKey !== false && trim($envKey) !== '') {
+        $key = trim($envKey);
+        return $key;
+    }
+    $dotenvPath = __DIR__ . '/api/.env';
+    if (is_file($dotenvPath) && is_readable($dotenvPath)) {
+        $lines = file($dotenvPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (is_array($lines)) {
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || str_starts_with($line, '#')) continue;
+                if (!str_starts_with($line, 'GOOGLE_MAPS_API_KEY=')) continue;
+                $val = substr($line, strlen('GOOGLE_MAPS_API_KEY='));
+                $val = trim($val);
+                if (strlen($val) >= 2) {
+                    if ($val[0] === '"' && $val[-1] === '"') $val = substr($val, 1, -1);
+                    elseif ($val[0] === "'" && $val[-1] === "'") $val = substr($val, 1, -1);
+                }
+                $key = $val;
+                return $key;
+            }
+        }
+    }
+    $key = '';
+    return $key;
+}
+
 // Handle "I have an account" login POST
 $loginError = '';
 $inlineLoginError = '';
@@ -262,6 +293,7 @@ unset($_spd);
 $travelSettings = getTravelSettings($pdo);
 $travelPricePerMile = (float) ($travelSettings['price_per_mile'] ?? 2.00);
 $travelMiles = 60.0;
+$travelDistanceIsEstimate = true;
 
 $step = isset($_GET['step']) ? (int) $_GET['step'] : 2;
 if (!in_array($step, [2, 3, 4], true)) {
@@ -418,6 +450,25 @@ if ($step === 4) {
 if ($step === 3 && !$booking) {
     header('Location: book_a_technician.php?step=2');
     exit;
+}
+
+// ── Real distance calculation for step 3 ─────────────────────────────────
+if ($step === 3 && $booking) {
+    $baseLocation = (string) ($travelSettings['base_location'] ?? '');
+    $customerAddress = implode(', ', array_filter([
+        $booking['address'] ?? '',
+        $booking['city']    ?? '',
+        $booking['state']   ?? '',
+        $booking['zip']     ?? '',
+    ]));
+    if ($baseLocation !== '' && $customerAddress !== '') {
+        $gmapsApiKey = loadGoogleMapsApiKey();
+        $oneWayMiles = calculateDrivingDistanceMiles($baseLocation, $customerAddress, $gmapsApiKey);
+        if ($oneWayMiles !== null) {
+            $travelMiles = round($oneWayMiles * 2, 1); // round trip
+            $travelDistanceIsEstimate = false;
+        }
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $step === 2) {
@@ -764,6 +815,9 @@ require_once __DIR__ . '/templates/header.php';
                 $serviceTotal = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
                 $travelFee = round($travelMiles * $travelPricePerMile, 2);
                 $total = round($serviceTotal + $travelFee, 2);
+                $travelMilesLabel = $travelDistanceIsEstimate
+                    ? number_format($travelMiles, 0) . ' miles (est.)'
+                    : number_format($travelMiles, 1) . ' miles round trip';
             ?>
             <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
                 <?php if (!empty($_SESSION['customer_id'])): ?>
@@ -876,7 +930,7 @@ require_once __DIR__ . '/templates/header.php';
                             <span id="current-service-total" class="font-semibold text-zinc-100">$<?= number_format($serviceTotal, 2) ?></span>
                         </div>
                         <div class="flex items-center justify-between gap-4">
-                            <span class="text-zinc-300">Travel Fee (<?= number_format($travelMiles, 0) ?> miles × $<?= number_format($travelPricePerMile, 2) ?>/mile)</span>
+                            <span class="text-zinc-300">Travel Fee (<?= h($travelMilesLabel) ?> × $<?= number_format($travelPricePerMile, 2) ?>/mile)</span>
                             <span id="current-travel-fee" class="font-semibold text-zinc-100">$<?= number_format($travelFee, 2) ?></span>
                         </div>
                         <div class="flex items-center justify-between gap-4 border-t border-cyan-500/20 pt-2">
@@ -1039,6 +1093,7 @@ require_once __DIR__ . '/templates/header.php';
     const speedPriorityMap = { standard: 'standard', rush: 'vip', emergency: 'emergency' };
     const travelMiles = <?= json_encode($travelMiles, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const travelPricePerMile = <?= json_encode($travelPricePerMile, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const travelMilesLabel = <?= json_encode($travelMilesLabel ?? (number_format($travelMiles, 0) . ' miles (est.)'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
     if (stepTwoForm && bookingPayload) {
         const serviceTotalEl = document.getElementById('current-service-total');
@@ -1134,7 +1189,7 @@ require_once __DIR__ . '/templates/header.php';
                 bookingPayload.other_service ? `Other service details: ${bookingPayload.other_service}` : null,
                 `Service speed: ${selectedSpeedLabel}`,
                 `Service total: $${bookingPayload.service_total.toFixed(2)}`,
-                `Travel fee (${travelMiles.toFixed(0)} miles @ $${travelPricePerMile.toFixed(2)}/mile): $${bookingPayload.travel_fee.toFixed(2)}`,
+                `Travel fee (${travelMilesLabel} @ $${travelPricePerMile.toFixed(2)}/mile): $${bookingPayload.travel_fee.toFixed(2)}`,
                 `Grand total: $${bookingPayload.total_price.toFixed(2)}`,
             ].filter(Boolean);
 

@@ -15,13 +15,14 @@ $errorMessage = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $submittedPricePerMile = trim((string) ($_POST['price_per_mile'] ?? ''));
+    $submittedBaseLocation = trim((string) ($_POST['base_location'] ?? ''));
 
     if ($submittedPricePerMile === '' || !is_numeric($submittedPricePerMile) || (float) $submittedPricePerMile < 0) {
         $errorMessage = 'Price per mile must be a valid non-negative number.';
-        $settings = array_merge($settings, ['price_per_mile' => $submittedPricePerMile]);
+        $settings = array_merge($settings, ['price_per_mile' => $submittedPricePerMile, 'base_location' => $submittedBaseLocation]);
     } else {
         try {
-            updateTravelSettings($pdo, ['price_per_mile' => $submittedPricePerMile]);
+            updateTravelSettings($pdo, ['price_per_mile' => $submittedPricePerMile, 'base_location' => $submittedBaseLocation]);
             $settings = getTravelSettings($pdo);
             $successMessage = 'Travel settings updated successfully.';
         } catch (Throwable $e) {
@@ -88,6 +89,18 @@ require_once __DIR__ . '/templates/header.php';
                         class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none"
                         required
                     >
+                </label>
+
+                <label class="block max-w-sm">
+                    <span class="text-sm font-medium text-zinc-200">Base Location (origin address)</span>
+                    <input
+                        type="text"
+                        name="base_location"
+                        value="<?= htmlspecialchars((string) ($settings['base_location'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>"
+                        placeholder="e.g. 123 Main St, Los Angeles, CA 90001"
+                        class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none"
+                    >
+                    <p class="mt-1 text-xs text-zinc-500">Used as the driving origin when calculating the travel fee. Leave blank to use the default estimate.</p>
                 </label>
 
                 <div class="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">
