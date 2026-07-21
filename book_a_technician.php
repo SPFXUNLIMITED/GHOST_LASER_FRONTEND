@@ -292,8 +292,8 @@ unset($_spd);
 
 $travelSettings = getTravelSettings($pdo);
 $travelPricePerMile = (float) ($travelSettings['price_per_mile'] ?? 2.00);
-$travelMiles = 60.0;
-$travelDistanceIsEstimate = true;
+$travelMiles = null;
+$travelDistanceError = null;
 
 $step = isset($_GET['step']) ? (int) $_GET['step'] : 2;
 if (!in_array($step, [2, 3, 4], true)) {
