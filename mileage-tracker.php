@@ -52,6 +52,50 @@ function fmtMiles($mileage): string
     return number_format((float) $mileage, 2) . ' mi';
 }
 
+/**
+ * Build an IRS-style business purpose string for a mileage log row.
+ * Format: "{Brand} {Model} — {Services} — {Problem}"
+ * Any missing piece is simply omitted.
+ */
+function buildPurpose(array $row): string
+{
+    static $serviceLabels = [
+        'maintenance_alignment' => 'Maintenance & Alignment',
+        'tube_change'           => 'Tube Change',
+        'diagnosis'             => 'Diagnosis',
+        'training'              => 'Training',
+        'other'                 => 'Other',
+    ];
+
+    $parts = [];
+
+    $brand   = trim((string) ($row['laser_brand']  ?? ''));
+    $model   = trim((string) ($row['laser_model']  ?? ''));
+    $machine = trim("$brand $model");
+    if ($machine !== '') {
+        $parts[] = $machine;
+    }
+
+    $servicesRaw = $row['services'] ?? null;
+    if ($servicesRaw !== null && $servicesRaw !== '') {
+        $keys = json_decode((string) $servicesRaw, true);
+        if (is_array($keys) && $keys !== []) {
+            $labels = array_map(
+                static fn($k) => $serviceLabels[$k] ?? ucwords(str_replace('_', ' ', (string) $k)),
+                $keys
+            );
+            $parts[] = implode(', ', $labels);
+        }
+    }
+
+    $problem = trim((string) ($row['problem_summary'] ?? ''));
+    if ($problem !== '') {
+        $parts[] = $problem;
+    }
+
+    return $parts !== [] ? implode(' — ', $parts) : '—';
+}
+
 $adminUsername = trim((string) ($_SESSION['admin_username'] ?? 'Admin'));
 if ($adminUsername === '') {
     $adminUsername = 'Admin';
@@ -114,14 +158,33 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 
+    // Ensure the services JSON column exists on service_requests so that
+    // purpose data can be stored and displayed for IRS documentation.
+    $pdo->exec("
+        ALTER TABLE service_requests
+        ADD COLUMN IF NOT EXISTS services JSON NULL COMMENT 'Selected services as JSON array'
+    ");
+
     $stmt = $pdo->prepare(
-        "SELECT ml.*
+        "SELECT ml.*,
+                sr.laser_brand,
+                sr.laser_model,
+                sr.problem_summary,
+                sr.services
          FROM mileage_logs ml
+         LEFT JOIN service_requests sr ON sr.id = ml.service_request_id
          WHERE {$whereClause}
          ORDER BY ml.trip_date DESC, ml.start_time DESC"
     );
     $stmt->execute($params);
     $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Pre-compute the IRS business purpose for each row so it is available
+    // both in the HTML table and in the JSON data fed to the detail modal.
+    foreach ($logs as &$log) {
+        $log['purpose'] = buildPurpose($log);
+    }
+    unset($log);
 } catch (PDOException $e) {
     $logs = [];
     $dbError = $e->getMessage();
@@ -173,6 +236,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         'Date',
         'Client Name',
         'Address',
+        'Purpose',
         'Start Time (LA)',
         'End Time (LA)',
         'Starting Odometer',
@@ -187,6 +251,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             fmtDate($row['trip_date']),
             $row['client_name'],
             $row['address'],
+            $row['purpose'] ?? buildPurpose($row),
             fmtDateTime($row['start_time']),
             fmtDateTime($row['end_time']),
             $row['start_mileage'] ?? '',
@@ -293,7 +358,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         table {
             border-collapse: collapse;
             width: 100%;
-            min-width: 960px;
+            min-width: 1100px;
             font-size: 0.82rem;
         }
 
@@ -360,6 +425,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             color: #71717a;
             font-family: ui-monospace, monospace;
             white-space: nowrap;
+        }
+
+        .purpose-cell {
+            font-size: 0.78rem;
+            color: #a1a1aa;
+            line-height: 1.45;
         }
 
         .miles-cell {
@@ -620,6 +691,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         <th>Date</th>
                         <th>Client Name</th>
                         <th>Address</th>
+                        <th>Purpose</th>
                         <th>Time</th>
                         <th>Starting Odometer</th>
                         <th>Ending Odometer</th>
@@ -641,6 +713,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                             </td>
                             <td class="max-w-xs text-zinc-300" style="min-width:160px;">
                                 <?= htmlspecialchars($row['address'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
+                            </td>
+                            <td class="purpose-cell" style="min-width:220px;max-width:320px;">
+                                <?= htmlspecialchars($row['purpose'], ENT_QUOTES, 'UTF-8') ?>
                             </td>
                             <td class="whitespace-nowrap">
                                 <div class="text-xs text-zinc-400">Start: <?= htmlspecialchars(fmtDateTime($row['start_time']), ENT_QUOTES, 'UTF-8') ?></div>
@@ -703,7 +778,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <div class="detail-modal-header">
                 <div>
                     <h2 id="trip-detail-title" class="detail-modal-title">Trip Record Details</h2>
-                    <div class="detail-modal-subtitle" id="trip-detail-subtitle">Complete raw row data</div>
+                    <div class="detail-modal-subtitle" id="trip-detail-subtitle">IRS Business Purpose &amp; Trip Details</div>
                 </div>
                 <button type="button" class="detail-close" id="trip-detail-close" aria-label="Close details modal">&times;</button>
             </div>
@@ -746,13 +821,25 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 .replace(/\b\w/g, (char) => char.toUpperCase());
 
             const renderDetails = (record) => {
-                const fields = Object.entries(record);
-                modalGrid.innerHTML = fields.map(([key, value]) => (
+                // Show Purpose prominently at the top, then all other fields.
+                const purpose = record.purpose || '—';
+                const purposeHtml = `<div class="detail-item" style="grid-column:1/-1;border-color:rgba(6,182,212,0.35);background:rgba(6,182,212,0.06);">
+                    <div class="detail-key" style="color:#22d3ee;">Business Purpose (IRS)</div>
+                    <div class="detail-value" style="color:#f4f4f5;font-family:inherit;font-size:0.88rem;font-weight:600;">${escapeHtml(purpose)}</div>
+                </div>`;
+
+                // Skip the pre-computed 'purpose' key and raw service-request fields that
+                // are already captured in the purpose string; show everything else.
+                const skipKeys = new Set(['purpose', 'laser_brand', 'laser_model', 'problem_summary', 'services']);
+                const fields = Object.entries(record).filter(([key]) => !skipKeys.has(key));
+                const fieldsHtml = fields.map(([key, value]) => (
                     `<div class="detail-item">
                         <div class="detail-key">${escapeHtml(toLabel(key))}</div>
                         <div class="detail-value">${escapeHtml(normalizeValue(value))}</div>
                     </div>`
                 )).join('');
+
+                modalGrid.innerHTML = purposeHtml + fieldsHtml;
             };
 
             const closeModal = () => {
