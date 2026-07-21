@@ -42,7 +42,7 @@ $pwaHead         = <<<'HTML'
     <meta name="theme-color" content="#09090b">
     <link rel="apple-touch-icon" href="/ghost-logo-250x250.png">
     <link rel="icon" type="image/png" sizes="250x250" href="/ghost-logo-250x250.png">
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="/admin-manifest.webmanifest">
 HTML;
 $extraHead       = <<<'HTML'
     <style>
@@ -175,9 +175,57 @@ require_once __DIR__ . '/templates/header.php';
                         >
                             SMS Invite
                         </a>
+                        <button
+                            id="pwa-install-btn"
+                            type="button"
+                            hidden
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-emerald-700/60 bg-emerald-950/30 hover:border-emerald-500/60 hover:bg-emerald-950/50 text-emerald-300 font-medium text-sm px-4 py-2.5 transition-all"
+                        >
+                            <svg class="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+                            </svg>
+                            Install Admin App
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
     </main>
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
+<script>
+    (() => {
+        // Register the admin-only service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/admin-sw.js', { scope: '/' })
+                .catch((err) => console.warn('Admin SW registration failed:', err));
+        }
+
+        // Handle the PWA install prompt
+        let deferredPrompt = null;
+        const installBtn = document.getElementById('pwa-install-btn');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (installBtn) installBtn.hidden = false;
+        });
+
+        if (installBtn) {
+            installBtn.addEventListener('click', async () => {
+                if (!deferredPrompt) return;
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    installBtn.hidden = true;
+                }
+                deferredPrompt = null;
+            });
+        }
+
+        // Hide the button once the app is installed
+        window.addEventListener('appinstalled', () => {
+            if (installBtn) installBtn.hidden = true;
+            deferredPrompt = null;
+        });
+    })();
+</script>
