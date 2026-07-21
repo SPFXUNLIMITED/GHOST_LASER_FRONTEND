@@ -90,30 +90,31 @@ require_once __DIR__ . '/templates/header.php';
 
             <!-- Cards grid -->
             <div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-                <!-- Schedule card (primary) -->
-                <a
-                    href="technician/schedule.php"
-                    class="group bg-zinc-900/80 border border-zinc-800 rounded-xl p-7 card-glow flex flex-col justify-between min-h-[260px] transition-colors hover:border-cyan-500/40"
-                >
+                <!-- Settings card (primary) -->
+                <div class="group bg-zinc-900/80 border border-zinc-800 rounded-xl p-7 card-glow flex flex-col justify-between min-h-[260px] transition-colors hover:border-cyan-500/40">
                     <div>
                         <span class="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-800/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                            Primary Access
+                            Admin Configuration
                         </span>
                         <span class="mt-5 inline-flex h-12 w-12 items-center justify-center rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-400">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 9v6m3-3H9m10 0a7 7 0 11-14 0 7 7 0 0114 0z"/>
                             </svg>
                         </span>
-                        <h2 class="mt-5 text-2xl font-semibold text-white">Technician Schedule</h2>
+                        <h2 class="mt-5 text-2xl font-semibold text-white">Settings</h2>
                         <p class="mt-3 text-sm text-zinc-400 leading-7">
-                            Review bookings, manage assignments, and track upcoming technician availability.
+                            Manage operational configuration pages for scheduling, services, and other admin tools.
                         </p>
                     </div>
-                    <div class="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-cyan-400">
-                        Open schedule
-                        <span class="transition-transform group-hover:translate-x-1">&rarr;</span>
+                    <div class="mt-8">
+                        <a
+                            href="service-settings.php"
+                            class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2.5 transition-all btn-glow"
+                        >
+                            Service Settings
+                        </a>
                     </div>
-                </a>
+                </div>
 
                 <!-- Quick access card -->
                 <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl p-7 card-glow">
