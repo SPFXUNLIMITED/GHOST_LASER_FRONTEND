@@ -34,11 +34,17 @@ function ensureTravelSettingsTable(PDO $pdo): void
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
     ");
-    // Add base_location column if it was not present in the original schema
-    try {
-        $pdo->exec("ALTER TABLE travel_settings ADD COLUMN IF NOT EXISTS base_location VARCHAR(255) NOT NULL DEFAULT ''");
-    } catch (Throwable $e) {
-        // Ignore – column may already exist on databases that don't support IF NOT EXISTS
+    // Add base_location column if it was not present in the original schema.
+    // Use information_schema check for compatibility with MySQL < 8.0.
+    $colCheck = $pdo->prepare("
+        SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'travel_settings'
+          AND COLUMN_NAME  = 'base_location'
+    ");
+    $colCheck->execute();
+    if ((int) $colCheck->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE travel_settings ADD COLUMN base_location VARCHAR(255) NOT NULL DEFAULT ''");
     }
 }
 
