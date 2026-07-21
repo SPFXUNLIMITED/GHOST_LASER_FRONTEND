@@ -160,10 +160,20 @@ try {
 
     // Ensure the services JSON column exists on service_requests so that
     // purpose data can be stored and displayed for IRS documentation.
-    $pdo->exec("
-        ALTER TABLE service_requests
-        ADD COLUMN IF NOT EXISTS services JSON NULL COMMENT 'Selected services as JSON array'
+    // Use information_schema check for compatibility with MySQL < 8.0.
+    $colCheck = $pdo->prepare("
+        SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'service_requests'
+          AND COLUMN_NAME  = 'services'
     ");
+    $colCheck->execute();
+    if ((int) $colCheck->fetchColumn() === 0) {
+        $pdo->exec("
+            ALTER TABLE service_requests
+            ADD COLUMN services JSON NULL COMMENT 'Selected services as JSON array'
+        ");
+    }
 
     $stmt = $pdo->prepare(
         "SELECT ml.*,
