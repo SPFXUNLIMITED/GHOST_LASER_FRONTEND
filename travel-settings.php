@@ -1,0 +1,103 @@
+<?php
+session_start();
+
+if (empty($_SESSION['admin_id'])) {
+    header('Location: admin-login.php');
+    exit;
+}
+
+require_once __DIR__ . '/project/db.php';
+require_once __DIR__ . '/travel_settings.php';
+
+$settings = getTravelSettings($pdo);
+$successMessage = null;
+$errorMessage = null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $submittedPricePerMile = trim((string) ($_POST['price_per_mile'] ?? ''));
+
+    if ($submittedPricePerMile === '' || !is_numeric($submittedPricePerMile) || (float) $submittedPricePerMile < 0) {
+        $errorMessage = 'Price per mile must be a valid non-negative number.';
+        $settings = array_merge($settings, ['price_per_mile' => $submittedPricePerMile]);
+    } else {
+        try {
+            updateTravelSettings($pdo, ['price_per_mile' => $submittedPricePerMile]);
+            $settings = getTravelSettings($pdo);
+            $successMessage = 'Travel settings updated successfully.';
+        } catch (Throwable $e) {
+            $errorMessage = 'Unable to save travel settings right now.';
+        }
+    }
+}
+?>
+<?php
+$pageTitle = 'Travel Settings | Ghost Laser';
+$pageDescription = 'Ghost Laser travel settings management.';
+$extraHead = <<<'HTML'
+    <style>
+        .card-glow { box-shadow: 0 0 0 1px rgba(6,182,212,0.15), 0 0 60px rgba(6,182,212,0.06); }
+    </style>
+HTML;
+$headerRight = <<<'HTML'
+                <div class="flex items-center gap-3">
+                    <a href="dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Dashboard</a>
+                    <a href="service-settings.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Service Settings</a>
+                </div>
+HTML;
+require_once __DIR__ . '/templates/header.php';
+?>
+
+    <main class="min-h-screen hero-grid pt-24 pb-16 px-4">
+        <div class="max-w-4xl mx-auto space-y-8">
+            <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8 card-glow">
+                <div class="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-cyan-400">
+                    Admin Settings
+                </div>
+                <h1 class="mt-4 text-3xl font-bold tracking-tight">Travel Settings</h1>
+                <p class="mt-2 text-zinc-400">
+                    Set the default travel pricing used in booking totals.
+                </p>
+            </section>
+
+            <?php if ($successMessage !== null): ?>
+                <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
+                    <?= htmlspecialchars($successMessage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($errorMessage !== null): ?>
+                <div class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                    <?= htmlspecialchars($errorMessage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8 card-glow space-y-6">
+                <div>
+                    <h2 class="text-xl font-semibold text-white">Travel Pricing</h2>
+                    <p class="mt-2 text-sm text-zinc-400">This value is multiplied by miles traveled when generating the booking travel fee.</p>
+                </div>
+
+                <label class="block max-w-sm">
+                    <span class="text-sm font-medium text-zinc-200">Price per Mile ($)</span>
+                    <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        name="price_per_mile"
+                        value="<?= htmlspecialchars((string) $settings['price_per_mile'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>"
+                        class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none"
+                        required
+                    >
+                </label>
+
+                <div class="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+                    Current price per mile: <span class="font-semibold">$<?= number_format((float) $settings['price_per_mile'], 2) ?></span>
+                </div>
+
+                <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400">
+                    Save Travel Settings
+                </button>
+            </form>
+        </div>
+    </main>
+<?php require_once __DIR__ . '/templates/footer.php'; ?>

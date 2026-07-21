@@ -8,6 +8,7 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/project/db.php';
+require_once __DIR__ . '/travel_settings.php';
 
 // Load Google Maps API key for client-side geocoding proxy
 function loadGoogleMapsApiKey(): string {
@@ -234,6 +235,10 @@ foreach ($pdo->query("SELECT speed_key, display_name, price_multiplier FROM serv
     $speedOptions[$_spd['speed_key']] = ['label' => $_spd['display_name'], 'multiplier' => (float) $_spd['price_multiplier']];
 }
 unset($_spd);
+
+$travelSettings = getTravelSettings($pdo);
+$travelPricePerMile = (float) ($travelSettings['price_per_mile'] ?? 2.00);
+$travelMiles = 60.0;
 
 $step = isset($_GET['step']) ? (int) $_GET['step'] : 1;
 if (!in_array($step, [1, 2, 3], true)) {
@@ -569,7 +574,9 @@ require_once __DIR__ . '/templates/header.php';
             foreach ($selectedServices as $serviceKey) {
                 $baseTotal += $serviceBasePrices[$serviceKey] ?? 0;
             }
-            $total = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
+            $serviceTotal = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
+            $travelFee = round($travelMiles * $travelPricePerMile, 2);
+            $total = round($serviceTotal + $travelFee, 2);
         ?>
         <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
             <div id="step-2-success" class="hidden relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-zinc-950 px-6 py-8 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_0_70px_rgba(8,145,178,0.12)] sm:px-8 sm:py-10">
@@ -647,7 +654,7 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                     <p class="text-xs font-semibold uppercase tracking-widest text-cyan-400">Choose Service Speed</p>
                     <?php foreach ($speedOptions as $speedKey => $speed): ?>
-                        <?php $speedTotal = round($baseTotal * $speed['multiplier'], 2); ?>
+                        <?php $speedTotal = round(($baseTotal * $speed['multiplier']) + $travelFee, 2); ?>
                         <label class="speed-option flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 cursor-pointer">
                             <span class="flex items-center gap-2">
                                 <input type="radio" name="service_speed" value="<?= h($speedKey) ?>" <?= $currentSpeed === $speedKey ? 'checked' : '' ?>>
@@ -662,9 +669,19 @@ require_once __DIR__ . '/templates/header.php';
                         <input type="text" id="step-2-website" name="website" tabindex="-1" autocomplete="off">
                     </div>
 
-                    <div class="rounded-lg border border-cyan-500/30 bg-cyan-950/30 px-4 py-3 text-sm">
-                        <span class="text-zinc-300">Current Total:</span>
-                        <span id="current-total" class="font-semibold text-cyan-300">$<?= number_format($total, 2) ?></span>
+                    <div class="rounded-lg border border-cyan-500/30 bg-cyan-950/30 px-4 py-3 text-sm space-y-2">
+                        <div class="flex items-center justify-between gap-4">
+                            <span class="text-zinc-300">Service Total</span>
+                            <span id="current-service-total" class="font-semibold text-zinc-100">$<?= number_format($serviceTotal, 2) ?></span>
+                        </div>
+                        <div class="flex items-center justify-between gap-4">
+                            <span class="text-zinc-300">Travel Fee (<?= number_format($travelMiles, 0) ?> miles × $<?= number_format($travelPricePerMile, 2) ?>/mile)</span>
+                            <span id="current-travel-fee" class="font-semibold text-zinc-100">$<?= number_format($travelFee, 2) ?></span>
+                        </div>
+                        <div class="flex items-center justify-between gap-4 border-t border-cyan-500/20 pt-2">
+                            <span class="text-zinc-300">Grand Total</span>
+                            <span id="current-total" class="font-semibold text-cyan-300">$<?= number_format($total, 2) ?></span>
+                        </div>
                     </div>
 
                     <div class="flex gap-3">
@@ -983,8 +1000,12 @@ require_once __DIR__ . '/templates/header.php';
     const serviceBasePrices = <?= json_encode($serviceBasePrices, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const speedOptions     = <?= json_encode($speedOptions,     JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const speedPriorityMap = { standard: 'standard', rush: 'vip', emergency: 'emergency' };
+    const travelMiles = <?= json_encode($travelMiles, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const travelPricePerMile = <?= json_encode($travelPricePerMile, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
     if (stepTwoForm && bookingPayload) {
+        const serviceTotalEl = document.getElementById('current-service-total');
+        const travelFeeEl = document.getElementById('current-travel-fee');
         const totalEl       = document.getElementById('current-total');
         const submitBtn     = document.getElementById('step-2-submit-btn');
         const submitLabel   = document.getElementById('step-2-submit-label');
@@ -1029,7 +1050,11 @@ require_once __DIR__ . '/templates/header.php';
             const selectedSpeed = stepTwoForm.querySelector('input[name="service_speed"]:checked')?.value || 'standard';
             bookingPayload.service_speed = selectedSpeed;
             const baseTotal = (bookingPayload.services || []).reduce((sum, key) => sum + (serviceBasePrices[key] || 0), 0);
-            bookingPayload.total_price = Number((baseTotal * (speedOptions[selectedSpeed]?.multiplier || 1)).toFixed(2));
+            bookingPayload.service_total = Number((baseTotal * (speedOptions[selectedSpeed]?.multiplier || 1)).toFixed(2));
+            bookingPayload.travel_fee = Number((travelMiles * travelPricePerMile).toFixed(2));
+            bookingPayload.total_price = Number((bookingPayload.service_total + bookingPayload.travel_fee).toFixed(2));
+            serviceTotalEl.textContent = `$${bookingPayload.service_total.toFixed(2)}`;
+            travelFeeEl.textContent = `$${bookingPayload.travel_fee.toFixed(2)}`;
             totalEl.textContent = `$${bookingPayload.total_price.toFixed(2)}`;
         };
 
@@ -1064,7 +1089,9 @@ require_once __DIR__ . '/templates/header.php';
                 `Selected services: ${selectedServices.join(', ')}`,
                 bookingPayload.other_service ? `Other service details: ${bookingPayload.other_service}` : null,
                 `Service speed: ${selectedSpeedLabel}`,
-                `Quoted total: $${bookingPayload.total_price.toFixed(2)}`,
+                `Service total: $${bookingPayload.service_total.toFixed(2)}`,
+                `Travel fee (${travelMiles.toFixed(0)} miles @ $${travelPricePerMile.toFixed(2)}/mile): $${bookingPayload.travel_fee.toFixed(2)}`,
+                `Grand total: $${bookingPayload.total_price.toFixed(2)}`,
                 '--- Internal Booking (phone-in) ---',
             ].filter(Boolean);
 
