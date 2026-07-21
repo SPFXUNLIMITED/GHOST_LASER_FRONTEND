@@ -268,23 +268,37 @@ require_once __DIR__ . '/templates/header.php';
             if (installUnavailable) installUnavailable.hidden = false;
         };
 
+        console.log('[PWA] Install page loaded. Waiting for beforeinstallprompt event...');
+
         window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('[PWA] beforeinstallprompt event fired — install prompt is available.');
             e.preventDefault();
             deferredPrompt = e;
             showInstallBtn();
+            console.log('[PWA] Install button is now visible.');
         });
 
         if (installBtn) {
             installBtn.addEventListener('click', async () => {
-                if (!deferredPrompt) return;
+                console.log('[PWA] Install button clicked.');
+
+                if (!deferredPrompt) {
+                    console.warn('[PWA] No deferred prompt available — cannot trigger install dialog.');
+                    return;
+                }
 
                 const promptEvent = deferredPrompt;
+                console.log('[PWA] Calling deferredPrompt.prompt()...');
 
                 try {
                     await promptEvent.prompt();
                     const { outcome } = await promptEvent.userChoice;
+                    console.log('[PWA] User choice outcome:', outcome);
                     if (outcome === 'accepted') {
+                        console.log('[PWA] User accepted the install prompt.');
                         hideInstallBtn();
+                    } else {
+                        console.log('[PWA] User dismissed the install prompt.');
                     }
                 } catch (error) {
                     console.error('[PWA] Failed to show install prompt:', error);
@@ -294,10 +308,13 @@ require_once __DIR__ . '/templates/header.php';
                     }
                 }
             });
+        } else {
+            console.warn('[PWA] Install button element #pwa-install-btn not found in DOM.');
         }
 
         // Hide the button once the app is installed
         window.addEventListener('appinstalled', () => {
+            console.log('[PWA] App successfully installed.');
             hideInstallBtn();
             deferredPrompt = null;
         });
