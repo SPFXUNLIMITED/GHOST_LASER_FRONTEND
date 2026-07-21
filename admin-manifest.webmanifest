@@ -1,0 +1,19 @@
+{
+    "name": "Ghost Laser Admin",
+    "short_name": "GL Admin",
+    "description": "Ghost Laser admin dashboard for managing scheduling, technicians, and settings.",
+    "start_url": "/dashboard.php",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#09090b",
+    "theme_color": "#09090b",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/ghost-logo-250x250.png",
+            "sizes": "250x250",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}
