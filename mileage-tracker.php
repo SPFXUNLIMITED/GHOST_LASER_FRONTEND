@@ -703,9 +703,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         <th>Address</th>
                         <th>Purpose</th>
                         <th>Time</th>
-                        <th>Starting Odometer</th>
-                        <th>Ending Odometer</th>
-                        <th>Total Miles</th>
+                        <th>Odometer</th>
                         <th>Job ID</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -731,14 +729,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <div class="text-xs text-zinc-400">Start: <?= htmlspecialchars(fmtDateTime($row['start_time']), ENT_QUOTES, 'UTF-8') ?></div>
                                 <div class="text-xs text-zinc-400">End: <?= htmlspecialchars(fmtDateTime($row['end_time']), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
-                            <td class="odometer-cell">
-                                <?= htmlspecialchars(fmtOdometer($row['start_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?>
-                            </td>
-                            <td class="odometer-cell">
-                                <?= htmlspecialchars(fmtOdometer($row['end_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?>
-                            </td>
-                            <td class="miles-cell">
-                                <?= htmlspecialchars(fmtMiles($tripMiles), ENT_QUOTES, 'UTF-8') ?>
+                            <td class="odometer-cell whitespace-nowrap">
+                                <div class="text-xs text-zinc-400">Starting: <?= htmlspecialchars(fmtOdometer($row['start_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+                                <div class="text-xs text-zinc-400">Ending: <?= htmlspecialchars(fmtOdometer($row['end_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+                                <div class="text-xs text-zinc-400">Total: <?= htmlspecialchars(fmtMiles($tripMiles), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
                             <td class="text-zinc-400 font-mono text-xs whitespace-nowrap">
                                 #<?= (int) $row['service_request_id'] ?>
