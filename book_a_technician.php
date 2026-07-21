@@ -174,6 +174,12 @@ function h($value) {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function formatPrice($value) {
+    $amount = (float) $value;
+
+    return number_format($amount, floor($amount) == $amount ? 0 : 2);
+}
+
 function normalizeUsPhone($value) {
     $digits = preg_replace('/\D+/', '', (string) $value);
     if (strlen($digits) === 11 && strpos($digits, '1') === 0) {
@@ -689,7 +695,7 @@ require_once __DIR__ . '/templates/header.php';
                                     value="<?= h($serviceKey) ?>"
                                     <?= in_array($serviceKey, (array) ($_POST['services'] ?? []), true) ? 'checked' : '' ?>
                                 >
-                                <label for="service-<?= h($serviceKey) ?>"><?= h($serviceLabel) ?> &ndash; $<?= number_format($serviceBasePrices[$serviceKey], 2) ?></label>
+                                <label for="service-<?= h($serviceKey) ?>"><?= h($serviceLabel) ?> &ndash; $<?= formatPrice($serviceBasePrices[$serviceKey]) ?></label>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -798,7 +804,7 @@ require_once __DIR__ . '/templates/header.php';
                         <?php foreach ($selectedServices as $serviceKey): ?>
                             <li class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
                                 <span><?= h($serviceLabels[$serviceKey] ?? $serviceKey) ?></span>
-                                <span>$<?= number_format((float) ($serviceBasePrices[$serviceKey] ?? 0), 2) ?></span>
+                                <span>$<?= formatPrice($serviceBasePrices[$serviceKey] ?? 0) ?></span>
                             </li>
                         <?php endforeach; ?>
                         <?php if ($otherServiceId !== '' && in_array($otherServiceId, $selectedServices, true) && !empty($booking['other_service'])): ?>
