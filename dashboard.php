@@ -175,17 +175,15 @@ require_once __DIR__ . '/templates/header.php';
                         >
                             SMS Invite
                         </a>
-                        <button
-                            id="pwa-install-btn"
-                            type="button"
-                            hidden
+                        <a
+                            href="install-admin-app.php"
                             class="inline-flex w-full items-center gap-2 rounded-md border border-emerald-700/60 bg-emerald-950/30 hover:border-emerald-500/60 hover:bg-emerald-950/50 text-emerald-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
                             <svg class="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
                             </svg>
                             Install Admin App
-                        </button>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -199,49 +197,5 @@ require_once __DIR__ . '/templates/header.php';
             navigator.serviceWorker.register('/admin-sw.js', { scope: '/' })
                 .catch((err) => console.warn('Admin SW registration failed:', err));
         }
-
-        // Handle the PWA install prompt
-        let deferredPrompt = null;
-        const installBtn = document.getElementById('pwa-install-btn');
-
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            console.log('[PWA] beforeinstallprompt captured; install prompt is ready.');
-            if (installBtn) installBtn.hidden = false;
-        });
-
-        if (installBtn) {
-            installBtn.addEventListener('click', async () => {
-                if (!deferredPrompt) {
-                    console.error('[PWA] Install Admin App tapped, but no deferred prompt is available. The beforeinstallprompt event may not have fired yet.');
-                    return;
-                }
-
-                const promptEvent = deferredPrompt;
-
-                try {
-                    console.log('[PWA] Install Admin App tapped; showing install prompt.');
-                    await promptEvent.prompt();
-                    const { outcome } = await promptEvent.userChoice;
-                    console.log(`[PWA] Install prompt outcome: ${outcome}`);
-                    if (outcome === 'accepted') {
-                        installBtn.hidden = true;
-                    }
-                } catch (error) {
-                    console.error('[PWA] Failed to show install prompt:', error);
-                } finally {
-                    if (deferredPrompt === promptEvent) {
-                        deferredPrompt = null;
-                    }
-                }
-            });
-        }
-
-        // Hide the button once the app is installed
-        window.addEventListener('appinstalled', () => {
-            if (installBtn) installBtn.hidden = true;
-            deferredPrompt = null;
-        });
     })();
 </script>
