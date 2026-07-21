@@ -184,20 +184,28 @@ function getCustomerSearchSelectColumns(PDO $pdo): array {
 }
 
 // ── Data ───────────────────────────────────────────────────────────────────
-$serviceLabels = [
-    'maintenance_alignment' => 'Maintenance & Alignment',
-    'tube_change'           => 'Tube Change',
-    'diagnosis'             => 'Diagnosis',
-    'training'              => 'Training',
-    'other'                 => 'Other',
-];
-$serviceBasePrices = [
-    'maintenance_alignment' => 150,
-    'tube_change'           => 320,
-    'diagnosis'             => 120,
-    'training'              => 180,
-    'other'                 => 100,
-];
+function fetchServicesForBooking(PDO $pdo): array {
+    return $pdo->query(
+        "SELECT id, service_name, base_price FROM services ORDER BY service_name ASC"
+    )->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$_dbServices = fetchServicesForBooking($pdo);
+$serviceLabels = [];
+$serviceBasePrices = [];
+foreach ($_dbServices as $_svc) {
+    $_key = (string) $_svc['id'];
+    $serviceLabels[$_key] = $_svc['service_name'];
+    $serviceBasePrices[$_key] = (float) $_svc['base_price'];
+}
+$otherServiceId = '';
+foreach ($_dbServices as $_svc) {
+    if (strtolower(trim($_svc['service_name'])) === 'other') {
+        $otherServiceId = (string) $_svc['id'];
+        break;
+    }
+}
+unset($_dbServices, $_svc, $_key);
 $speedOptions = [
     'standard'  => ['label' => 'Standard',  'multiplier' => 1.00],
     'rush'      => ['label' => 'VIP',        'multiplier' => 1.35],
@@ -217,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
     $otherService  = trim((string) ($_POST['other_service'] ?? ''));
     $normalizedPhone = normalizeUsPhone($_POST['phone'] ?? '');
 
-    if (in_array('other', $services, true) && $otherService === '') {
+    if ($otherServiceId !== '' && in_array($otherServiceId, $services, true) && $otherService === '') {
         $errors[] = 'Please describe the "Other" service.';
     }
     if (count($services) === 0) {
@@ -507,11 +515,11 @@ require_once __DIR__ . '/templates/header.php';
                                 value="<?= h($serviceKey) ?>"
                                 <?= in_array($serviceKey, (array) ($_POST['services'] ?? []), true) ? 'checked' : '' ?>
                             >
-                            <label for="service-<?= h($serviceKey) ?>"><?= h($serviceLabel) ?></label>
+                            <label for="service-<?= h($serviceKey) ?>"><?= h($serviceLabel) ?> &ndash; $<?= number_format($serviceBasePrices[$serviceKey], 2) ?></label>
                         </div>
                     <?php endforeach; ?>
                 </div>
-                <div id="other-service-wrap" class="mt-4 <?= in_array('other', (array) ($_POST['services'] ?? []), true) ? '' : 'hidden' ?>">
+                <div id="other-service-wrap" class="mt-4 <?= ($otherServiceId !== '' && in_array($otherServiceId, (array) ($_POST['services'] ?? []), true)) ? '' : 'hidden' ?>">
                     <input class="input-base" id="other-service-input" name="other_service" placeholder="Describe other service" value="<?= h($_POST['other_service'] ?? '') ?>">
                 </div>
             </div>
@@ -601,7 +609,7 @@ require_once __DIR__ . '/templates/header.php';
                                 <span>$<?= number_format((float) ($serviceBasePrices[$serviceKey] ?? 0), 2) ?></span>
                             </li>
                         <?php endforeach; ?>
-                        <?php if (in_array('other', $selectedServices, true) && !empty($booking['other_service'])): ?>
+                        <?php if ($otherServiceId !== '' && in_array($otherServiceId, $selectedServices, true) && !empty($booking['other_service'])): ?>
                             <li class="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-zinc-400">Other details: <?= h($booking['other_service']) ?></li>
                         <?php endif; ?>
                     </ul>
@@ -930,7 +938,7 @@ require_once __DIR__ . '/templates/header.php';
     }
 
     // ── Other-service toggle ─────────────────────────────────────────────────
-    const otherServiceCheckbox = document.getElementById('service-other');
+    const otherServiceCheckbox = document.getElementById('service-<?= h($otherServiceId) ?>');
     const otherServiceWrap     = document.getElementById('other-service-wrap');
     const otherServiceInput    = document.getElementById('other-service-input');
 
