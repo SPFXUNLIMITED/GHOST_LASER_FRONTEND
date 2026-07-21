@@ -2,7 +2,7 @@
 session_start();
 
 require_once __DIR__ . '/project/db.php';
-require_once __DIR__ . '/travel_settings.php';
+require_once __DIR__ . '/travel-helper.php';
 
 // Ensure password_hash column exists
 try {
