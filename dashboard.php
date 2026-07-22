@@ -170,6 +170,12 @@ require_once __DIR__ . '/templates/header.php';
                             Internal Booking (Phone-In)
                         </a>
                         <a
+                            href="bookings.php"
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-cyan-700/60 bg-cyan-950/30 hover:border-cyan-500/60 hover:bg-cyan-950/50 text-cyan-300 font-medium text-sm px-4 py-2.5 transition-all"
+                        >
+                            Bookings
+                        </a>
+                        <a
                             href="sms-tool.php"
                             class="inline-flex w-full items-center gap-2 rounded-md border border-violet-700/60 bg-violet-950/30 hover:border-violet-500/60 hover:bg-violet-950/50 text-violet-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
