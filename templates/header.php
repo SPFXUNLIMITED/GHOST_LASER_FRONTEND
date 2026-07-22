@@ -79,24 +79,26 @@ if ($customerLoggedIn) {
 
     <header class="fixed top-0 left-0 right-0 z-50 nav-blur bg-zinc-950/80 border-b border-zinc-800/60">
         <div class="max-w-7xl mx-auto px-6 lg:px-8">
-            <div class="grid grid-cols-3 items-center h-16">
-                <a href="<?= $logoHref ?? '/' ?>" class="flex items-center gap-2.5 group">
-                    <span class="w-7 h-7 rounded bg-cyan-500 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-400 transition-colors">
-                        <svg class="w-4 h-4 text-zinc-950" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M10 1C6.13 1 3 4.13 3 8v10l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V8C17 4.13 13.87 1 10 1z"/>
-                        </svg>
-                    </span>
-                    <span class="text-white font-bold text-lg tracking-tight">Ghost<span class="text-cyan-400">Laser</span></span>
-                </a>
-                <div class="flex justify-center">
-                    <a href="tel:9495652660" class="inline-flex items-center gap-1.5 text-sm font-semibold text-white hover:text-zinc-300 transition-colors font-sans" aria-label="Call us at 949-565-2660">
+            <div class="flex items-center justify-between h-16">
+                <div class="w-1/3 flex items-center">
+                    <a href="<?= $logoHref ?? '/' ?>" class="flex items-center gap-2.5 group">
+                        <span class="w-7 h-7 rounded bg-cyan-500 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-400 transition-colors">
+                            <svg class="w-4 h-4 text-zinc-950" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10 1C6.13 1 3 4.13 3 8v10l2.5-2 2.5 2 2.5-2 2.5 2 2.5-2 2.5 2V8C17 4.13 13.87 1 10 1z"/>
+                            </svg>
+                        </span>
+                        <span class="text-white font-bold text-lg tracking-tight">Ghost<span class="text-cyan-400">Laser</span></span>
+                    </a>
+                </div>
+                <div class="w-1/3 flex items-center justify-center">
+                    <a href="tel:9495652660" class="inline-flex items-center gap-1.5 text-sm font-semibold text-white hover:text-zinc-300 transition-colors font-['Inter']" aria-label="Call us at 949-565-2660">
                         <svg class="w-4 h-4 flex-shrink-0 text-cyan-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                             <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"/>
                         </svg>
                         <span>949-565-2660</span>
                     </a>
                 </div>
-                <div class="flex items-center justify-end gap-3">
+                <div class="w-1/3 min-w-0 flex items-center justify-end gap-3">
                     <?= $headerRight ?? '' ?>
                     <?php if ($customerLoggedIn): ?>
                     <div class="relative" id="header-user-menu">
