@@ -167,7 +167,7 @@ require_once __DIR__ . '/templates/header.php';
                             href="book_internal.php"
                             class="inline-flex w-full items-center gap-2 rounded-md border border-amber-700/60 bg-amber-950/30 hover:border-amber-500/60 hover:bg-amber-950/50 text-amber-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
-                            New Booking
+                            Internal Booking (Phone-In)
                         </a>
                         <a
                             href="bookings.php"
