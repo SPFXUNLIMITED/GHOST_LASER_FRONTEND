@@ -331,6 +331,16 @@ if (!in_array($booking_source, ['Internal', 'Website'], true)) {
     $booking_source = 'Website';
 }
 
+// ── Service fields ────────────────────────────────────────────────────────────
+// Keep only non-empty string values (service IDs submitted by the front-end)
+$services_raw   = isset($body['services']) && is_array($body['services']) ? $body['services'] : [];
+$services_input = array_values(array_filter(array_map('strval', $services_raw)));
+$other_service  = str_field($body, 'other_service');
+$service_speed  = str_field($body, 'service_speed');
+if (!in_array($service_speed, ['standard', 'rush', 'emergency'], true)) {
+    $service_speed = 'standard';
+}
+
 // Client-provided coordinates (pre-geocoded by the front-end)
 $client_lat = isset($body['latitude'])  && is_numeric($body['latitude'])  ? (float)$body['latitude']  : null;
 $client_lng = isset($body['longitude']) && is_numeric($body['longitude']) ? (float)$body['longitude'] : null;
@@ -497,6 +507,20 @@ if ($errors) {
 // ── Derive problem_summary from the first 255 chars of problem ────────────────
 $problem_summary = mb_substr($problem, 0, 255);
 
+// ── Ensure service columns exist on service_requests ─────────────────────────
+foreach ([
+    'services'      => "JSON        NULL COMMENT 'Selected service IDs as JSON array'",
+    'other_service' => "TEXT        NULL COMMENT 'Other service description when \"Other\" is selected'",
+    'service_speed' => "VARCHAR(50) NULL COMMENT 'Service speed/tier key'",
+] as $_col => $_def) {
+    try {
+        $pdo->exec("ALTER TABLE service_requests ADD COLUMN {$_col} {$_def}");
+    } catch (\Throwable $_ex) {
+        // Column already exists — non-fatal
+    }
+}
+unset($_col, $_def);
+
 // ── Insert into service_requests ──────────────────────────────────────────────
 try {
     $customer_id = resolve_customer_id(
@@ -526,12 +550,14 @@ try {
             customer_id, laser_brand, laser_model, laser_watts, laser_age,
             problem_summary, problem_details, priority_level, source,
             request_status, latitude, longitude, geocode_status,
-            preferred_date_start, preferred_date_end
+            preferred_date_start, preferred_date_end,
+            services, other_service, service_speed
         ) VALUES (
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             'new', ?, ?, ?,
-            ?, ?
+            ?, ?,
+            ?, ?, ?
         )
     ");
     $suggested_dates = get_suggested_dates($priority, $pdo);
@@ -556,6 +582,9 @@ try {
         $geo['status'],
         $first_suggested_date,
         $last_suggested_date,
+        $services_input !== [] ? json_encode($services_input) : null,
+        $other_service !== '' ? $other_service : null,
+        $service_speed,
     ]);
 
     $new_id = (int) $pdo->lastInsertId();

@@ -8,6 +8,7 @@ $SMTP_PASSWORD   = getenv('SMTP_PASSWORD') ?: '@O+xmLX^*Lxt';
 $SMTP_FROM_EMAIL = getenv('SMTP_FROM_EMAIL') ?: 'sales@LaserCutterRepair.com';
 $SMTP_FROM_NAME  = getenv('SMTP_FROM_NAME') ?: 'Ghost Laser';
 $ADMIN_EMAIL     = getenv('ADMIN_EMAIL') ?: 'sales@LaserCutterRepair.com';
+$COMPANY_WEBSITE = getenv('COMPANY_WEBSITE') ?: 'https://LaserCutterRepair.com';
 
 // Hidden honeypot field for spam protection.
 $HONEYPOT_FIELD = 'website';

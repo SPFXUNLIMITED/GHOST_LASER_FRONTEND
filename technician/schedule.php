@@ -1021,7 +1021,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         c.phone,
                         sc.scheduled_date,
                         scj.time_window_start,
-                        scj.time_window_end
+                        scj.time_window_end,
+                        sr.services AS services_json
                     FROM scheduled_clusters sc
                     JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
                     JOIN service_requests sr ON sr.id = scj.service_request_id
@@ -1094,10 +1095,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             '{appointment_date}'     => $appointmentDate,
                             '{appointment_time}'     => $timeStart,
                             '{appointment_end_time}' => $timeEnd,
+                            '{company_website}'      => $COMPANY_WEBSITE,
+                            '{service_name}'         => '',
                         ];
 
-                        $subject = strtr((string) $notification['title'], $tagValues);
-                        $body    = strtr((string) $notification['body'], $tagValues);
+                        // Resolve {service_name} from the JSON array of service IDs.
+                        $servicesJson = trim((string) ($customer['services_json'] ?? ''));
+                        if ($servicesJson !== '') {
+                            $serviceIds = json_decode($servicesJson, true);
+                            if (is_array($serviceIds) && $serviceIds !== []) {
+                                try {
+                                    $svcPlaceholders = implode(',', array_fill(0, count($serviceIds), '?'));
+                                    $svcStmt = $pdo->prepare(
+                                        "SELECT service_name FROM services WHERE id IN ({$svcPlaceholders}) ORDER BY service_name ASC"
+                                    );
+                                    $svcStmt->execute($serviceIds);
+                                    $svcNames = $svcStmt->fetchAll(PDO::FETCH_COLUMN);
+                                    $tagValues['{service_name}'] = implode(', ', $svcNames);
+                                } catch (Throwable $svcEx) {
+                                    // services table unavailable — leave tag empty.
+                                }
+                            }
+                        }
+
+                        $subject  = strtr((string) $notification['title'], $tagValues);
+                        $bodyText = strtr((string) $notification['body'], $tagValues);
+                        // Build HTML body: escape entities then convert newlines to <br> tags.
+                        $bodyHtml = nl2br(htmlspecialchars($bodyText, ENT_QUOTES, 'UTF-8'));
 
                         try {
                             $mailer = new PHPMailer(true);
@@ -1119,8 +1143,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $mailer->addAddress($customerEmail, $fullName);
                             $mailer->addCC($CC_EMAIL);
                             $mailer->Subject = $subject;
-                            $mailer->isHTML(false);
-                            $mailer->Body    = $body;
+                            $mailer->isHTML(true);
+                            $mailer->Body    = $bodyHtml;
+                            $mailer->AltBody = $bodyText;
                             $mailer->send();
                             $sent++;
                         } catch (MailerException $e) {
