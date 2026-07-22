@@ -8,6 +8,134 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 
+/**
+ * Supported notification tags and their exact database sources.
+ */
+function getNotificationTagDefinitions(): array
+{
+    return [
+        '{client_name}' => [
+            'table' => 'customers',
+            'columns' => ['first_name', 'last_name'],
+            'description' => 'Customer first and last name combined.',
+        ],
+        '{client_address}' => [
+            'table' => 'customers',
+            'columns' => ['address', 'city', 'state', 'zip'],
+            'description' => 'Customer service address combined into one line.',
+        ],
+        '{company_name}' => [
+            'table' => 'customers',
+            'columns' => ['company'],
+            'description' => 'Customer company name.',
+        ],
+        '{company_phone}' => [
+            'table' => 'customers',
+            'columns' => ['phone'],
+            'description' => 'Customer company phone number.',
+        ],
+        '{appointment_date}' => [
+            'table' => 'service_requests',
+            'columns' => ['promised_service_date'],
+            'description' => 'Scheduled appointment date.',
+        ],
+        '{appointment_time}' => [
+            'table' => 'service_route_stops',
+            'columns' => ['arrival_window_start'],
+            'description' => 'Arrival window start time.',
+        ],
+        '{appointment_end_time}' => [
+            'table' => 'service_route_stops',
+            'columns' => ['arrival_window_end'],
+            'description' => 'Arrival window end time.',
+        ],
+    ];
+}
+
+function getNotificationTemplateTags(string $template): array
+{
+    preg_match_all('/\{[a-z0-9_]+\}/i', $template, $matches);
+
+    return array_values(array_unique($matches[0] ?? []));
+}
+
+function getUnsupportedNotificationTags(string $template): array
+{
+    return array_values(array_diff(
+        getNotificationTemplateTags($template),
+        array_keys(getNotificationTagDefinitions())
+    ));
+}
+
+function renderNotificationTemplate(string $template, array $tagValues): string
+{
+    return strtr($template, $tagValues);
+}
+
+function loadNotificationTagValues(PDO $pdo): array
+{
+    $tagValues = array_fill_keys(array_keys(getNotificationTagDefinitions()), '');
+
+    $customerAndRequest = [];
+    try {
+        $customerAndRequestStmt = $pdo->query("
+            SELECT
+                c.first_name,
+                c.last_name,
+                c.address,
+                c.city,
+                c.state,
+                c.zip,
+                c.company,
+                c.phone,
+                sr.promised_service_date
+            FROM service_requests sr
+            JOIN customers c ON c.id = sr.customer_id
+            ORDER BY
+                CASE WHEN sr.promised_service_date IS NULL OR sr.promised_service_date = '' THEN 1 ELSE 0 END,
+                sr.promised_service_date DESC,
+                sr.id DESC
+            LIMIT 1
+        ");
+        $customerAndRequest = $customerAndRequestStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        // Preview data is optional on environments without seeded scheduling data.
+    }
+
+    $fullName = trim(implode(' ', array_filter([
+        trim((string) ($customerAndRequest['first_name'] ?? '')),
+        trim((string) ($customerAndRequest['last_name'] ?? '')),
+    ])));
+    $fullAddress = implode(', ', array_filter([
+        trim((string) ($customerAndRequest['address'] ?? '')),
+        trim((string) ($customerAndRequest['city'] ?? '')),
+        trim((string) ($customerAndRequest['state'] ?? '')),
+        trim((string) ($customerAndRequest['zip'] ?? '')),
+    ]));
+
+    $tagValues['{client_name}'] = $fullName;
+    $tagValues['{client_address}'] = $fullAddress;
+    $tagValues['{company_name}'] = trim((string) ($customerAndRequest['company'] ?? ''));
+    $tagValues['{company_phone}'] = trim((string) ($customerAndRequest['phone'] ?? ''));
+    $tagValues['{appointment_date}'] = trim((string) ($customerAndRequest['promised_service_date'] ?? ''));
+
+    try {
+        $routeStopStmt = $pdo->query("
+            SELECT arrival_window_start, arrival_window_end
+            FROM service_route_stops
+            ORDER BY id DESC
+            LIMIT 1
+        ");
+        $routeStop = $routeStopStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $tagValues['{appointment_time}'] = trim((string) ($routeStop['arrival_window_start'] ?? ''));
+        $tagValues['{appointment_end_time}'] = trim((string) ($routeStop['arrival_window_end'] ?? ''));
+    } catch (Throwable $e) {
+        // service_route_stops may not exist in every environment yet.
+    }
+
+    return $tagValues;
+}
+
 function ensureNotificationsTable(PDO $pdo): void
 {
     $pdo->exec("
@@ -37,11 +165,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add') {
         $title = trim((string) ($_POST['title'] ?? ''));
         $body = trim((string) ($_POST['body'] ?? ''));
+        $unsupportedTags = getUnsupportedNotificationTags($body);
 
         if ($title === '') {
             $errorMessage = 'Notification title is required.';
         } elseif ($body === '') {
             $errorMessage = 'Notification body is required.';
+        } elseif ($unsupportedTags !== []) {
+            $errorMessage = 'Unsupported notification tags: ' . implode(', ', $unsupportedTags);
         } else {
             $stmt = $pdo->prepare("INSERT INTO notifications (title, body) VALUES (:title, :body)");
             $stmt->execute([
@@ -54,6 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int) ($_POST['id'] ?? 0);
         $title = trim((string) ($_POST['title'] ?? ''));
         $body = trim((string) ($_POST['body'] ?? ''));
+        $unsupportedTags = getUnsupportedNotificationTags($body);
 
         if ($id <= 0) {
             $errorMessage = 'Invalid notification ID.';
@@ -61,6 +193,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errorMessage = 'Notification title is required.';
         } elseif ($body === '') {
             $errorMessage = 'Notification body is required.';
+        } elseif ($unsupportedTags !== []) {
+            $errorMessage = 'Unsupported notification tags: ' . implode(', ', $unsupportedTags);
         } else {
             $stmt = $pdo->prepare("UPDATE notifications SET title = :title, body = :body WHERE id = :id");
             $stmt->execute([
@@ -92,7 +226,15 @@ if (isset($_GET['msg'])) {
     $successMessage = htmlspecialchars(trim((string) $_GET['msg']), ENT_QUOTES, 'UTF-8');
 }
 
+$notificationTagDefinitions = getNotificationTagDefinitions();
+$notificationTagValues = loadNotificationTagValues($pdo);
 $notifications = getNotifications($pdo);
+
+foreach ($notifications as &$notification) {
+    $notification['unsupported_tags'] = getUnsupportedNotificationTags((string) $notification['body']);
+    $notification['rendered_body'] = renderNotificationTemplate((string) $notification['body'], $notificationTagValues);
+}
+unset($notification);
 ?>
 <?php
 $pageTitle = 'Notifications | Ghost Laser';
@@ -137,11 +279,48 @@ require_once __DIR__ . '/templates/header.php';
             <?php endif; ?>
 
             <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8 card-glow space-y-6">
+                <div>
+                    <h2 class="text-xl font-semibold text-white">Supported Notification Tags</h2>
+                    <p class="mt-2 text-sm text-zinc-400">
+                        Use only these tags in notification bodies. Each tag below is wired to the listed database table and column(s) when notifications are rendered.
+                    </p>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-zinc-800">
+                                <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Tag</th>
+                                <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Table</th>
+                                <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Column(s)</th>
+                                <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Current Preview Value</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-800/60">
+                            <?php foreach ($notificationTagDefinitions as $tag => $definition): ?>
+                            <tr>
+                                <td class="py-3 pr-4 font-semibold text-cyan-300"><?= htmlspecialchars($tag, ENT_QUOTES, 'UTF-8') ?></td>
+                                <td class="py-3 pr-4 text-zinc-200"><?= htmlspecialchars($definition['table'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td class="py-3 pr-4 text-zinc-200"><?= htmlspecialchars(implode(' + ', $definition['columns']), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td class="py-3 text-zinc-400">
+                                    <?= htmlspecialchars($notificationTagValues[$tag] !== '' ? $notificationTagValues[$tag] : 'No sample data available', ENT_QUOTES, 'UTF-8') ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8 card-glow space-y-6">
                 <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div>
                         <h2 class="text-xl font-semibold text-white">Notification Templates</h2>
                         <p class="mt-2 text-sm text-zinc-400">
-                            Available placeholders: <span class="text-cyan-300">{client_name}</span>, <span class="text-cyan-300">{service_name}</span>, <span class="text-cyan-300">{client_address}</span>, <span class="text-cyan-300">{appointment_date}</span>
+                            Supported tags:
+                            <?php foreach (array_keys($notificationTagDefinitions) as $index => $tag): ?>
+                                <span class="text-cyan-300"><?= htmlspecialchars($tag, ENT_QUOTES, 'UTF-8') ?></span><?= $index < count($notificationTagDefinitions) - 1 ? ',' : '' ?>
+                            <?php endforeach; ?>
                         </p>
                     </div>
                     <button
@@ -163,6 +342,7 @@ require_once __DIR__ . '/templates/header.php';
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b border-zinc-800">
+                                <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">ID</th>
                                 <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Title</th>
                                 <th class="pb-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500">Actions</th>
                             </tr>
@@ -170,6 +350,9 @@ require_once __DIR__ . '/templates/header.php';
                         <tbody class="divide-y divide-zinc-800/60">
                             <?php foreach ($notifications as $notification): ?>
                             <tr class="group">
+                                <td class="py-3.5 pr-4 align-top font-mono text-xs text-zinc-400">
+                                    <?= (int) $notification['id'] ?>
+                                </td>
                                 <td class="py-3.5 pr-4">
                                     <button
                                         type="button"
@@ -206,9 +389,28 @@ require_once __DIR__ . '/templates/header.php';
                                 </td>
                             </tr>
                             <tr id="notification-body-<?= (int) $notification['id'] ?>" class="hidden bg-zinc-950/40">
-                                <td colspan="2" class="px-4 pb-4 pt-1">
-                                    <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 text-sm leading-7 text-zinc-300 whitespace-pre-line">
-                                        <?= htmlspecialchars($notification['body'], ENT_QUOTES, 'UTF-8') ?>
+                                <td colspan="3" class="px-4 pb-4 pt-1">
+                                    <div class="space-y-4">
+                                        <?php if ($notification['unsupported_tags'] !== []): ?>
+                                        <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+                                            Unsupported tags found: <?= htmlspecialchars(implode(', ', $notification['unsupported_tags']), ENT_QUOTES, 'UTF-8') ?>
+                                        </div>
+                                        <?php endif; ?>
+
+                                        <div class="grid gap-4 lg:grid-cols-2">
+                                            <div>
+                                                <div class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Template Body</div>
+                                                <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 text-sm leading-7 text-zinc-300 whitespace-pre-line">
+                                                    <?= htmlspecialchars($notification['body'], ENT_QUOTES, 'UTF-8') ?>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div class="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Rendered Preview</div>
+                                                <div class="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-sm leading-7 text-zinc-200 whitespace-pre-line">
+                                                    <?= htmlspecialchars($notification['rendered_body'], ENT_QUOTES, 'UTF-8') ?>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
@@ -247,7 +449,7 @@ require_once __DIR__ . '/templates/header.php';
                             rows="8"
                             required
                             class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
-                            placeholder="Hello {client_name}, your {service_name} appointment at {client_address} is scheduled for {appointment_date}."
+                            placeholder="Hello {client_name}, your appointment at {client_address} is scheduled for {appointment_date} between {appointment_time} and {appointment_end_time}."
                         ></textarea>
                     </div>
                 </div>
