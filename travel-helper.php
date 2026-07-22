@@ -3,8 +3,9 @@
 function getTravelSettingsDefaults(): array
 {
     return [
-        'price_per_mile' => '2.00',
-        'base_location'  => '',
+        'price_per_mile'     => '2.00',
+        'hourly_travel_rate' => '50.00',
+        'base_location'      => '',
     ];
 }
 
@@ -18,8 +19,14 @@ function normalizeTravelSettings(array $settings): array
         $pricePerMile = (float) $defaults['price_per_mile'];
     }
 
+    $hourlyTravelRate = (float) $merged['hourly_travel_rate'];
+    if ($hourlyTravelRate < 0) {
+        $hourlyTravelRate = (float) $defaults['hourly_travel_rate'];
+    }
+
     $merged['price_per_mile'] = number_format($pricePerMile, 2, '.', '');
-    $merged['base_location']  = trim((string) ($merged['base_location'] ?? ''));
+    $merged['hourly_travel_rate'] = number_format($hourlyTravelRate, 2, '.', '');
+    $merged['base_location'] = trim((string) ($merged['base_location'] ?? ''));
 
     return $merged;
 }
@@ -30,21 +37,29 @@ function ensureTravelSettingsTable(PDO $pdo): void
         CREATE TABLE IF NOT EXISTS travel_settings (
             id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
             price_per_mile DECIMAL(10,2) NOT NULL DEFAULT 2.00,
+            hourly_travel_rate DECIMAL(10,2) NOT NULL DEFAULT 50.00,
+            base_location VARCHAR(255) NOT NULL DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
     ");
-    // Add base_location column if it was not present in the original schema.
+    // Add missing columns for legacy schemas.
     // Use information_schema check for compatibility with MySQL < 8.0.
     $colCheck = $pdo->prepare("
         SELECT COUNT(*) FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME   = 'travel_settings'
-          AND COLUMN_NAME  = 'base_location'
+          AND COLUMN_NAME  = :column_name
     ");
-    $colCheck->execute();
-    if ((int) $colCheck->fetchColumn() === 0) {
-        $pdo->exec("ALTER TABLE travel_settings ADD COLUMN base_location VARCHAR(255) NOT NULL DEFAULT ''");
+    $columnsToEnsure = [
+        'hourly_travel_rate' => "ALTER TABLE travel_settings ADD COLUMN hourly_travel_rate DECIMAL(10,2) NOT NULL DEFAULT 50.00",
+        'base_location' => "ALTER TABLE travel_settings ADD COLUMN base_location VARCHAR(255) NOT NULL DEFAULT ''",
+    ];
+    foreach ($columnsToEnsure as $columnName => $sql) {
+        $colCheck->execute([':column_name' => $columnName]);
+        if ((int) $colCheck->fetchColumn() === 0) {
+            $pdo->exec($sql);
+        }
     }
 }
 
@@ -55,16 +70,19 @@ function seedTravelSettings(PDO $pdo): void
         INSERT INTO travel_settings (
             id,
             price_per_mile,
+            hourly_travel_rate,
             base_location
         ) VALUES (
             1,
             :price_per_mile,
+            :hourly_travel_rate,
             :base_location
         )
     ");
     $stmt->execute([
         ':price_per_mile' => $defaults['price_per_mile'],
-        ':base_location'  => $defaults['base_location'],
+        ':hourly_travel_rate' => $defaults['hourly_travel_rate'],
+        ':base_location' => $defaults['base_location'],
     ]);
 }
 
@@ -95,25 +113,25 @@ function updateTravelSettings(PDO $pdo, array $settings): void
         UPDATE travel_settings
         SET
             price_per_mile = :price_per_mile,
+            hourly_travel_rate = :hourly_travel_rate,
             base_location  = :base_location
         WHERE id = 1
     ");
     $stmt->execute([
         ':price_per_mile' => $normalized['price_per_mile'],
-        ':base_location'  => $normalized['base_location'],
+        ':hourly_travel_rate' => $normalized['hourly_travel_rate'],
+        ':base_location' => $normalized['base_location'],
     ]);
 }
 
 /**
- * Calls the Google Maps Distance Matrix API and returns the one-way driving
- * distance in miles between $origin and $destination.
+ * Calls the Google Maps Distance Matrix API and returns one-way and round-trip
+ * driving metrics between $origin and $destination.
  *
- * Returns a float (miles) on success, or an array ['error' => '<code>'] on failure.
+ * Returns an array on success, or ['error' => '<code>'] on failure.
  * Error codes: 'api_key_missing', 'base_location_missing', 'invalid_address', 'api_error'.
- *
- * Multiply a successful result by 2 for a round-trip distance.
  */
-function calculateDrivingDistanceMiles(string $origin, string $destination, string $apiKey): float|array
+function calculateDrivingTravelEstimate(string $origin, string $destination, string $apiKey): array
 {
     if ($apiKey === '') {
         return ['error' => 'api_key_missing'];
@@ -162,11 +180,58 @@ function calculateDrivingDistanceMiles(string $origin, string $destination, stri
     }
 
     $meters = (float) ($element['distance']['value'] ?? 0);
-    if ($meters <= 0) {
+    $durationSeconds = (float) ($element['duration']['value'] ?? 0);
+    if ($meters <= 0 || $durationSeconds <= 0) {
         return ['error' => 'api_error'];
     }
 
-    return $meters / 1609.344; // metres → miles
+    $oneWayMiles = $meters / 1609.344;
+    $oneWayHours = $durationSeconds / 3600;
+
+    return [
+        'one_way_miles' => $oneWayMiles,
+        'one_way_hours' => $oneWayHours,
+        'round_trip_miles' => $oneWayMiles * 2,
+        'round_trip_hours' => $oneWayHours * 2,
+    ];
+}
+
+/**
+ * Backwards-compatible helper that returns only one-way miles.
+ */
+function calculateDrivingDistanceMiles(string $origin, string $destination, string $apiKey): float|array
+{
+    $estimate = calculateDrivingTravelEstimate($origin, $destination, $apiKey);
+    if (isset($estimate['error'])) {
+        return $estimate;
+    }
+
+    return (float) ($estimate['one_way_miles'] ?? 0.0);
+}
+
+/**
+ * Calculates travel fee using whichever is higher:
+ * (round-trip miles × per-mile rate) or (round-trip hours × hourly rate).
+ */
+function calculateTravelCharge(float $roundTripMiles, float $roundTripHours, float $pricePerMile, float $hourlyTravelRate): array
+{
+    $safeMiles = max(0, $roundTripMiles);
+    $safeHours = max(0, $roundTripHours);
+    $safePricePerMile = max(0, $pricePerMile);
+    $safeHourlyRate = max(0, $hourlyTravelRate);
+
+    $mileageCharge = round($safeMiles * $safePricePerMile, 2);
+    $hourlyCharge = round($safeHours * $safeHourlyRate, 2);
+    $finalCharge = max($mileageCharge, $hourlyCharge);
+
+    return [
+        'round_trip_miles' => round($safeMiles, 1),
+        'round_trip_hours' => round($safeHours, 2),
+        'mileage_charge' => $mileageCharge,
+        'hourly_charge' => $hourlyCharge,
+        'final_charge' => $finalCharge,
+        'billing_method' => $hourlyCharge > $mileageCharge ? 'hourly' : 'mileage',
+    ];
 }
 
 /**

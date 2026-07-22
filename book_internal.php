@@ -238,7 +238,10 @@ unset($_spd);
 
 $travelSettings = getTravelSettings($pdo);
 $travelPricePerMile = (float) ($travelSettings['price_per_mile'] ?? 2.00);
+$travelHourlyRate = (float) ($travelSettings['hourly_travel_rate'] ?? 50.00);
 $travelMiles = null;
+$travelHours = null;
+$travelChargeDetails = null;
 $travelDistanceError = null;
 
 $step = isset($_GET['step']) ? (int) $_GET['step'] : 1;
@@ -320,9 +323,16 @@ if ($step === 2 && $booking) {
         $booking['state']   ?? '',
         $booking['zip']     ?? '',
     ]));
-    $distanceResult = calculateDrivingDistanceMiles($baseLocation, $customerAddress, $googleMapsApiKey);
-    if (is_float($distanceResult)) {
-        $travelMiles = round($distanceResult * 2, 1); // round trip
+    $distanceResult = calculateDrivingTravelEstimate($baseLocation, $customerAddress, $googleMapsApiKey);
+    if (!isset($distanceResult['error'])) {
+        $travelChargeDetails = calculateTravelCharge(
+            (float) ($distanceResult['round_trip_miles'] ?? 0),
+            (float) ($distanceResult['round_trip_hours'] ?? 0),
+            $travelPricePerMile,
+            $travelHourlyRate
+        );
+        $travelMiles = (float) $travelChargeDetails['round_trip_miles'];
+        $travelHours = (float) $travelChargeDetails['round_trip_hours'];
     } else {
         $travelDistanceError = $distanceResult['error'] ?? 'api_error';
     }
@@ -593,9 +603,15 @@ require_once __DIR__ . '/templates/header.php';
                 $baseTotal += $serviceBasePrices[$serviceKey] ?? 0;
             }
             $serviceTotal = round($baseTotal * ($speedOptions[$currentSpeed]['multiplier'] ?? 1), 2);
-            $travelFee = $travelMiles !== null ? round($travelMiles * $travelPricePerMile, 2) : 0.0;
+            $travelFee = $travelChargeDetails !== null ? (float) $travelChargeDetails['final_charge'] : 0.0;
             $total = round($serviceTotal + $travelFee, 2);
             $travelMilesLabel = $travelMiles !== null ? number_format($travelMiles, 1) . ' miles round trip' : '';
+            $travelHoursLabel = $travelHours !== null ? number_format($travelHours, 2) . ' hours round trip' : '';
+            $travelMileageCharge = $travelChargeDetails !== null ? number_format((float) $travelChargeDetails['mileage_charge'], 2) : '0.00';
+            $travelHourlyCharge = $travelChargeDetails !== null ? number_format((float) $travelChargeDetails['hourly_charge'], 2) : '0.00';
+            $travelBillingMethodLabel = $travelChargeDetails !== null
+                ? ((string) ($travelChargeDetails['billing_method'] ?? 'mileage') === 'hourly' ? 'Hourly drive time' : 'Mileage')
+                : '';
         ?>
         <div class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
             <div id="step-2-success" class="hidden relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-zinc-950 px-6 py-8 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_0_70px_rgba(8,145,178,0.12)] sm:px-8 sm:py-10">
@@ -700,9 +716,16 @@ require_once __DIR__ . '/templates/header.php';
                             <span id="current-travel-fee" class="text-red-400">TBD</span>
                         </div>
                         <?php else: ?>
-                        <div class="flex items-center justify-between gap-4">
-                            <span class="text-zinc-300">Travel Fee (<?= h($travelMilesLabel) ?> × $<?= number_format($travelPricePerMile, 2) ?>/mile)</span>
-                            <span id="current-travel-fee" class="font-semibold text-zinc-100">$<?= number_format($travelFee, 2) ?></span>
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between gap-4">
+                                <span class="text-zinc-300">Travel Charge (higher of mileage or hourly)</span>
+                                <span id="current-travel-fee" class="font-semibold text-zinc-100">$<?= number_format($travelFee, 2) ?></span>
+                            </div>
+                            <p id="current-travel-breakdown" class="text-xs text-zinc-400">
+                                Mileage: <?= h($travelMilesLabel) ?> × $<?= number_format($travelPricePerMile, 2) ?>/mile = $<?= h($travelMileageCharge) ?>
+                                &bull; Hourly: <?= h($travelHoursLabel) ?> × $<?= number_format($travelHourlyRate, 2) ?>/hour = $<?= h($travelHourlyCharge) ?>
+                                &bull; Billing method: <?= h($travelBillingMethodLabel) ?>
+                            </p>
                         </div>
                         <?php endif; ?>
                         <div class="flex items-center justify-between gap-4 border-t border-cyan-500/20 pt-2">
@@ -1032,14 +1055,15 @@ require_once __DIR__ . '/templates/header.php';
     const serviceBasePrices = <?= json_encode($serviceBasePrices, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const speedOptions     = <?= json_encode($speedOptions,     JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const speedPriorityMap = { standard: 'standard', rush: 'vip', emergency: 'emergency' };
-    const travelMiles = <?= json_encode($travelMiles, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const travelPricePerMile = <?= json_encode($travelPricePerMile, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-    const travelMilesLabel = <?= json_encode($travelMilesLabel ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const travelHourlyRate = <?= json_encode($travelHourlyRate, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const travelChargeDetails = <?= json_encode($travelChargeDetails, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const travelDistanceError = <?= json_encode($travelDistanceError ?? null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
     if (stepTwoForm && bookingPayload) {
         const serviceTotalEl = document.getElementById('current-service-total');
         const travelFeeEl = document.getElementById('current-travel-fee');
+        const travelBreakdownEl = document.getElementById('current-travel-breakdown');
         const totalEl       = document.getElementById('current-total');
         const submitBtn     = document.getElementById('step-2-submit-btn');
         const submitLabel   = document.getElementById('step-2-submit-label');
@@ -1085,11 +1109,19 @@ require_once __DIR__ . '/templates/header.php';
             bookingPayload.service_speed = selectedSpeed;
             const baseTotal = (bookingPayload.services || []).reduce((sum, key) => sum + (serviceBasePrices[key] || 0), 0);
             bookingPayload.service_total = Number((baseTotal * (speedOptions[selectedSpeed]?.multiplier || 1)).toFixed(2));
-            bookingPayload.travel_fee = travelMiles !== null ? Number((travelMiles * travelPricePerMile).toFixed(2)) : 0;
+            bookingPayload.travel_fee = travelChargeDetails ? Number((travelChargeDetails.final_charge || 0).toFixed(2)) : 0;
             bookingPayload.total_price = Number((bookingPayload.service_total + bookingPayload.travel_fee).toFixed(2));
             serviceTotalEl.textContent = `$${bookingPayload.service_total.toFixed(2)}`;
-            if (travelMiles !== null) {
+            if (travelChargeDetails) {
                 travelFeeEl.textContent = `$${bookingPayload.travel_fee.toFixed(2)}`;
+                if (travelBreakdownEl) {
+                    const miles = Number(travelChargeDetails.round_trip_miles || 0).toFixed(1);
+                    const hours = Number(travelChargeDetails.round_trip_hours || 0).toFixed(2);
+                    const mileageCharge = Number(travelChargeDetails.mileage_charge || 0).toFixed(2);
+                    const hourlyCharge = Number(travelChargeDetails.hourly_charge || 0).toFixed(2);
+                    const method = travelChargeDetails.billing_method === 'hourly' ? 'Hourly drive time' : 'Mileage';
+                    travelBreakdownEl.textContent = `Mileage: ${miles} miles round trip × $${travelPricePerMile.toFixed(2)}/mile = $${mileageCharge} • Hourly: ${hours} hours round trip × $${travelHourlyRate.toFixed(2)}/hour = $${hourlyCharge} • Billing method: ${method}`;
+                }
             }
             totalEl.textContent = `$${bookingPayload.total_price.toFixed(2)}`;
         };
@@ -1128,7 +1160,7 @@ require_once __DIR__ . '/templates/header.php';
                 `Service total: $${bookingPayload.service_total.toFixed(2)}`,
                 travelDistanceError
                     ? `Travel fee: unable to calculate (${travelDistanceError}) — contact us for a quote`
-                    : `Travel fee (${travelMilesLabel} @ $${travelPricePerMile.toFixed(2)}/mile): $${bookingPayload.travel_fee.toFixed(2)}`,
+                    : `Travel charge: $${bookingPayload.travel_fee.toFixed(2)} (Mileage: $${Number(travelChargeDetails?.mileage_charge || 0).toFixed(2)} vs Hourly: $${Number(travelChargeDetails?.hourly_charge || 0).toFixed(2)} — billed by ${travelChargeDetails?.billing_method === 'hourly' ? 'hourly drive time' : 'mileage'})`,
                 `Grand total: $${bookingPayload.total_price.toFixed(2)}`,
                 '--- Internal Booking (phone-in) ---',
             ].filter(Boolean);
@@ -1159,6 +1191,12 @@ require_once __DIR__ . '/templates/header.php';
                 other_service: bookingPayload.other_service || '',
                 service_speed: selectedSpeed,
                 total_price:   bookingPayload.total_price,
+                travel_charge: bookingPayload.travel_fee,
+                travel_miles: travelChargeDetails ? Number(travelChargeDetails.round_trip_miles || 0) : null,
+                travel_estimated_hours: travelChargeDetails ? Number(travelChargeDetails.round_trip_hours || 0) : null,
+                travel_charge_mileage_based: travelChargeDetails ? Number(travelChargeDetails.mileage_charge || 0) : null,
+                travel_charge_hourly_based: travelChargeDetails ? Number(travelChargeDetails.hourly_charge || 0) : null,
+                travel_billing_method: travelChargeDetails ? (travelChargeDetails.billing_method || 'mileage') : null,
             };
 
             try {

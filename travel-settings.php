@@ -15,14 +15,22 @@ $errorMessage = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $submittedPricePerMile = trim((string) ($_POST['price_per_mile'] ?? ''));
+    $submittedHourlyTravelRate = trim((string) ($_POST['hourly_travel_rate'] ?? ''));
     $submittedBaseLocation = trim((string) ($_POST['base_location'] ?? ''));
 
     if ($submittedPricePerMile === '' || !is_numeric($submittedPricePerMile) || (float) $submittedPricePerMile < 0) {
         $errorMessage = 'Price per mile must be a valid non-negative number.';
-        $settings = array_merge($settings, ['price_per_mile' => $submittedPricePerMile, 'base_location' => $submittedBaseLocation]);
+        $settings = array_merge($settings, ['price_per_mile' => $submittedPricePerMile, 'hourly_travel_rate' => $submittedHourlyTravelRate, 'base_location' => $submittedBaseLocation]);
+    } elseif ($submittedHourlyTravelRate === '' || !is_numeric($submittedHourlyTravelRate) || (float) $submittedHourlyTravelRate < 0) {
+        $errorMessage = 'Hourly travel rate must be a valid non-negative number.';
+        $settings = array_merge($settings, ['price_per_mile' => $submittedPricePerMile, 'hourly_travel_rate' => $submittedHourlyTravelRate, 'base_location' => $submittedBaseLocation]);
     } else {
         try {
-            updateTravelSettings($pdo, ['price_per_mile' => $submittedPricePerMile, 'base_location' => $submittedBaseLocation]);
+            updateTravelSettings($pdo, [
+                'price_per_mile' => $submittedPricePerMile,
+                'hourly_travel_rate' => $submittedHourlyTravelRate,
+                'base_location' => $submittedBaseLocation,
+            ]);
             $settings = getTravelSettings($pdo);
             $successMessage = 'Travel settings updated successfully.';
         } catch (Throwable $e) {
@@ -75,7 +83,7 @@ require_once __DIR__ . '/templates/header.php';
             <form method="POST" class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8 card-glow space-y-6">
                 <div>
                     <h2 class="text-xl font-semibold text-white">Travel Pricing</h2>
-                    <p class="mt-2 text-sm text-zinc-400">This value is multiplied by miles traveled when generating the booking travel fee.</p>
+                    <p class="mt-2 text-sm text-zinc-400">Travel billing uses the higher of mileage-based cost or hourly drive-time cost for each request.</p>
                 </div>
 
                 <label class="block max-w-sm">
@@ -86,6 +94,19 @@ require_once __DIR__ . '/templates/header.php';
                         step="0.01"
                         name="price_per_mile"
                         value="<?= htmlspecialchars((string) $settings['price_per_mile'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>"
+                        class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none"
+                        required
+                    >
+                </label>
+
+                <label class="block max-w-sm">
+                    <span class="text-sm font-medium text-zinc-200">Hourly Travel Rate ($/hour)</span>
+                    <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        name="hourly_travel_rate"
+                        value="<?= htmlspecialchars((string) $settings['hourly_travel_rate'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>"
                         class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none"
                         required
                     >
@@ -104,7 +125,8 @@ require_once __DIR__ . '/templates/header.php';
                 </label>
 
                 <div class="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">
-                    Current price per mile: <span class="font-semibold">$<?= number_format((float) $settings['price_per_mile'], 2) ?></span>
+                    <div>Current price per mile: <span class="font-semibold">$<?= number_format((float) $settings['price_per_mile'], 2) ?></span></div>
+                    <div class="mt-1">Current hourly travel rate: <span class="font-semibold">$<?= number_format((float) $settings['hourly_travel_rate'], 2) ?>/hour</span></div>
                 </div>
 
                 <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400">

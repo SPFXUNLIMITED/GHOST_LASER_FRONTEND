@@ -30,6 +30,30 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // ── Load DB ───────────────────────────────────────────────────────────────────
 require __DIR__ . '/../project/db.php';
+require_once __DIR__ . '/../travel-helper.php';
+
+function ensure_service_request_pricing_columns(PDO $pdo): void {
+    $columns = [
+        'travel_charge' => "ALTER TABLE service_requests ADD COLUMN travel_charge DECIMAL(10,2) NULL DEFAULT NULL",
+        'travel_miles' => "ALTER TABLE service_requests ADD COLUMN travel_miles DECIMAL(10,2) NULL DEFAULT NULL",
+        'travel_estimated_hours' => "ALTER TABLE service_requests ADD COLUMN travel_estimated_hours DECIMAL(10,2) NULL DEFAULT NULL",
+        'travel_charge_mileage_based' => "ALTER TABLE service_requests ADD COLUMN travel_charge_mileage_based DECIMAL(10,2) NULL DEFAULT NULL",
+        'travel_charge_hourly_based' => "ALTER TABLE service_requests ADD COLUMN travel_charge_hourly_based DECIMAL(10,2) NULL DEFAULT NULL",
+        'travel_billing_method' => "ALTER TABLE service_requests ADD COLUMN travel_billing_method VARCHAR(20) NULL DEFAULT NULL",
+    ];
+    $checkStmt = $pdo->prepare("
+        SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'service_requests'
+          AND COLUMN_NAME = :column_name
+    ");
+    foreach ($columns as $columnName => $ddlSql) {
+        $checkStmt->execute([':column_name' => $columnName]);
+        if ((int) $checkStmt->fetchColumn() === 0) {
+            $pdo->exec($ddlSql);
+        }
+    }
+}
 
 // ── Rate limit: max 10 submissions per IP per hour (reuses form_rate_limit) ───
 $_api_ip = (function (): string {
@@ -495,10 +519,63 @@ if ($errors) {
 }
 
 // ── Derive problem_summary from the first 255 chars of problem ────────────────
+$full_address = implode(', ', array_filter([$street, $city, $state, $zip, $country], fn($p) => $p !== ''));
+$travel_settings = getTravelSettings($pdo);
+$travel_price_per_mile = (float) ($travel_settings['price_per_mile'] ?? 0);
+$travel_hourly_rate = (float) ($travel_settings['hourly_travel_rate'] ?? 0);
+$travel_base_location = trim((string) ($travel_settings['base_location'] ?? ''));
+$travel_charge = null;
+$travel_miles = null;
+$travel_estimated_hours = null;
+$travel_charge_mileage_based = null;
+$travel_charge_hourly_based = null;
+$travel_billing_method = null;
+$travel_calc_error = null;
+
+$travel_estimate = calculateDrivingTravelEstimate($travel_base_location, $full_address, load_env_value('GOOGLE_MAPS_API_KEY'));
+if (!isset($travel_estimate['error'])) {
+    $travel_charge_data = calculateTravelCharge(
+        (float) ($travel_estimate['round_trip_miles'] ?? 0),
+        (float) ($travel_estimate['round_trip_hours'] ?? 0),
+        $travel_price_per_mile,
+        $travel_hourly_rate
+    );
+    $travel_charge = (float) ($travel_charge_data['final_charge'] ?? 0);
+    $travel_miles = (float) ($travel_charge_data['round_trip_miles'] ?? 0);
+    $travel_estimated_hours = (float) ($travel_charge_data['round_trip_hours'] ?? 0);
+    $travel_charge_mileage_based = (float) ($travel_charge_data['mileage_charge'] ?? 0);
+    $travel_charge_hourly_based = (float) ($travel_charge_data['hourly_charge'] ?? 0);
+    $travel_billing_method = (string) ($travel_charge_data['billing_method'] ?? 'mileage');
+} else {
+    $travel_calc_error = (string) ($travel_estimate['error'] ?? 'api_error');
+}
+
+$server_invoice_lines = [
+    '--- Invoice (System Calculated) ---',
+];
+if ($travel_charge !== null) {
+    $server_invoice_lines[] = sprintf('Travel charge: $%.2f', $travel_charge);
+    $server_invoice_lines[] = sprintf(
+        'Travel billing rule (higher of): mileage ($%.2f @ %.2f miles × $%.2f/mile) vs hourly ($%.2f @ %.2f hours × $%.2f/hour); billed by %s.',
+        (float) $travel_charge_mileage_based,
+        (float) $travel_miles,
+        $travel_price_per_mile,
+        (float) $travel_charge_hourly_based,
+        (float) $travel_estimated_hours,
+        $travel_hourly_rate,
+        $travel_billing_method === 'hourly' ? 'hourly drive time' : 'mileage'
+    );
+} else {
+    $server_invoice_lines[] = 'Travel charge could not be auto-calculated for this request.';
+    $server_invoice_lines[] = 'Reason: ' . $travel_calc_error;
+}
+$problem = rtrim($problem) . "\n\n" . implode("\n", $server_invoice_lines);
 $problem_summary = mb_substr($problem, 0, 255);
 
 // ── Insert into service_requests ──────────────────────────────────────────────
 try {
+    ensure_service_request_pricing_columns($pdo);
+
     $customer_id = resolve_customer_id(
         $pdo,
         $first_name,
@@ -517,7 +594,6 @@ try {
     if ($client_coords_valid) {
         $geo = ['lat' => $client_lat, 'lng' => $client_lng, 'status' => 'ok'];
     } else {
-        $full_address = implode(', ', array_filter([$street, $city, $state, $zip, $country], fn($p) => $p !== ''));
         $geo = $full_address !== '' ? geocode_address($full_address) : ['lat' => null, 'lng' => null, 'status' => 'failed'];
     }
 
@@ -526,11 +602,15 @@ try {
             customer_id, laser_brand, laser_model, laser_watts, laser_age,
             problem_summary, problem_details, priority_level, source,
             request_status, latitude, longitude, geocode_status,
+            travel_charge, travel_miles, travel_estimated_hours,
+            travel_charge_mileage_based, travel_charge_hourly_based, travel_billing_method,
             preferred_date_start, preferred_date_end
         ) VALUES (
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             'new', ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
             ?, ?
         )
     ");
@@ -554,6 +634,12 @@ try {
         $geo['lat'],
         $geo['lng'],
         $geo['status'],
+        $travel_charge,
+        $travel_miles,
+        $travel_estimated_hours,
+        $travel_charge_mileage_based,
+        $travel_charge_hourly_based,
+        $travel_billing_method,
         $first_suggested_date,
         $last_suggested_date,
     ]);
@@ -573,6 +659,7 @@ try {
         'id'              => $new_id,
         'suggested_dates' => $suggested_dates,
         'priority'        => $priority,
+        'travel_charge'   => $travel_charge,
     ]);
 } catch (\Throwable $ex) {
     error_log('api/book-repair-api.php DB error: ' . $ex->getMessage());
