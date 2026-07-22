@@ -477,8 +477,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         .stat-card {
             background: rgba(24,24,27,0.85);
             border: 1px solid rgba(63,63,70,0.8);
-            border-radius: 0.875rem;
-            padding: 1.25rem 1.5rem;
+            border-radius: 0.75rem;
+            padding: 0.65rem 0.85rem;
         }
         .filter-input {
             background: rgba(24,24,27,0.85);
@@ -700,9 +700,15 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 
 <main class="max-w-7xl mx-auto px-4 pb-16 pt-6">
 
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold text-white leading-tight">Bookings</h1>
-        <p class="text-sm text-zinc-400 mt-1">All customer registration &amp; booking form submissions &mdash; view, edit, or remove any record.</p>
+    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white leading-tight">Bookings</h1>
+            <p class="text-sm text-zinc-400 mt-1">All customer registration &amp; booking form submissions &mdash; view, edit, or remove any record.</p>
+        </div>
+        <a href="book_internal.php" class="filter-btn self-start">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            New Booking
+        </a>
     </div>
 
     <?php if ($dbError !== null): ?>
@@ -724,26 +730,22 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     <?php endif; ?>
 
     <!-- Stats -->
-    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-6">
         <div class="stat-card">
-            <div class="text-xs text-zinc-500 font-medium uppercase tracking-widest mb-1">Total</div>
-            <div class="text-2xl font-bold text-white"><?= (int) ($statsRow['total'] ?? 0) ?></div>
+            <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">Total</div>
+            <div class="text-xl font-bold text-white leading-tight"><?= (int) ($statsRow['total'] ?? 0) ?></div>
         </div>
         <div class="stat-card">
-            <div class="text-xs text-zinc-500 font-medium uppercase tracking-widest mb-1">New</div>
-            <div class="text-2xl font-bold text-zinc-300"><?= (int) ($statsRow['new_count'] ?? 0) ?></div>
+            <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">New</div>
+            <div class="text-xl font-bold text-zinc-300 leading-tight"><?= (int) ($statsRow['new_count'] ?? 0) ?></div>
         </div>
         <div class="stat-card">
-            <div class="text-xs text-zinc-500 font-medium uppercase tracking-widest mb-1">Queued</div>
-            <div class="text-2xl font-bold text-blue-400"><?= (int) ($statsRow['queued'] ?? 0) ?></div>
+            <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">Queued</div>
+            <div class="text-xl font-bold text-blue-400 leading-tight"><?= (int) ($statsRow['queued'] ?? 0) ?></div>
         </div>
         <div class="stat-card">
-            <div class="text-xs text-zinc-500 font-medium uppercase tracking-widest mb-1">Completed</div>
-            <div class="text-2xl font-bold text-green-400"><?= (int) ($statsRow['completed'] ?? 0) ?></div>
-        </div>
-        <div class="stat-card">
-            <div class="text-xs text-zinc-500 font-medium uppercase tracking-widest mb-1">Cancelled</div>
-            <div class="text-2xl font-bold text-yellow-300"><?= (int) ($statsRow['cancelled'] ?? 0) ?></div>
+            <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">Completed</div>
+            <div class="text-xl font-bold text-green-400 leading-tight"><?= (int) ($statsRow['completed'] ?? 0) ?></div>
         </div>
     </div>
 
