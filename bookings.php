@@ -50,6 +50,79 @@ function bk_sourceInfo(string $source): array
     };
 }
 
+function bk_tableExists(PDO $pdo, string $table): bool
+{
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+    ");
+    $stmt->execute([$table]);
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function bk_deleteBookings(PDO $pdo, array $ids): int
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn($v) => $v > 0)));
+    if ($ids === []) {
+        return 0;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+    try {
+        $pdo->beginTransaction();
+
+        $clusterIds = [];
+        if (bk_tableExists($pdo, 'scheduled_cluster_jobs')) {
+            $clusterIdsStmt = $pdo->prepare("
+                SELECT DISTINCT scheduled_cluster_id
+                FROM scheduled_cluster_jobs
+                WHERE service_request_id IN ($placeholders)
+            ");
+            $clusterIdsStmt->execute($ids);
+            $clusterIds = array_map('intval', $clusterIdsStmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
+
+            $deleteScheduledJobsStmt = $pdo->prepare("
+                DELETE FROM scheduled_cluster_jobs
+                WHERE service_request_id IN ($placeholders)
+            ");
+            $deleteScheduledJobsStmt->execute($ids);
+        }
+
+        $deleteBookingsStmt = $pdo->prepare("
+            DELETE FROM service_requests
+            WHERE id IN ($placeholders)
+        ");
+        $deleteBookingsStmt->execute($ids);
+        $deletedCount = (int) $deleteBookingsStmt->rowCount();
+
+        if ($clusterIds !== [] && bk_tableExists($pdo, 'scheduled_clusters')) {
+            $clusterPlaceholders = implode(',', array_fill(0, count($clusterIds), '?'));
+            $deleteEmptyClustersStmt = $pdo->prepare("
+                DELETE FROM scheduled_clusters
+                WHERE id IN ($clusterPlaceholders)
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM scheduled_cluster_jobs
+                      WHERE scheduled_cluster_id = scheduled_clusters.id
+                  )
+            ");
+            $deleteEmptyClustersStmt->execute($clusterIds);
+        }
+
+        $pdo->commit();
+        return $deletedCount;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+        throw $e;
+    }
+}
+
 $adminUsername = trim((string) ($_SESSION['admin_username'] ?? 'Admin'));
 if ($adminUsername === '') $adminUsername = 'Admin';
 
@@ -116,10 +189,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $delId = (int) ($_POST['id'] ?? 0);
         if ($delId > 0) {
             try {
-                $pdo->prepare("UPDATE service_requests SET request_status = 'deleted' WHERE id = ?")
-                    ->execute([$delId]);
-                $_SESSION['bk_flash_success'] = 'Booking #' . $delId . ' has been deleted.';
-            } catch (PDOException $e) {
+                $deletedCount = bk_deleteBookings($pdo, [$delId]);
+                if ($deletedCount > 0) {
+                    $_SESSION['bk_flash_success'] = 'Booking #' . $delId . ' has been permanently deleted.';
+                } else {
+                    $_SESSION['bk_flash_error'] = 'Booking #' . $delId . ' could not be found.';
+                }
+            } catch (Throwable $e) {
                 $_SESSION['bk_flash_error'] = 'Delete failed: ' . $e->getMessage();
             }
         }
@@ -133,12 +209,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ids = array_values(array_filter(array_map('intval', $rawIds), fn($v) => $v > 0));
             if (count($ids) > 0) {
                 try {
-                    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-                    $pdo->prepare("UPDATE service_requests SET request_status = 'deleted' WHERE id IN ($placeholders)")
-                        ->execute($ids);
-                    $n = count($ids);
-                    $_SESSION['bk_flash_success'] = $n . ' booking' . ($n !== 1 ? 's' : '') . ' deleted.';
-                } catch (PDOException $e) {
+                    $deletedCount = bk_deleteBookings($pdo, $ids);
+                    $_SESSION['bk_flash_success'] = $deletedCount . ' booking' . ($deletedCount !== 1 ? 's' : '') . ' permanently deleted.';
+                } catch (Throwable $e) {
                     $_SESSION['bk_flash_error'] = 'Bulk delete failed: ' . $e->getMessage();
                 }
             }
@@ -921,9 +994,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <input type="hidden" name="fstart"    value="<?= htmlspecialchars($filterDateStart, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="fend"      value="<?= htmlspecialchars($filterDateEnd,   ENT_QUOTES, 'UTF-8') ?>">
             <div class="modal-body">
-                <p class="text-sm text-zinc-300">Are you sure you want to mark this booking as <strong class="text-red-400">deleted</strong>?</p>
+                <p class="text-sm text-zinc-300">Are you sure you want to <strong class="text-red-400">permanently delete</strong> this booking?</p>
                 <p id="deleteCustomerName" class="mt-2 text-sm font-medium text-white"></p>
-                <p class="mt-3 text-xs text-zinc-500">The record will be hidden from default views but retained in the database.</p>
+                <p class="mt-3 text-xs text-zinc-500">This will completely remove the booking record from the database.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-cancel-modal" onclick="closeModal('deleteModal')">Cancel</button>
@@ -952,8 +1025,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <input type="hidden" name="fend"      value="<?= htmlspecialchars($filterDateEnd,   ENT_QUOTES, 'UTF-8') ?>">
             <div id="bulkDeleteIds"></div>
             <div class="modal-body">
-                <p class="text-sm text-zinc-300">Are you sure you want to mark <strong id="bulkDeleteCount" class="text-red-400"></strong> as <strong class="text-red-400">deleted</strong>?</p>
-                <p class="mt-3 text-xs text-zinc-500">Records will be hidden from default views but retained in the database.</p>
+                <p class="text-sm text-zinc-300">Are you sure you want to <strong class="text-red-400">permanently delete</strong> <strong id="bulkDeleteCount" class="text-red-400"></strong>?</p>
+                <p class="mt-3 text-xs text-zinc-500">This will completely remove the selected booking records from the database.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-cancel-modal" onclick="closeModal('bulkDeleteModal')">Cancel</button>
