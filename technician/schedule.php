@@ -1137,22 +1137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $subject  = strtr((string) $notification['title'], $tagValues);
                         $bodyText = strtr((string) $notification['body'], $tagValues);
-                        // Build HTML body: wrap each non-empty line in a <p> tag so
-                        // sentences sit on their own lines instead of collapsing into
-                        // one paragraph in email clients.
-                        $bodyLines = explode("\n", str_replace("\r\n", "\n", $bodyText));
-                        $bodyHtmlParts = [];
-                        foreach ($bodyLines as $bodyLine) {
-                            $trimmedLine = rtrim($bodyLine);
-                            if ($trimmedLine !== '') {
-                                $bodyHtmlParts[] = '<p style="margin:0 0 0.8em 0;">'
-                                    . htmlspecialchars($trimmedLine, ENT_QUOTES, 'UTF-8')
-                                    . '</p>';
-                            } else {
-                                $bodyHtmlParts[] = '<br>';
-                            }
-                        }
-                        $bodyHtml = implode("\n", $bodyHtmlParts);
+                        $bodyHtml = nl2br(htmlspecialchars($bodyText));
 
                         try {
                             $mailer = new PHPMailer(true);
