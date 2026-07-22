@@ -25,14 +25,14 @@ function getNotificationTagDefinitions(): array
             'description' => 'Customer service address combined into one line.',
         ],
         '{company_name}' => [
-            'table' => 'customers',
-            'columns' => ['company'],
-            'description' => 'Customer company name.',
+            'table' => 'company_settings',
+            'columns' => ['company_name'],
+            'description' => 'Your company name (editable in Custom Tags section).',
         ],
         '{company_phone}' => [
-            'table' => 'customers',
-            'columns' => ['phone'],
-            'description' => 'Customer company phone number.',
+            'table' => 'company_settings',
+            'columns' => ['company_phone'],
+            'description' => 'Your company phone number (editable in Custom Tags section).',
         ],
         '{appointment_date}' => [
             'table' => 'service_requests',
@@ -55,9 +55,9 @@ function getNotificationTagDefinitions(): array
             'description' => 'Comma-separated list of selected service names.',
         ],
         '{company_website}' => [
-            'table' => 'settings',
-            'columns' => ['COMPANY_WEBSITE env var'],
-            'description' => 'Company website URL (set via COMPANY_WEBSITE environment variable).',
+            'table' => 'company_settings',
+            'columns' => ['company_website'],
+            'description' => 'Your company website URL (editable in Custom Tags section).',
         ],
     ];
 }
@@ -77,6 +77,44 @@ function getUnsupportedNotificationTags(string $template): array
     ));
 }
 
+function ensureCompanySettingsTable(PDO $pdo): void
+{
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS company_settings (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            company_name VARCHAR(255) NOT NULL DEFAULT '',
+            company_phone VARCHAR(100) NOT NULL DEFAULT '',
+            company_website VARCHAR(255) NOT NULL DEFAULT ''
+        )
+    ");
+
+    $count = (int) $pdo->query("SELECT COUNT(*) FROM company_settings WHERE id = 1")->fetchColumn();
+    if ($count === 0) {
+        $pdo->exec("INSERT INTO company_settings (id, company_name, company_phone, company_website) VALUES (1, '', '', '')");
+    }
+}
+
+function getCompanySettings(PDO $pdo): array
+{
+    $defaults = ['company_name' => '', 'company_phone' => '', 'company_website' => ''];
+    try {
+        $row = $pdo->query("SELECT company_name, company_phone, company_website FROM company_settings WHERE id = 1 LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        return $row ?: $defaults;
+    } catch (Throwable $e) {
+        return $defaults;
+    }
+}
+
+function saveCompanySettings(PDO $pdo, string $name, string $phone, string $website): void
+{
+    $stmt = $pdo->prepare("
+        UPDATE company_settings
+        SET company_name = :name, company_phone = :phone, company_website = :website
+        WHERE id = 1
+    ");
+    $stmt->execute([':name' => $name, ':phone' => $phone, ':website' => $website]);
+}
+
 function renderNotificationTemplate(string $template, array $tagValues): string
 {
     return strtr($template, $tagValues);
@@ -85,6 +123,11 @@ function renderNotificationTemplate(string $template, array $tagValues): string
 function loadNotificationTagValues(PDO $pdo): array
 {
     $tagValues = array_fill_keys(array_keys(getNotificationTagDefinitions()), '');
+
+    $companySettings = getCompanySettings($pdo);
+    $tagValues['{company_name}']    = $companySettings['company_name'];
+    $tagValues['{company_phone}']   = $companySettings['company_phone'];
+    $tagValues['{company_website}'] = $companySettings['company_website'];
 
     $customerAndRequest = [];
     try {
@@ -126,8 +169,6 @@ function loadNotificationTagValues(PDO $pdo): array
 
     $tagValues['{client_name}'] = $fullName;
     $tagValues['{client_address}'] = $fullAddress;
-    $tagValues['{company_name}'] = trim((string) ($customerAndRequest['company'] ?? ''));
-    $tagValues['{company_phone}'] = trim((string) ($customerAndRequest['phone'] ?? ''));
     $tagValues['{appointment_date}'] = trim((string) ($customerAndRequest['promised_service_date'] ?? ''));
 
     // Resolve {service_name} from the JSON array of service IDs stored in service_requests.services
@@ -164,9 +205,6 @@ function loadNotificationTagValues(PDO $pdo): array
         // service_route_stops may not exist in every environment yet.
     }
 
-    // {company_website} comes from the COMPANY_WEBSITE environment variable (see smtp_config.php).
-    $tagValues['{company_website}'] = getenv('COMPANY_WEBSITE') ?: 'https://LaserCutterRepair.com';
-
     return $tagValues;
 }
 
@@ -189,6 +227,7 @@ function getNotifications(PDO $pdo): array
 }
 
 ensureNotificationsTable($pdo);
+ensureCompanySettingsTable($pdo);
 
 $successMessage = null;
 $errorMessage = null;
@@ -196,7 +235,13 @@ $errorMessage = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
 
-    if ($action === 'add') {
+    if ($action === 'save_custom_tags') {
+        $companyName    = trim((string) ($_POST['custom_company_name'] ?? ''));
+        $companyPhone   = trim((string) ($_POST['custom_company_phone'] ?? ''));
+        $companyWebsite = trim((string) ($_POST['custom_company_website'] ?? ''));
+        saveCompanySettings($pdo, $companyName, $companyPhone, $companyWebsite);
+        $successMessage = 'Custom tags saved successfully.';
+    } elseif ($action === 'add') {
         $title = trim((string) ($_POST['title'] ?? ''));
         $body = trim((string) ($_POST['body'] ?? ''));
         $unsupportedTags = getUnsupportedNotificationTags($body);
@@ -263,6 +308,7 @@ if (isset($_GET['msg'])) {
 $notificationTagDefinitions = getNotificationTagDefinitions();
 $notificationTagValues = loadNotificationTagValues($pdo);
 $notifications = getNotifications($pdo);
+$companySettings = getCompanySettings($pdo);
 
 foreach ($notifications as &$notification) {
     $notification['unsupported_tags'] = getUnsupportedNotificationTags((string) $notification['body']);
@@ -344,6 +390,68 @@ require_once __DIR__ . '/templates/header.php';
                         </tbody>
                     </table>
                 </div>
+            </section>
+
+            <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8 card-glow space-y-6">
+                <div>
+                    <h2 class="text-xl font-semibold text-white">Custom Tags</h2>
+                    <p class="mt-2 text-sm text-zinc-400">
+                        Set your company's details here. These values are used when rendering the
+                        <span class="text-cyan-300">{company_name}</span>,
+                        <span class="text-cyan-300">{company_phone}</span>, and
+                        <span class="text-cyan-300">{company_website}</span> tags in any notification template.
+                    </p>
+                </div>
+
+                <form method="POST" action="notifications.php" class="space-y-4">
+                    <input type="hidden" name="action" value="save_custom_tags">
+                    <div class="grid gap-4 md:grid-cols-3">
+                        <div>
+                            <label for="custom-company-name" class="mb-1.5 block text-xs font-medium text-zinc-400">Company Name</label>
+                            <input
+                                type="text"
+                                id="custom-company-name"
+                                name="custom_company_name"
+                                maxlength="255"
+                                value="<?= htmlspecialchars($companySettings['company_name'], ENT_QUOTES, 'UTF-8') ?>"
+                                class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                                placeholder="e.g. Ghost Laser"
+                            >
+                        </div>
+                        <div>
+                            <label for="custom-company-phone" class="mb-1.5 block text-xs font-medium text-zinc-400">Company Phone</label>
+                            <input
+                                type="text"
+                                id="custom-company-phone"
+                                name="custom_company_phone"
+                                maxlength="100"
+                                value="<?= htmlspecialchars($companySettings['company_phone'], ENT_QUOTES, 'UTF-8') ?>"
+                                class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                                placeholder="e.g. (555) 123-4567"
+                            >
+                        </div>
+                        <div>
+                            <label for="custom-company-website" class="mb-1.5 block text-xs font-medium text-zinc-400">Company Website</label>
+                            <input
+                                type="text"
+                                id="custom-company-website"
+                                name="custom_company_website"
+                                maxlength="255"
+                                value="<?= htmlspecialchars($companySettings['company_website'], ENT_QUOTES, 'UTF-8') ?>"
+                                class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                                placeholder="e.g. https://LaserCutterRepair.com"
+                            >
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button
+                            type="submit"
+                            class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition-colors hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                        >
+                            Save Custom Tags
+                        </button>
+                    </div>
+                </form>
             </section>
 
             <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8 card-glow space-y-6">
