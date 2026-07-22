@@ -914,38 +914,38 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             </button>
         </div>
         <form method="POST" action="bookings.php" autocomplete="off">
-            <input type="hidden" name="action"    value="edit">
-            <input type="hidden" name="csrf"      value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-            <input type="hidden" name="id"        id="editId">
+            <input type="hidden" name="action"    value="edit" autocomplete="off">
+            <input type="hidden" name="csrf"      value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>" autocomplete="off">
+            <input type="hidden" name="id"        id="editId" autocomplete="off">
             <!-- Preserve current filter params -->
-            <input type="hidden" name="fq"        value="<?= htmlspecialchars($filterSearch,    ENT_QUOTES, 'UTF-8') ?>">
-            <input type="hidden" name="fstatus"   value="<?= htmlspecialchars($filterStatus,    ENT_QUOTES, 'UTF-8') ?>">
-            <input type="hidden" name="fpriority" value="<?= htmlspecialchars($filterPriority,  ENT_QUOTES, 'UTF-8') ?>">
-            <input type="hidden" name="fstart"    value="<?= htmlspecialchars($filterDateStart, ENT_QUOTES, 'UTF-8') ?>">
-            <input type="hidden" name="fend"      value="<?= htmlspecialchars($filterDateEnd,   ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="fq"        value="<?= htmlspecialchars($filterSearch,    ENT_QUOTES, 'UTF-8') ?>" autocomplete="off">
+            <input type="hidden" name="fstatus"   value="<?= htmlspecialchars($filterStatus,    ENT_QUOTES, 'UTF-8') ?>" autocomplete="off">
+            <input type="hidden" name="fpriority" value="<?= htmlspecialchars($filterPriority,  ENT_QUOTES, 'UTF-8') ?>" autocomplete="off">
+            <input type="hidden" name="fstart"    value="<?= htmlspecialchars($filterDateStart, ENT_QUOTES, 'UTF-8') ?>" autocomplete="off">
+            <input type="hidden" name="fend"      value="<?= htmlspecialchars($filterDateEnd,   ENT_QUOTES, 'UTF-8') ?>" autocomplete="off">
             <div class="modal-body">
                 <p class="form-section-title" style="margin-top:0">Customer Information</p>
                 <div class="form-grid-2">
-                    <div><label class="form-label">First Name</label><input type="text"  name="c_first_name" id="editFirstName" class="form-input" required></div>
-                    <div><label class="form-label">Last Name</label> <input type="text"  name="c_last_name"  id="editLastName"  class="form-input" required></div>
-                    <div><label class="form-label">Email</label>     <input type="email" name="c_email"      id="editEmail"     class="form-input" required></div>
-                    <div><label class="form-label">Phone</label>     <input type="text"  name="c_phone"      id="editPhone"     class="form-input"></div>
-                    <div><label class="form-label">Company</label>   <input type="text"  name="c_company"    id="editCompany"   class="form-input"></div>
-                    <div><label class="form-label">Address</label>   <input type="text"  name="c_address"    id="editAddress"   class="form-input"></div>
-                    <div><label class="form-label">City</label>      <input type="text"  name="c_city"       id="editCity"      class="form-input"></div>
-                    <div><label class="form-label">State</label>     <input type="text"  name="c_state"      id="editState"     class="form-input" maxlength="2"></div>
-                    <div><label class="form-label">ZIP</label>       <input type="text"  name="c_zip"        id="editZip"       class="form-input"></div>
+                    <div><label class="form-label">First Name</label><input type="text"  name="c_first_name" id="editFirstName" class="form-input" required autocomplete="off"></div>
+                    <div><label class="form-label">Last Name</label> <input type="text"  name="c_last_name"  id="editLastName"  class="form-input" required autocomplete="off"></div>
+                    <div><label class="form-label">Email</label>     <input type="email" name="c_email"      id="editEmail"     class="form-input" required autocomplete="off"></div>
+                    <div><label class="form-label">Phone</label>     <input type="text"  name="c_phone"      id="editPhone"     class="form-input" autocomplete="off"></div>
+                    <div><label class="form-label">Company</label>   <input type="text"  name="c_company"    id="editCompany"   class="form-input" autocomplete="off"></div>
+                    <div><label class="form-label">Address</label>   <input type="text"  name="c_address"    id="editAddress"   class="form-input" autocomplete="off"></div>
+                    <div><label class="form-label">City</label>      <input type="text"  name="c_city"       id="editCity"      class="form-input" autocomplete="off"></div>
+                    <div><label class="form-label">State</label>     <input type="text"  name="c_state"      id="editState"     class="form-input" maxlength="2" autocomplete="off"></div>
+                    <div><label class="form-label">ZIP</label>       <input type="text"  name="c_zip"        id="editZip"       class="form-input" autocomplete="off"></div>
                 </div>
 
                 <p class="form-section-title">Machine &amp; Request</p>
                 <div class="form-grid-2">
-                    <div><label class="form-label">Laser Brand</label>      <input type="text" name="sr_brand" id="editBrand" class="form-input"></div>
-                    <div><label class="form-label">Laser Model</label>      <input type="text" name="sr_model" id="editModel" class="form-input"></div>
-                    <div><label class="form-label">Watts</label>            <input type="text" name="sr_watts" id="editWatts" class="form-input"></div>
-                    <div><label class="form-label">Age</label>              <input type="text" name="sr_age"   id="editAge"   class="form-input"></div>
+                    <div><label class="form-label">Laser Brand</label>      <input type="text" name="sr_brand" id="editBrand" class="form-input" autocomplete="off"></div>
+                    <div><label class="form-label">Laser Model</label>      <input type="text" name="sr_model" id="editModel" class="form-input" autocomplete="off"></div>
+                    <div><label class="form-label">Watts</label>            <input type="text" name="sr_watts" id="editWatts" class="form-input" autocomplete="off"></div>
+                    <div><label class="form-label">Age</label>              <input type="text" name="sr_age"   id="editAge"   class="form-input" autocomplete="off"></div>
                     <div>
                         <label class="form-label">Priority</label>
-                        <select name="sr_priority" id="editPriority" class="form-select">
+                        <select name="sr_priority" id="editPriority" class="form-select" autocomplete="off">
                             <option value="standard">Standard</option>
                             <option value="vip">VIP</option>
                             <option value="emergency">Emergency</option>
@@ -953,7 +953,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     </div>
                     <div>
                         <label class="form-label">Status</label>
-                        <select name="sr_status" id="editStatus" class="form-select">
+                        <select name="sr_status" id="editStatus" class="form-select" autocomplete="off">
                             <option value="new">New</option>
                             <option value="queued">Queued</option>
                             <option value="completed">Completed</option>
@@ -961,11 +961,11 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                             <option value="deleted">Deleted</option>
                         </select>
                     </div>
-                    <div><label class="form-label">Preferred Start</label>  <input type="date" name="sr_pref_start" id="editPrefStart" class="form-input"></div>
-                    <div><label class="form-label">Preferred End</label>    <input type="date" name="sr_pref_end"   id="editPrefEnd"   class="form-input"></div>
+                    <div><label class="form-label">Preferred Start</label>  <input type="date" name="sr_pref_start" id="editPrefStart" class="form-input" autocomplete="off"></div>
+                    <div><label class="form-label">Preferred End</label>    <input type="date" name="sr_pref_end"   id="editPrefEnd"   class="form-input" autocomplete="off"></div>
                 </div>
-                <div class="mt-3"><label class="form-label">Problem Summary</label><input type="text" name="sr_summary" id="editSummary" class="form-input"></div>
-                <div class="mt-3"><label class="form-label">Problem Details</label><textarea name="sr_details" id="editDetails" class="form-textarea"></textarea></div>
+                <div class="mt-3"><label class="form-label">Problem Summary</label><input type="text" name="sr_summary" id="editSummary" class="form-input" autocomplete="off"></div>
+                <div class="mt-3"><label class="form-label">Problem Details</label><textarea name="sr_details" id="editDetails" class="form-textarea" autocomplete="off"></textarea></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-cancel-modal" onclick="closeModal('editModal')">Cancel</button>
