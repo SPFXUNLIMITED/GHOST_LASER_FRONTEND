@@ -610,6 +610,14 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/../project/db.php';
 require_once __DIR__ . '/../scheduling_settings.php';
+require_once __DIR__ . '/../smtp_config.php';
+require_once __DIR__ . '/../lib/PHPMailer/src/Exception.php';
+require_once __DIR__ . '/../lib/PHPMailer/src/PHPMailer.php';
+require_once __DIR__ . '/../lib/PHPMailer/src/SMTP.php';
+
+use PHPMailer\PHPMailer\Exception as MailerException;
+use PHPMailer\PHPMailer\PHPMailer;
+
 ensureClusterSchedulingTables($pdo);
 $schedulingSettings = getSchedulingSettings($pdo);
 $dailyTechnicianCapacity = calculateTechnicianDailyCapacity($schedulingSettings);
@@ -619,6 +627,8 @@ $testDataMessage = null;
 $testDataError = null;
 $clusterAssignMessage = null;
 $clusterAssignError = null;
+$notifyClusterMessage = null;
+$notifyClusterError = null;
 $calendarMonthParam = trim((string) ($_GET['month'] ?? $_POST['month'] ?? ''));
 $parsedCalendarMonth = $calendarMonthParam !== ''
     ? DateTimeImmutable::createFromFormat('Y-m', $calendarMonthParam)
@@ -979,6 +989,175 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$clusteringRequested && !$unassignScheduledJobId && !$unassignScheduledClusterId) {
         $clusteringRequested = isset($_POST['run_clustering']);
     }
+
+    $notifyClusterId = filter_input(
+        INPUT_POST,
+        'notify_cluster_id',
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1]]
+    );
+
+    if ($notifyClusterId && !$unassignScheduledJobId && !$unassignScheduledClusterId && !$clusteringRequested) {
+        try {
+            // Load notification template ID 1.
+            $notifStmt = $pdo->prepare("SELECT title, body FROM notifications WHERE id = 1 LIMIT 1");
+            $notifStmt->execute();
+            $notification = $notifStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$notification) {
+                $notifyClusterError = 'Notification template #1 was not found. Please add it in the Notifications admin page.';
+            } else {
+                // Fetch all jobs in the cluster with customer + scheduling data.
+                $clusterCustomersStmt = $pdo->prepare("
+                    SELECT
+                        c.first_name,
+                        c.last_name,
+                        c.email,
+                        c.address,
+                        c.city,
+                        c.state,
+                        c.zip,
+                        c.company,
+                        c.phone,
+                        sc.scheduled_date,
+                        scj.time_window_start,
+                        scj.time_window_end
+                    FROM scheduled_clusters sc
+                    JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
+                    JOIN service_requests sr ON sr.id = scj.service_request_id
+                    JOIN customers c ON c.id = sr.customer_id
+                    WHERE sc.id = :cluster_id
+                    ORDER BY c.last_name ASC, c.first_name ASC
+                ");
+                $clusterCustomersStmt->execute([':cluster_id' => $notifyClusterId]);
+                $clusterCustomers = $clusterCustomersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                if (empty($clusterCustomers)) {
+                    $notifyClusterError = 'No customers found in that cluster.';
+                } else {
+                    $CC_EMAIL = 'sales@lasercutterrepair.com';
+                    $sent = 0;
+                    $skipped = 0;
+                    $failed = 0;
+                    $failedNames = [];
+
+                    foreach ($clusterCustomers as $customer) {
+                        $customerEmail = trim((string) ($customer['email'] ?? ''));
+                        if ($customerEmail === '' || !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+                            $skipped++;
+                            continue;
+                        }
+
+                        $fullName = trim(implode(' ', array_filter([
+                            trim((string) ($customer['first_name'] ?? '')),
+                            trim((string) ($customer['last_name'] ?? '')),
+                        ])));
+                        $fullAddress = implode(', ', array_filter([
+                            trim((string) ($customer['address'] ?? '')),
+                            trim((string) ($customer['city'] ?? '')),
+                            trim((string) ($customer['state'] ?? '')),
+                            trim((string) ($customer['zip'] ?? '')),
+                        ]));
+
+                        $appointmentDate = trim((string) ($customer['scheduled_date'] ?? ''));
+                        if ($appointmentDate !== '') {
+                            try {
+                                $appointmentDate = (new DateTimeImmutable($appointmentDate))->format('F j, Y');
+                            } catch (Throwable $dtEx) {
+                                // Keep raw value if parsing fails.
+                            }
+                        }
+
+                        $timeStart = trim((string) ($customer['time_window_start'] ?? ''));
+                        $timeEnd   = trim((string) ($customer['time_window_end'] ?? ''));
+
+                        if ($timeStart !== '') {
+                            try {
+                                $timeStart = (new DateTimeImmutable($timeStart))->format('g:i A');
+                            } catch (Throwable $dtEx) {
+                                // Keep raw value.
+                            }
+                        }
+                        if ($timeEnd !== '') {
+                            try {
+                                $timeEnd = (new DateTimeImmutable($timeEnd))->format('g:i A');
+                            } catch (Throwable $dtEx) {
+                                // Keep raw value.
+                            }
+                        }
+
+                        $tagValues = [
+                            '{client_name}'          => $fullName,
+                            '{client_address}'       => $fullAddress,
+                            '{company_name}'         => trim((string) ($customer['company'] ?? '')),
+                            '{company_phone}'        => trim((string) ($customer['phone'] ?? '')),
+                            '{appointment_date}'     => $appointmentDate,
+                            '{appointment_time}'     => $timeStart,
+                            '{appointment_end_time}' => $timeEnd,
+                        ];
+
+                        $subject = strtr((string) $notification['title'], $tagValues);
+                        $body    = strtr((string) $notification['body'], $tagValues);
+
+                        try {
+                            $mailer = new PHPMailer(true);
+                            $mailer->isSMTP();
+                            $mailer->Host       = $SMTP_HOST;
+                            $mailer->SMTPAuth   = true;
+                            $mailer->Username   = $SMTP_USERNAME;
+                            $mailer->Password   = $SMTP_PASSWORD;
+                            $mailer->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                            $mailer->Port       = $SMTP_PORT;
+                            $mailer->SMTPOptions = [
+                                'ssl' => [
+                                    'verify_peer'       => false,
+                                    'verify_peer_name'  => false,
+                                    'allow_self_signed' => true,
+                                ],
+                            ];
+                            $mailer->setFrom($SMTP_FROM_EMAIL, $SMTP_FROM_NAME);
+                            $mailer->addAddress($customerEmail, $fullName);
+                            $mailer->addCC($CC_EMAIL);
+                            $mailer->Subject = $subject;
+                            $mailer->isHTML(false);
+                            $mailer->Body    = $body;
+                            $mailer->send();
+                            $sent++;
+                        } catch (MailerException $e) {
+                            $failed++;
+                            $failedNames[] = $fullName !== '' ? $fullName : $customerEmail;
+                            error_log('[NOTIFY_CLUSTER] PHPMailer error for ' . $customerEmail . ': ' . $e->getMessage());
+                        }
+                    }
+
+                    if ($sent > 0 && $failed === 0) {
+                        $parts = ["Notification sent to {$sent} customer" . ($sent === 1 ? '' : 's') . '.'];
+                        if ($skipped > 0) {
+                            $parts[] = "{$skipped} skipped (no valid email).";
+                        }
+                        $notifyClusterMessage = implode(' ', $parts);
+                    } elseif ($sent > 0) {
+                        $parts = ["Sent to {$sent} customer" . ($sent === 1 ? '' : 's') . '.'];
+                        $parts[] = "Failed for: " . implode(', ', $failedNames) . '.';
+                        if ($skipped > 0) {
+                            $parts[] = "{$skipped} skipped (no valid email).";
+                        }
+                        $notifyClusterMessage = implode(' ', $parts);
+                    } else {
+                        if ($skipped > 0 && $failed === 0) {
+                            $notifyClusterError = "No emails sent — {$skipped} customer" . ($skipped === 1 ? ' has' : 's have') . " no valid email address.";
+                        } else {
+                            $failMsg = $failed > 0 ? ' Failed for: ' . implode(', ', $failedNames) . '.' : '';
+                            $notifyClusterError = 'No notification emails could be sent.' . $failMsg;
+                        }
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('[NOTIFY_CLUSTER] Unexpected error: ' . $e->getMessage());
+            $notifyClusterError = 'An unexpected error occurred while sending notifications.';
+        }
+    }
 }
 
 $jobs = $pdo->query("
@@ -1221,6 +1400,18 @@ require_once __DIR__ . '/../templates/header.php';
             </div>
         <?php endif; ?>
 
+        <?php if ($notifyClusterMessage !== null): ?>
+            <div class="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                <?= htmlspecialchars($notifyClusterMessage) ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($notifyClusterError !== null): ?>
+            <div class="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                <?= htmlspecialchars($notifyClusterError) ?>
+            </div>
+        <?php endif; ?>
+
         <section class="mb-8 rounded-3xl border border-zinc-700 bg-zinc-900/80 p-6">
             <?php
             $prevMonthParam = $currentMonth->modify('-1 month')->format('Y-m');
@@ -1310,6 +1501,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                 ];
                                             }, $scheduledCluster['jobs']);
                                             $clusterModalPayload = [
+                                                'scheduled_cluster_id' => $scheduledCluster['scheduled_cluster_id'],
                                                 'center_city' => $scheduledCluster['center_city'],
                                                 'cluster_label' => $scheduledCluster['cluster_label'],
                                                 'scheduled_date' => $scheduledCluster['scheduled_date'],
@@ -1659,13 +1851,17 @@ require_once __DIR__ . '/../templates/header.php';
                 <ul id="cluster-modal-jobs-list" class="mt-3 space-y-2"></ul>
             </div>
 
-            <button
-                type="button"
-                id="cluster-notify-all-button"
-                class="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-cyan-500 px-6 py-4 text-base font-semibold text-zinc-950 transition hover:bg-cyan-400"
-            >
-                Notify All Customers in This Cluster
-            </button>
+            <form method="POST" id="cluster-notify-form">
+                <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="notify_cluster_id" id="cluster-notify-cluster-id" value="">
+                <button
+                    type="submit"
+                    id="cluster-notify-all-button"
+                    class="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-cyan-500 px-6 py-4 text-base font-semibold text-zinc-950 transition hover:bg-cyan-400"
+                >
+                    Notify All Customers in This Cluster
+                </button>
+            </form>
         </div>
     </div>
 <script>
@@ -1752,6 +1948,7 @@ require_once __DIR__ . '/../templates/header.php';
     const clusterModalDate = document.getElementById('cluster-modal-date');
     const clusterModalJobsList = document.getElementById('cluster-modal-jobs-list');
     const clusterModalJobsEmpty = document.getElementById('cluster-modal-jobs-empty');
+    const clusterNotifyClusterId = document.getElementById('cluster-notify-cluster-id');
 
     function closeClusterSummaryModal() {
         clusterSummaryModal.classList.add('hidden');
@@ -1764,6 +1961,10 @@ require_once __DIR__ . '/../templates/header.php';
             ? `Center location: ${payload.center_city}`
             : 'Center location unavailable';
         clusterModalDate.textContent = payload.scheduled_date || 'Date unavailable';
+
+        if (clusterNotifyClusterId) {
+            clusterNotifyClusterId.value = payload.scheduled_cluster_id || '';
+        }
 
         clusterModalJobsList.innerHTML = '';
         const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
