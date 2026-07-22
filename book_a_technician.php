@@ -916,6 +916,7 @@ require_once __DIR__ . '/templates/header.php';
                         </label>
                     <?php endforeach; ?>
 
+                    <input type="hidden" name="booking_source" value="Website">
                     <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
                         <label for="step-2-website">Website</label>
                         <input type="text" id="step-2-website" name="website" tabindex="-1" autocomplete="off">
@@ -1225,6 +1226,7 @@ require_once __DIR__ . '/templates/header.php';
                 confirm_password: bookingPayload.confirm_password,
                 priority: speedPriorityMap[selectedSpeed] || 'standard',
                 website: stepTwoForm.website.value.trim(),
+                booking_source: stepTwoForm.booking_source.value,
                 services: bookingPayload.services || [],
                 other_service: bookingPayload.other_service || '',
                 service_speed: selectedSpeed,
