@@ -683,8 +683,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     <th>Customer</th>
                     <th>Contact</th>
                     <th>Location</th>
-                    <th>Machine</th>
-                    <th>Problem</th>
                     <th>Priority</th>
                     <th>Status</th>
                     <th>Submitted</th>
@@ -720,12 +718,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     <div class="text-zinc-400 text-xs mt-0.5"><?= htmlspecialchars($row['phone'] ?? '', ENT_QUOTES, 'UTF-8') ?></div>
                 </td>
                 <td class="text-zinc-300"><?= $location !== '' ? htmlspecialchars($location, ENT_QUOTES, 'UTF-8') : '—' ?></td>
-                <td class="text-zinc-300"><?= $machine !== '' ? htmlspecialchars($machine, ENT_QUOTES, 'UTF-8') : '—' ?></td>
-                <td>
-                    <div class="max-w-[160px] truncate text-zinc-300" title="<?= htmlspecialchars($row['problem_summary'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
-                        <?= htmlspecialchars($row['problem_summary'] ?? '—', ENT_QUOTES, 'UTF-8') ?>
-                    </div>
-                </td>
                 <td><span class="badge <?= htmlspecialchars($pi['class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($pi['label'], ENT_QUOTES, 'UTF-8') ?></span></td>
                 <td><span class="badge <?= htmlspecialchars($si['class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($si['label'], ENT_QUOTES, 'UTF-8') ?></span></td>
                 <td class="text-zinc-400 text-xs whitespace-nowrap"><?= htmlspecialchars(bk_fmtDateTime($row['created_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></td>
