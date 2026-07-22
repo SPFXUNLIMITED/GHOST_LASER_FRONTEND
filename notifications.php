@@ -54,6 +54,11 @@ function getNotificationTagDefinitions(): array
             'columns' => ['services'],
             'description' => 'Comma-separated list of selected service names.',
         ],
+        '{company_website}' => [
+            'table' => 'settings',
+            'columns' => ['COMPANY_WEBSITE env var'],
+            'description' => 'Company website URL (set via COMPANY_WEBSITE environment variable).',
+        ],
     ];
 }
 
@@ -158,6 +163,9 @@ function loadNotificationTagValues(PDO $pdo): array
     } catch (Throwable $e) {
         // service_route_stops may not exist in every environment yet.
     }
+
+    // {company_website} comes from the COMPANY_WEBSITE environment variable (see smtp_config.php).
+    $tagValues['{company_website}'] = getenv('COMPANY_WEBSITE') ?: 'https://LaserCutterRepair.com';
 
     return $tagValues;
 }
