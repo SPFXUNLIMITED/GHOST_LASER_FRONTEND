@@ -42,6 +42,14 @@ function bk_priorityInfo(string $priority): array
     };
 }
 
+function bk_sourceInfo(string $source): array
+{
+    return match ($source) {
+        'Internal' => ['label' => 'Internal', 'class' => 'badge-source-internal'],
+        default    => ['label' => 'Website',  'class' => 'badge-source-website'],
+    };
+}
+
 $adminUsername = trim((string) ($_SESSION['admin_username'] ?? 'Admin'));
 if ($adminUsername === '') $adminUsername = 'Admin';
 
@@ -477,6 +485,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         .badge-completed { background: rgba(34,197,94,0.15);  color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
         .badge-cancelled { background: rgba(234,179,8,0.15);  color: #fde047; border: 1px solid rgba(234,179,8,0.3); }
         .badge-deleted   { background: rgba(239,68,68,0.15);  color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+        .badge-source-internal { background: rgba(168,85,247,0.15); color: #d8b4fe; border: 1px solid rgba(168,85,247,0.3); }
+        .badge-source-website  { background: rgba(20,184,166,0.15); color: #5eead4; border: 1px solid rgba(20,184,166,0.3); }
         .priority-emergency { background: rgba(239,68,68,0.15);  color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
         .priority-vip       { background: rgba(168,85,247,0.15); color: #d8b4fe; border: 1px solid rgba(168,85,247,0.3); }
         .priority-standard  { background: rgba(63,63,70,0.5);    color: #a1a1aa; border: 1px solid rgba(113,113,122,0.3); }
@@ -747,6 +757,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     <th>Contact</th>
                     <th>Location</th>
                     <th>Priority</th>
+                    <th>Source</th>
                     <th>Status</th>
                     <th>Submitted</th>
                     <th>Actions</th>
@@ -765,6 +776,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 ]));
                 $si          = bk_statusInfo($row['request_status'] ?? 'new');
                 $pi          = bk_priorityInfo($row['priority_level'] ?? 'standard');
+                $srcInfo     = bk_sourceInfo($row['source'] ?? 'Website');
                 $rowJson     = htmlspecialchars(json_encode($row, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
                 $nameJson    = htmlspecialchars(json_encode($fullName), ENT_QUOTES, 'UTF-8');
             ?>
@@ -783,6 +795,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 </td>
                 <td class="text-zinc-300"><?= $location !== '' ? htmlspecialchars($location, ENT_QUOTES, 'UTF-8') : '—' ?></td>
                 <td><span class="badge <?= htmlspecialchars($pi['class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($pi['label'], ENT_QUOTES, 'UTF-8') ?></span></td>
+                <td><span class="badge <?= htmlspecialchars($srcInfo['class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($srcInfo['label'], ENT_QUOTES, 'UTF-8') ?></span></td>
                 <td><span class="badge <?= htmlspecialchars($si['class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($si['label'], ENT_QUOTES, 'UTF-8') ?></span></td>
                 <td class="text-zinc-400 text-xs whitespace-nowrap"><?= htmlspecialchars(bk_fmtDateTime($row['created_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></td>
                 <td>

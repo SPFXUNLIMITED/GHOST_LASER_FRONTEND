@@ -325,6 +325,11 @@ $state         = str_field($body, 'state');
 $zip           = str_field($body, 'zip');
 $country       = str_field($body, 'country') ?: 'USA';
 $priority      = str_field($body, 'priority') ?: 'standard';
+$booking_source = str_field($body, 'booking_source');
+// Allowlist: accept only known source values; default to 'Website'
+if (!in_array($booking_source, ['Internal', 'Website'], true)) {
+    $booking_source = 'Website';
+}
 
 // Client-provided coordinates (pre-geocoded by the front-end)
 $client_lat = isset($body['latitude'])  && is_numeric($body['latitude'])  ? (float)$body['latitude']  : null;
@@ -524,7 +529,7 @@ try {
             preferred_date_start, preferred_date_end
         ) VALUES (
             ?, ?, ?, ?, ?,
-            ?, ?, ?, 'api',
+            ?, ?, ?, ?,
             'new', ?, ?, ?,
             ?, ?
         )
@@ -545,6 +550,7 @@ try {
         $problem_summary,
         $problem,
         $priority,
+        $booking_source,
         $geo['lat'],
         $geo['lng'],
         $geo['status'],
