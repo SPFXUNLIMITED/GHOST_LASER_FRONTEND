@@ -1036,6 +1036,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (empty($clusterCustomers)) {
                     $notifyClusterError = 'No customers found in that cluster.';
                 } else {
+                    // Load company-level tag values from company_settings table.
+                    $notifCompanyName    = '';
+                    $notifCompanyPhone   = '';
+                    $notifCompanyWebsite = '';
+                    try {
+                        $csRow = $pdo->query(
+                            "SELECT company_name, company_phone, company_website FROM company_settings WHERE id = 1 LIMIT 1"
+                        )->fetch(PDO::FETCH_ASSOC);
+                        if ($csRow) {
+                            $notifCompanyName    = (string) $csRow['company_name'];
+                            $notifCompanyPhone   = (string) $csRow['company_phone'];
+                            $notifCompanyWebsite = (string) $csRow['company_website'];
+                        }
+                    } catch (Throwable $csEx) {
+                        // company_settings table may not exist; leave values empty.
+                    }
+
                     $CC_EMAIL = 'sales@lasercutterrepair.com';
                     $sent = 0;
                     $skipped = 0;
@@ -1090,12 +1107,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $tagValues = [
                             '{client_name}'          => $fullName,
                             '{client_address}'       => $fullAddress,
-                            '{company_name}'         => trim((string) ($customer['company'] ?? '')),
-                            '{company_phone}'        => trim((string) ($customer['phone'] ?? '')),
+                            '{company_name}'         => $notifCompanyName,
+                            '{company_phone}'        => $notifCompanyPhone,
                             '{appointment_date}'     => $appointmentDate,
                             '{appointment_time}'     => $timeStart,
                             '{appointment_end_time}' => $timeEnd,
-                            '{company_website}'      => $COMPANY_WEBSITE,
+                            '{company_website}'      => $notifCompanyWebsite,
                             '{service_name}'         => '',
                         ];
 
@@ -1120,8 +1137,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $subject  = strtr((string) $notification['title'], $tagValues);
                         $bodyText = strtr((string) $notification['body'], $tagValues);
-                        // Build HTML body: escape entities then convert newlines to <br> tags.
-                        $bodyHtml = nl2br(htmlspecialchars($bodyText, ENT_QUOTES, 'UTF-8'));
+                        // Build HTML body: wrap each non-empty line in a <p> tag so
+                        // sentences sit on their own lines instead of collapsing into
+                        // one paragraph in email clients.
+                        $bodyLines = explode("\n", str_replace("\r\n", "\n", $bodyText));
+                        $bodyHtmlParts = [];
+                        foreach ($bodyLines as $bodyLine) {
+                            $trimmedLine = rtrim($bodyLine);
+                            if ($trimmedLine !== '') {
+                                $bodyHtmlParts[] = '<p style="margin:0 0 0.8em 0;">'
+                                    . htmlspecialchars($trimmedLine, ENT_QUOTES, 'UTF-8')
+                                    . '</p>';
+                            } else {
+                                $bodyHtmlParts[] = '<br>';
+                            }
+                        }
+                        $bodyHtml = implode("\n", $bodyHtmlParts);
 
                         try {
                             $mailer = new PHPMailer(true);
