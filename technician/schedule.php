@@ -1160,76 +1160,11 @@ $extraHead   = <<<'HTML'
             color: #fbbf24;
             font-weight: 600;
         }
-        .floating-action-panel {
-            position: fixed;
-            right: 1.25rem;
-            top: 50%;
-            transform: translateY(-50%);
-            z-index: 40;
-            display: flex;
-            flex-direction: column;
-            gap: 0.625rem;
-            width: 13rem;
-            background: rgba(24,24,27,0.92);
-            border: 1px solid rgba(63,63,70,0.8);
-            border-radius: 1rem;
-            padding: 1rem;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 0 0 1px rgba(6,182,212,0.08);
-        }
-        .floating-action-panel .panel-label {
-            font-size: 0.65rem;
-            font-weight: 600;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: #71717a;
-            margin-bottom: 0.25rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid rgba(63,63,70,0.6);
-        }
     </style>
 HTML;
 $headerRight = '<a href="../dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Dashboard</a>';
 require_once __DIR__ . '/../templates/header.php';
 ?>
-
-    <!-- Floating Action Panel -->
-    <div class="floating-action-panel">
-        <div class="panel-label">Actions</div>
-
-        <form method="POST">
-            <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
-            <button
-                type="submit"
-                name="insert_test_data"
-                value="1"
-                class="inline-flex w-full items-center justify-center rounded-lg bg-amber-500 px-4 py-2.5 text-xs font-semibold text-zinc-950 transition hover:bg-amber-400"
-                onclick="return confirm('Are you sure you want to insert 8 test customers and service requests?');"
-            >
-                Insert Test Data
-            </button>
-        </form>
-
-        <form method="POST">
-            <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
-            <button
-                type="submit"
-                name="run_clustering"
-                value="1"
-                class="inline-flex w-full items-center justify-center rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-semibold text-zinc-950 transition hover:bg-cyan-400"
-            >
-                Run Clustering
-            </button>
-        </form>
-
-        <a
-            href="../settings.php"
-            class="inline-flex w-full items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-zinc-200 transition hover:border-cyan-400 hover:text-white"
-        >
-            Admin Settings
-        </a>
-    </div>
 
     <div class="max-w-7xl mx-auto">
         <h1 class="text-5xl font-bold mb-2">Scheduling Dashboard</h1>
@@ -1583,6 +1518,20 @@ require_once __DIR__ . '/../templates/header.php';
         <?php endif; ?>
 
         <div class="min-w-0">
+            <div class="mb-4 flex justify-end">
+                <form method="POST">
+                    <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                    <button
+                        type="submit"
+                        name="run_clustering"
+                        value="1"
+                        class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
+                    >
+                        Run Clustering
+                    </button>
+                </form>
+            </div>
+
             <section class="mb-4">
                 <div>
                     <h2 class="text-2xl font-semibold text-white">Jobs Awaiting Scheduling</h2>
