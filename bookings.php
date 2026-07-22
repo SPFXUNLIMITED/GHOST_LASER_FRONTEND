@@ -119,6 +119,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'bulk_delete') {
+        $rawIds = $_POST['ids'] ?? [];
+        if (is_array($rawIds) && count($rawIds) > 0) {
+            $ids = array_values(array_filter(array_map('intval', $rawIds), fn($v) => $v > 0));
+            if (count($ids) > 0) {
+                try {
+                    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+                    $pdo->prepare("UPDATE service_requests SET request_status = 'deleted' WHERE id IN ($placeholders)")
+                        ->execute($ids);
+                    $n = count($ids);
+                    $_SESSION['bk_flash_success'] = $n . ' booking' . ($n !== 1 ? 's' : '') . ' deleted.';
+                } catch (PDOException $e) {
+                    $_SESSION['bk_flash_error'] = 'Bulk delete failed: ' . $e->getMessage();
+                }
+            }
+        }
+        header('Location: bookings.php' . ($redirectQs !== '' ? '?' . $redirectQs : ''));
+        exit;
+    }
+
     if ($action === 'edit') {
         $editId = (int) ($_POST['id'] ?? 0);
         if ($editId > 0) {
@@ -538,6 +558,38 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             border-radius: .5rem; cursor: pointer; transition: border-color .12s, color .12s;
         }
         .btn-cancel-modal:hover { border-color: rgba(6,182,212,0.4); color: #fff; }
+
+        /* Row checkboxes */
+        .row-check, #selectAll {
+            width: 1rem; height: 1rem; cursor: pointer;
+            accent-color: #ef4444;
+        }
+        thead th.th-check { width: 2.5rem; text-align: center; }
+        tbody td.td-check  { text-align: center; vertical-align: middle; }
+
+        /* Bulk toolbar */
+        #bulkToolbar {
+            display: none;
+            align-items: center; gap: .75rem;
+            background: rgba(239,68,68,0.08);
+            border: 1px solid rgba(239,68,68,0.3);
+            border-radius: .625rem;
+            padding: .55rem 1rem;
+            margin-bottom: .75rem;
+        }
+        #bulkToolbar.visible { display: flex; }
+        #bulkCount {
+            font-size: .8125rem; color: #fca5a5; font-weight: 600;
+        }
+        .btn-bulk-delete {
+            display: inline-flex; align-items: center; gap: .35rem;
+            background: rgba(239,68,68,0.15); color: #fca5a5;
+            border: 1px solid rgba(239,68,68,0.35);
+            font-size: .8125rem; font-weight: 600;
+            padding: .35rem .9rem; border-radius: .5rem;
+            cursor: pointer; transition: background .12s, border-color .12s;
+        }
+        .btn-bulk-delete:hover { background: rgba(239,68,68,0.28); border-color: rgba(239,68,68,0.6); }
     </style>
 </head>
 <body class="bg-zinc-950 text-white font-sans antialiased min-h-screen">
@@ -664,6 +716,16 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         </a>
     </form>
 
+    <!-- Bulk delete toolbar (visible when rows are checked) -->
+    <div id="bulkToolbar" role="toolbar" aria-label="Bulk actions">
+        <span id="bulkCount"></span>
+        <button type="button" class="btn-bulk-delete" onclick="openBulkDeleteModal()">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            Bulk Delete
+        </button>
+        <button type="button" class="btn-cancel-modal" style="font-size:.8125rem;padding:.35rem .75rem;" onclick="clearAllChecks()">Clear</button>
+    </div>
+
     <!-- Table -->
     <?php if (empty($bookings)): ?>
     <div class="flex flex-col items-center justify-center py-20 text-center">
@@ -679,6 +741,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         <table>
             <thead>
                 <tr>
+                    <th class="th-check"><input type="checkbox" id="selectAll" title="Select all visible rows" aria-label="Select all"></th>
                     <th>#</th>
                     <th>Customer</th>
                     <th>Contact</th>
@@ -706,6 +769,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 $nameJson    = htmlspecialchars(json_encode($fullName), ENT_QUOTES, 'UTF-8');
             ?>
             <tr>
+                <td class="td-check"><input type="checkbox" class="row-check" value="<?= (int) $row['id'] ?>" aria-label="Select booking #<?= (int) $row['id'] ?>"></td>
                 <td class="text-zinc-500 font-mono text-xs"><?= (int) $row['id'] ?></td>
                 <td>
                     <div class="font-medium text-white"><?= htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') ?></div>
@@ -856,6 +920,36 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </div>
 </div>
 
+<!-- Bulk Delete Modal -->
+<div id="bulkDeleteModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="bulkDeleteModalTitle">
+    <div class="modal-box" style="max-width:440px;">
+        <div class="modal-header">
+            <h2 id="bulkDeleteModalTitle" class="text-base font-semibold text-white">Confirm Bulk Delete</h2>
+            <button class="modal-close" onclick="closeModal('bulkDeleteModal')" aria-label="Close">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <form method="POST" action="bookings.php" id="bulkDeleteForm">
+            <input type="hidden" name="action" value="bulk_delete">
+            <input type="hidden" name="csrf"   value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="fq"        value="<?= htmlspecialchars($filterSearch,    ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="fstatus"   value="<?= htmlspecialchars($filterStatus,    ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="fpriority" value="<?= htmlspecialchars($filterPriority,  ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="fstart"    value="<?= htmlspecialchars($filterDateStart, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="fend"      value="<?= htmlspecialchars($filterDateEnd,   ENT_QUOTES, 'UTF-8') ?>">
+            <div id="bulkDeleteIds"></div>
+            <div class="modal-body">
+                <p class="text-sm text-zinc-300">Are you sure you want to mark <strong id="bulkDeleteCount" class="text-red-400"></strong> as <strong class="text-red-400">deleted</strong>?</p>
+                <p class="mt-3 text-xs text-zinc-500">Records will be hidden from default views but retained in the database.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel-modal" onclick="closeModal('bulkDeleteModal')">Cancel</button>
+                <button type="submit" class="btn-save" style="background:#ef4444;">Delete Selected</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 function closeModal(id) {
     document.getElementById(id).classList.remove('open');
@@ -959,6 +1053,78 @@ function openDeleteModal(id, name) {
     document.getElementById('deleteCustomerName').textContent = name || '';
     document.getElementById('deleteModal').classList.add('open');
 }
+
+// ── Bulk-delete helpers ───────────────────────────────────────────────────────
+function getCheckedIds() {
+    return Array.from(document.querySelectorAll('.row-check:checked')).map(function(cb) {
+        return parseInt(cb.value, 10);
+    });
+}
+
+function updateBulkToolbar() {
+    var ids    = getCheckedIds();
+    var n      = ids.length;
+    var toolbar = document.getElementById('bulkToolbar');
+    var countEl = document.getElementById('bulkCount');
+    if (n > 0) {
+        countEl.textContent = n + ' booking' + (n !== 1 ? 's' : '') + ' selected';
+        toolbar.classList.add('visible');
+    } else {
+        toolbar.classList.remove('visible');
+    }
+    // Keep select-all checkbox in sync
+    var all  = document.querySelectorAll('.row-check');
+    var saEl = document.getElementById('selectAll');
+    if (saEl) {
+        saEl.checked       = all.length > 0 && n === all.length;
+        saEl.indeterminate = n > 0 && n < all.length;
+    }
+}
+
+function clearAllChecks() {
+    document.querySelectorAll('.row-check').forEach(function(cb) { cb.checked = false; });
+    var saEl = document.getElementById('selectAll');
+    if (saEl) { saEl.checked = false; saEl.indeterminate = false; }
+    updateBulkToolbar();
+}
+
+function openBulkDeleteModal() {
+    var ids = getCheckedIds();
+    if (ids.length === 0) return;
+
+    // Populate hidden id inputs
+    var container = document.getElementById('bulkDeleteIds');
+    container.innerHTML = '';
+    ids.forEach(function(id) {
+        var inp = document.createElement('input');
+        inp.type  = 'hidden';
+        inp.name  = 'ids[]';
+        inp.value = id;
+        container.appendChild(inp);
+    });
+
+    var n = ids.length;
+    document.getElementById('bulkDeleteCount').textContent = n + ' booking' + (n !== 1 ? 's' : '');
+    document.getElementById('bulkDeleteModal').classList.add('open');
+}
+
+// Wire checkboxes once DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Select-all toggle
+    var saEl = document.getElementById('selectAll');
+    if (saEl) {
+        saEl.addEventListener('change', function() {
+            document.querySelectorAll('.row-check').forEach(function(cb) {
+                cb.checked = saEl.checked;
+            });
+            updateBulkToolbar();
+        });
+    }
+    // Individual row checkboxes
+    document.querySelectorAll('.row-check').forEach(function(cb) {
+        cb.addEventListener('change', updateBulkToolbar);
+    });
+});
 </script>
 </body>
 </html>
