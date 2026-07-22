@@ -49,6 +49,11 @@ function getNotificationTagDefinitions(): array
             'columns' => ['arrival_window_end'],
             'description' => 'Arrival window end time.',
         ],
+        '{service_name}' => [
+            'table' => 'service_requests',
+            'columns' => ['services'],
+            'description' => 'Comma-separated list of selected service names.',
+        ],
     ];
 }
 
@@ -88,7 +93,8 @@ function loadNotificationTagValues(PDO $pdo): array
                 c.zip,
                 c.company,
                 c.phone,
-                sr.promised_service_date
+                sr.promised_service_date,
+                sr.services AS services_json
             FROM service_requests sr
             JOIN customers c ON c.id = sr.customer_id
             ORDER BY
@@ -118,6 +124,26 @@ function loadNotificationTagValues(PDO $pdo): array
     $tagValues['{company_name}'] = trim((string) ($customerAndRequest['company'] ?? ''));
     $tagValues['{company_phone}'] = trim((string) ($customerAndRequest['phone'] ?? ''));
     $tagValues['{appointment_date}'] = trim((string) ($customerAndRequest['promised_service_date'] ?? ''));
+
+    // Resolve {service_name} from the JSON array of service IDs stored in service_requests.services
+    $tagValues['{service_name}'] = '';
+    $servicesJson = trim((string) ($customerAndRequest['services_json'] ?? ''));
+    if ($servicesJson !== '') {
+        $serviceIds = json_decode($servicesJson, true);
+        if (is_array($serviceIds) && $serviceIds !== []) {
+            try {
+                $placeholders = implode(',', array_fill(0, count($serviceIds), '?'));
+                $svcStmt = $pdo->prepare(
+                    "SELECT service_name FROM services WHERE id IN ({$placeholders}) ORDER BY service_name ASC"
+                );
+                $svcStmt->execute($serviceIds);
+                $svcNames = $svcStmt->fetchAll(PDO::FETCH_COLUMN);
+                $tagValues['{service_name}'] = implode(', ', $svcNames);
+            } catch (Throwable $e) {
+                // services table may not exist in every environment.
+            }
+        }
+    }
 
     try {
         $routeStopStmt = $pdo->query("
