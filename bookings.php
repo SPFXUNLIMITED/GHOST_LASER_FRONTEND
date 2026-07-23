@@ -402,12 +402,13 @@ try {
             SUM(request_status = 'completed') AS completed,
             SUM(request_status = 'new')       AS new_count,
             SUM(request_status = 'queued')    AS queued,
-            SUM(request_status = 'cancelled') AS cancelled
+            SUM(request_status = 'cancelled') AS cancelled,
+            SUM(request_status = 'abandoned') AS abandoned
         FROM service_requests
         WHERE request_status != 'deleted'
     ")->fetch(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    $statsRow = ['total' => 0, 'completed' => 0, 'new_count' => 0, 'queued' => 0, 'cancelled' => 0];
+    $statsRow = ['total' => 0, 'completed' => 0, 'new_count' => 0, 'queued' => 0, 'cancelled' => 0, 'abandoned' => 0];
 }
 
 // ── CSV export (before any HTML output) ───────────────────────────────────────
@@ -738,7 +739,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     <?php endif; ?>
 
     <!-- Stats -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-6">
+    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2.5 mb-6">
         <div class="stat-card">
             <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">Total</div>
             <div class="text-xl font-bold text-white leading-tight"><?= (int) ($statsRow['total'] ?? 0) ?></div>
@@ -748,12 +749,20 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <div class="text-xl font-bold text-zinc-300 leading-tight"><?= (int) ($statsRow['new_count'] ?? 0) ?></div>
         </div>
         <div class="stat-card">
+            <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">Abandoned</div>
+            <div class="text-xl font-bold text-orange-400 leading-tight"><?= (int) ($statsRow['abandoned'] ?? 0) ?></div>
+        </div>
+        <div class="stat-card">
             <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">Queued</div>
             <div class="text-xl font-bold text-blue-400 leading-tight"><?= (int) ($statsRow['queued'] ?? 0) ?></div>
         </div>
         <div class="stat-card">
             <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">Completed</div>
             <div class="text-xl font-bold text-green-400 leading-tight"><?= (int) ($statsRow['completed'] ?? 0) ?></div>
+        </div>
+        <div class="stat-card">
+            <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">Cancelled</div>
+            <div class="text-xl font-bold text-yellow-400 leading-tight"><?= (int) ($statsRow['cancelled'] ?? 0) ?></div>
         </div>
     </div>
 
