@@ -24,6 +24,7 @@ function bk_fmtDateTime(?string $dt): string
 function bk_statusInfo(string $status): array
 {
     return match ($status) {
+        'abandoned' => ['label' => 'Abandoned', 'class' => 'badge-abandoned'],
         'new'       => ['label' => 'New',      'class' => 'badge-new'],
         'queued'    => ['label' => 'Queued',    'class' => 'badge-queued'],
         'completed' => ['label' => 'Completed', 'class' => 'badge-completed'],
@@ -243,7 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $srPrefStart = trim((string) ($_POST['sr_pref_start'] ?? ''));
             $srPrefEnd   = trim((string) ($_POST['sr_pref_end']   ?? ''));
 
-            $validStatuses   = ['new', 'queued', 'completed', 'cancelled', 'deleted'];
+            $validStatuses   = ['abandoned', 'new', 'queued', 'completed', 'cancelled', 'deleted'];
             $validPriorities = ['standard', 'vip', 'emergency'];
             if (!in_array($srStatus, $validStatuses, true))     $srStatus   = 'new';
             if (!in_array($srPriority, $validPriorities, true)) $srPriority = 'standard';
@@ -327,9 +328,9 @@ if ($filterStatus === 'completed') {
 } elseif ($filterStatus === 'not_completed') {
     $where[] = "sr.request_status NOT IN ('completed', 'deleted')";
 } elseif ($filterStatus === 'incomplete_only') {
-    $where[] = "sr.request_status = 'new'";
+    $where[] = "sr.request_status = 'abandoned'";
     $where[] = "NOT EXISTS (SELECT 1 FROM scheduled_cluster_jobs scj WHERE scj.service_request_id = sr.id)";
-} elseif (in_array($filterStatus, ['new', 'queued', 'cancelled', 'deleted'], true)) {
+} elseif (in_array($filterStatus, ['abandoned', 'new', 'queued', 'cancelled', 'deleted'], true)) {
     $where[]          = 'sr.request_status = :status';
     $params[':status'] = $filterStatus;
 }
@@ -553,6 +554,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             font-size: 0.6875rem; font-weight: 600;
             padding: 0.2rem 0.55rem; border-radius: 9999px; white-space: nowrap;
         }
+        .badge-abandoned { background: rgba(251,146,60,0.14); color: #fdba74; border: 1px solid rgba(251,146,60,0.3); }
         .badge-new       { background: rgba(63,63,70,0.7);    color: #a1a1aa; border: 1px solid rgba(113,113,122,0.4); }
         .badge-queued    { background: rgba(59,130,246,0.15); color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); }
         .badge-completed { background: rgba(34,197,94,0.15);  color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
@@ -772,6 +774,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 <option value="">All Statuses</option>
                 <option value="incomplete_only" <?= $filterStatus === 'incomplete_only' ? 'selected' : '' ?>>Started but Incomplete</option>
                 <option value="not_completed"   <?= $filterStatus === 'not_completed'   ? 'selected' : '' ?>>Not Completed</option>
+                <option value="abandoned"       <?= $filterStatus === 'abandoned'       ? 'selected' : '' ?>>Abandoned</option>
                 <option value="new"             <?= $filterStatus === 'new'             ? 'selected' : '' ?>>New</option>
                 <option value="queued"          <?= $filterStatus === 'queued'          ? 'selected' : '' ?>>Queued</option>
                 <option value="completed"       <?= $filterStatus === 'completed'       ? 'selected' : '' ?>>Completed</option>
@@ -962,6 +965,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     <div>
                         <label class="form-label">Status</label>
                         <select name="sr_status" id="editStatus" class="form-select" autocomplete="off">
+                            <option value="abandoned">Abandoned</option>
                             <option value="new">New</option>
                             <option value="queued">Queued</option>
                             <option value="completed">Completed</option>
