@@ -5,10 +5,10 @@ error_reporting(E_ALL);
 /**
  * api/book-repair-api.php – Public API endpoint for the customer booking system.
  * Accepts JSON or form-encoded POST data from the frontend website,
- * validates all fields, and inserts a new record into service_requests.
+ * validates all fields, and creates or updates records in service_requests.
  *
  * Success response (HTTP 201):
- *   { "success": true, "id": <new_request_id>, "suggested_dates": [...], "priority": "..." }
+ *   { "success": true, "id": <request_id>, "suggested_dates": [...], "priority": "..." }
  *
  * Error response (HTTP 400 / 405 / 500):
  *   { "success": false, "errors": [ "…", … ] }
@@ -195,7 +195,7 @@ function count_jobs_on_date(PDO $pdo, string $date_str): int {
     $stmt = $pdo->prepare(
         "SELECT COUNT(*) FROM service_requests
          WHERE promised_service_date = ?
-           AND request_status NOT IN ('cancelled', 'completed')"
+           AND request_status NOT IN ('abandoned', 'cancelled', 'completed', 'deleted')"
     );
     $stmt->execute([$date_str]);
     return (int)$stmt->fetchColumn();
@@ -254,6 +254,9 @@ function resolve_customer_id(
     string $zip,
     string $country
 ): int {
+    if (!empty($_SESSION['customer_id'])) {
+        return (int) $_SESSION['customer_id'];
+    }
 
     if ($email !== '') {
         $stmt = $pdo->prepare("SELECT id, password_hash FROM customers WHERE email = ? ORDER BY id ASC LIMIT 1");
@@ -340,6 +343,9 @@ $service_speed  = str_field($body, 'service_speed');
 if (!in_array($service_speed, ['standard', 'rush', 'emergency'], true)) {
     $service_speed = 'standard';
 }
+$service_request_id = isset($body['service_request_id']) && is_numeric($body['service_request_id'])
+    ? (int) $body['service_request_id']
+    : 0;
 
 // Client-provided coordinates (pre-geocoded by the front-end)
 $client_lat = isset($body['latitude'])  && is_numeric($body['latitude'])  ? (float)$body['latitude']  : null;
@@ -521,7 +527,7 @@ foreach ([
 }
 unset($_col, $_def);
 
-// ── Insert into service_requests ──────────────────────────────────────────────
+// ── Insert/update service_requests ────────────────────────────────────────────
 try {
     $customer_id = resolve_customer_id(
         $pdo,
@@ -545,49 +551,96 @@ try {
         $geo = $full_address !== '' ? geocode_address($full_address) : ['lat' => null, 'lng' => null, 'status' => 'failed'];
     }
 
-    $stmt = $pdo->prepare("
-        INSERT INTO service_requests (
-            customer_id, laser_brand, laser_model, laser_watts, laser_age,
-            problem_summary, problem_details, priority_level, source,
-            request_status, latitude, longitude, geocode_status,
-            preferred_date_start, preferred_date_end,
-            services, other_service, service_speed
-        ) VALUES (
-            ?, ?, ?, ?, ?,
-            ?, ?, ?, ?,
-            'new', ?, ?, ?,
-            ?, ?,
-            ?, ?, ?
-        )
-    ");
     $suggested_dates = get_suggested_dates($priority, $pdo);
     $date_list = array_values($suggested_dates);
     $first_suggested_date = $date_list[0] ?? null;
     $last_suggested_date = $date_list !== []
         ? $date_list[count($date_list) - 1]
         : null;
+    $servicePayloadJson = $services_input !== [] ? json_encode($services_input) : null;
+    $serviceRequestId = 0;
 
-    $stmt->execute([
-        $customer_id,
-        $machine_brand,
-        $machine_model,
-        $machine_watts ?: null,
-        $machine_age ?: null,
-        $problem_summary,
-        $problem,
-        $priority,
-        $booking_source,
-        $geo['lat'],
-        $geo['lng'],
-        $geo['status'],
-        $first_suggested_date,
-        $last_suggested_date,
-        $services_input !== [] ? json_encode($services_input) : null,
-        $other_service !== '' ? $other_service : null,
-        $service_speed,
-    ]);
+    if ($service_request_id > 0) {
+        $update = $pdo->prepare("
+            UPDATE service_requests
+               SET customer_id = ?, laser_brand = ?, laser_model = ?, laser_watts = ?, laser_age = ?,
+                   problem_summary = ?, problem_details = ?, priority_level = ?, source = ?,
+                   request_status = 'new', latitude = ?, longitude = ?, geocode_status = ?,
+                   preferred_date_start = ?, preferred_date_end = ?,
+                   services = ?, other_service = ?, service_speed = ?
+             WHERE id = ?
+               AND customer_id = ?
+               AND request_status = 'abandoned'
+        ");
+        $update->execute([
+            $customer_id,
+            $machine_brand,
+            $machine_model,
+            $machine_watts ?: null,
+            $machine_age ?: null,
+            $problem_summary,
+            $problem,
+            $priority,
+            $booking_source,
+            $geo['lat'],
+            $geo['lng'],
+            $geo['status'],
+            $first_suggested_date,
+            $last_suggested_date,
+            $servicePayloadJson,
+            $other_service !== '' ? $other_service : null,
+            $service_speed,
+            $service_request_id,
+            $customer_id,
+        ]);
 
-    $new_id = (int) $pdo->lastInsertId();
+        if ((int) $update->rowCount() > 0) {
+            $serviceRequestId = $service_request_id;
+        } else {
+            http_response_code(409);
+            echo json_encode([
+                'success' => false,
+                'errors' => ['We could not finalize this booking. Please restart from step 2.'],
+            ]);
+            exit;
+        }
+    } else {
+        $stmt = $pdo->prepare("
+            INSERT INTO service_requests (
+                customer_id, laser_brand, laser_model, laser_watts, laser_age,
+                problem_summary, problem_details, priority_level, source,
+                request_status, latitude, longitude, geocode_status,
+                preferred_date_start, preferred_date_end,
+                services, other_service, service_speed
+            ) VALUES (
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                'new', ?, ?, ?,
+                ?, ?,
+                ?, ?, ?
+            )
+        ");
+        $stmt->execute([
+            $customer_id,
+            $machine_brand,
+            $machine_model,
+            $machine_watts ?: null,
+            $machine_age ?: null,
+            $problem_summary,
+            $problem,
+            $priority,
+            $booking_source,
+            $geo['lat'],
+            $geo['lng'],
+            $geo['status'],
+            $first_suggested_date,
+            $last_suggested_date,
+            $servicePayloadJson,
+            $other_service !== '' ? $other_service : null,
+            $service_speed,
+        ]);
+        $serviceRequestId = (int) $pdo->lastInsertId();
+    }
 
     // Log submission for rate limiting
     try {
@@ -599,7 +652,7 @@ try {
     http_response_code(201);
     echo json_encode([
         'success'         => true,
-        'id'              => $new_id,
+        'id'              => $serviceRequestId,
         'suggested_dates' => $suggested_dates,
         'priority'        => $priority,
     ]);

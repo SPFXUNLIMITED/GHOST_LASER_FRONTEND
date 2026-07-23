@@ -245,6 +245,129 @@ function formatUsPhoneE164($digits) {
     return $digits === null ? null : '+1' . $digits;
 }
 
+function resolveBookingCustomerId(PDO $pdo, array $bookingData): int {
+    if (!empty($_SESSION['customer_id'])) {
+        return (int) $_SESSION['customer_id'];
+    }
+
+    $email = trim((string) ($bookingData['email'] ?? ''));
+    $phone = trim((string) ($bookingData['phone_e164'] ?? ($bookingData['phone'] ?? '')));
+    $password = (string) ($bookingData['password'] ?? '');
+
+    if ($email !== '') {
+        $stmt = $pdo->prepare("SELECT id, password_hash FROM customers WHERE email = ? ORDER BY id ASC LIMIT 1");
+        $stmt->execute([$email]);
+        $existingByEmail = $stmt->fetch(PDO::FETCH_ASSOC);
+        $id = (int) ($existingByEmail['id'] ?? 0);
+        if ($id > 0) {
+            if (($existingByEmail['password_hash'] ?? '') === '' && $password !== '') {
+                $updatePassword = $pdo->prepare("UPDATE customers SET password_hash = ? WHERE id = ? AND (password_hash IS NULL OR password_hash = '')");
+                $updatePassword->execute([password_hash($password, PASSWORD_DEFAULT), $id]);
+            }
+            return $id;
+        }
+    }
+
+    if ($phone !== '') {
+        $stmt = $pdo->prepare("SELECT id FROM customers WHERE phone = ? ORDER BY id ASC LIMIT 1");
+        $stmt->execute([$phone]);
+        $id = (int) ($stmt->fetchColumn() ?: 0);
+        if ($id > 0) {
+            return $id;
+        }
+    }
+
+    $hubspotContactId = 'service_api_' . bin2hex(random_bytes(10));
+    $insert = $pdo->prepare("
+        INSERT INTO customers (
+            hubspot_contact_id, first_name, last_name, company, phone, email,
+            address, city, state, zip, country, password_hash, last_updated
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+    $insert->execute([
+        $hubspotContactId,
+        trim((string) ($bookingData['first_name'] ?? '')),
+        trim((string) ($bookingData['last_name'] ?? '')),
+        '',
+        $phone,
+        $email,
+        trim((string) ($bookingData['address'] ?? '')),
+        trim((string) ($bookingData['city'] ?? '')),
+        strtoupper(trim((string) ($bookingData['state'] ?? ''))),
+        trim((string) ($bookingData['zip'] ?? '')),
+        'USA',
+        $password !== '' ? password_hash($password, PASSWORD_DEFAULT) : null,
+        null,
+    ]);
+
+    return (int) $pdo->lastInsertId();
+}
+
+function saveAbandonedBooking(PDO $pdo, array $bookingData): int {
+    $customerId = resolveBookingCustomerId($pdo, $bookingData);
+    $problemSummary = mb_substr((string) ($bookingData['problem'] ?? ''), 0, 255);
+    $problemDetails = trim((string) ($bookingData['problem'] ?? ''));
+
+    $existingRequestId = (int) ($bookingData['service_request_id'] ?? 0);
+    if ($existingRequestId > 0) {
+        $update = $pdo->prepare("
+            UPDATE service_requests
+               SET customer_id = ?, laser_brand = ?, laser_model = ?, laser_watts = ?, laser_age = ?,
+                   problem_summary = ?, problem_details = ?, priority_level = ?, source = ?, request_status = ?,
+                   preferred_date_start = NULL, preferred_date_end = NULL
+             WHERE id = ?
+        ");
+        $update->execute([
+            $customerId,
+            trim((string) ($bookingData['machine_brand'] ?? '')),
+            trim((string) ($bookingData['machine_model'] ?? '')),
+            trim((string) ($bookingData['watts'] ?? '')) ?: null,
+            trim((string) ($bookingData['age'] ?? '')) ?: null,
+            $problemSummary,
+            $problemDetails,
+            'standard',
+            'Website',
+            'abandoned',
+            $existingRequestId,
+        ]);
+
+        if ((int) $update->rowCount() > 0) {
+            return $existingRequestId;
+        }
+        $existingCheck = $pdo->prepare("SELECT id FROM service_requests WHERE id = ? LIMIT 1");
+        $existingCheck->execute([$existingRequestId]);
+        if ((int) ($existingCheck->fetchColumn() ?: 0) > 0) {
+            return $existingRequestId;
+        }
+    }
+
+    $insert = $pdo->prepare("
+        INSERT INTO service_requests (
+            customer_id, laser_brand, laser_model, laser_watts, laser_age,
+            problem_summary, problem_details, priority_level, source, request_status,
+            preferred_date_start, preferred_date_end
+        ) VALUES (
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            NULL, NULL
+        )
+    ");
+    $insert->execute([
+        $customerId,
+        trim((string) ($bookingData['machine_brand'] ?? '')),
+        trim((string) ($bookingData['machine_model'] ?? '')),
+        trim((string) ($bookingData['watts'] ?? '')) ?: null,
+        trim((string) ($bookingData['age'] ?? '')) ?: null,
+        $problemSummary,
+        $problemDetails,
+        'standard',
+        'Website',
+        'abandoned',
+    ]);
+
+    return (int) $pdo->lastInsertId();
+}
+
 function fetchServicesForBooking(PDO $pdo): array {
     return $pdo->query(
         "SELECT id, service_name, base_price FROM services ORDER BY service_name ASC"
@@ -368,10 +491,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
                     'password' => $password,
                     'confirm_password' => $password,
                 ];
+                try {
+                    $preparedBookingData['service_request_id'] = saveAbandonedBooking($pdo, $preparedBookingData);
+                } catch (Throwable $e) {
+                    error_log('book_a_technician.php step2 abandoned-save error: ' . $e->getMessage());
+                    $errors[] = 'We could not save your booking details. Please try again.';
+                }
+                if ($errors) {
+                    $showInlineStepOneLogin = false;
+                    $inlineLoginError = '';
+                    $inlineLoginEmail = '';
+                    foreach ($preparedBookingData as $postKey => $postValue) {
+                        if (is_array($postValue)) {
+                            $_POST[$postKey] = $postValue;
+                        } elseif (is_scalar($postValue) || $postValue === null) {
+                            $_POST[$postKey] = (string) $postValue;
+                        }
+                    }
+                    unset($preparedBookingData['password'], $preparedBookingData['confirm_password']);
+                } else {
                 $_SESSION['book_dash_repair'] = $preparedBookingData;
                 unset($_SESSION[$pendingStepOneSessionKey]);
                 header('Location: book_a_technician.php?step=3');
                 exit;
+                }
             } else {
                 // Wrong password — show the inline login prompt.
                 $showInlineStepOneLogin = true;
@@ -435,6 +578,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'password' => $password,
             'confirm_password' => $passwordConfirm,
         ];
+        try {
+            $preparedBookingData['service_request_id'] = saveAbandonedBooking($pdo, $preparedBookingData);
+        } catch (Throwable $e) {
+            error_log('book_a_technician.php step2 abandoned-save error: ' . $e->getMessage());
+            $errors[] = 'We could not save your booking details. Please try again.';
+        }
+    }
+    if (!$errors && !$showInlineStepOneLogin && is_array($preparedBookingData)) {
         $_SESSION['book_dash_repair'] = $preparedBookingData;
         unset($_SESSION[$pendingStepOneSessionKey]);
         header('Location: book_a_technician.php?step=3');
@@ -503,6 +654,7 @@ if ($step === 3 && $booking) {
         'services' => array_values(array_intersect(array_keys($serviceLabels), (array) ($booking['services'] ?? []))),
         'other_service' => (string) ($booking['other_service'] ?? ''),
         'service_speed' => isset($speedOptions[$booking['service_speed'] ?? '']) ? (string) $booking['service_speed'] : 'standard',
+        'service_request_id' => (int) ($booking['service_request_id'] ?? 0),
     ];
 }
 
@@ -1231,6 +1383,7 @@ require_once __DIR__ . '/templates/header.php';
                 other_service: bookingPayload.other_service || '',
                 service_speed: selectedSpeed,
                 total_price: bookingPayload.total_price,
+                service_request_id: Number(bookingPayload.service_request_id || 0),
             };
 
             try {
