@@ -30,6 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // ── Load DB ───────────────────────────────────────────────────────────────────
 require __DIR__ . '/../project/db.php';
+try {
+    $pdo->exec("ALTER TABLE service_requests MODIFY COLUMN request_status ENUM('abandoned','new','queued','completed','cancelled','deleted') NOT NULL DEFAULT 'new'");
+} catch (\Throwable $ex) {
+    // Non-fatal if request_status is already compatible or table is not available yet.
+}
 
 // ── Rate limit: max 10 submissions per IP per hour (reuses form_rate_limit) ───
 $_api_ip = (function (): string {

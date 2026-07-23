@@ -10,6 +10,11 @@ try {
 } catch (PDOException $e) {
     // Column may already exist — ignore
 }
+try {
+    $pdo->exec("ALTER TABLE service_requests MODIFY COLUMN request_status ENUM('abandoned','new','queued','completed','cancelled','deleted') NOT NULL DEFAULT 'new'");
+} catch (Throwable $e) {
+    // Non-fatal if request_status is already compatible or table is not available yet.
+}
 
 function loadGoogleMapsApiKey(): string {
     static $key = null;
