@@ -739,7 +739,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     <?php endif; ?>
 
     <!-- Stats -->
-    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2.5 mb-6">
+    <div class="flex flex-wrap gap-2.5 mb-6 max-w-max">
         <div class="stat-card">
             <div class="text-[11px] text-zinc-500 font-medium uppercase tracking-widest mb-0.5">Total</div>
             <div class="text-xl font-bold text-white leading-tight"><?= (int) ($statsRow['total'] ?? 0) ?></div>
