@@ -717,6 +717,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 New Booking
             </a>
+            <a href="book_task.php" class="filter-btn">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5h6m-6 4h6m-7 6h8m-9 4h10M4 3h1a2 2 0 012 2v14a2 2 0 01-2 2H4m0-18h0"/></svg>
+                New Task
+            </a>
         </div>
     </div>
 

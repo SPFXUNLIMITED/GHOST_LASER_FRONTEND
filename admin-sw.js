@@ -14,6 +14,7 @@ const ADMIN_PAGES = [
     '/travel-settings.php',
     '/scheduling_settings.php',
     '/book_internal.php',
+    '/book_task.php',
     '/mileage-tracker.php',
     '/sms-tool.php',
     '/technician/schedule.php',
