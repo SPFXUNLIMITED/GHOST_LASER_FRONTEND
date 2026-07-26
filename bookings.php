@@ -315,12 +315,14 @@ $params = [];
 
 if ($filterSearch !== '') {
     $like = '%' . $filterSearch . '%';
-    $where[]          = '(c.first_name LIKE :q1 OR c.last_name LIKE :q2 OR c.email LIKE :q3 OR c.phone LIKE :q4 OR CONCAT(c.first_name,\' \',c.last_name) LIKE :q5)';
+    $where[]          = '(c.first_name LIKE :q1 OR c.last_name LIKE :q2 OR c.email LIKE :q3 OR c.phone LIKE :q4 OR CONCAT(c.first_name,\' \',c.last_name) LIKE :q5 OR sr.task_contact LIKE :q6 OR sr.problem_summary LIKE :q7)';
     $params[':q1']    = $like;
     $params[':q2']    = $like;
     $params[':q3']    = $like;
     $params[':q4']    = $like;
     $params[':q5']    = $like;
+    $params[':q6']    = $like;
+    $params[':q7']    = $like;
 }
 
 if ($filterStatus === 'completed') {
@@ -372,6 +374,11 @@ try {
             sr.preferred_date_end,
             sr.created_at,
             sr.updated_at,
+            sr.task_contact,
+            sr.destination_street,
+            sr.destination_city,
+            sr.destination_state,
+            sr.destination_zip,
             c.first_name,
             c.last_name,
             c.email,
@@ -382,7 +389,7 @@ try {
             c.zip,
             c.company
         FROM service_requests sr
-        JOIN customers c ON c.id = sr.customer_id
+        LEFT JOIN customers c ON c.id = sr.customer_id
         WHERE {$whereClause}
         ORDER BY sr.id DESC
     ");
@@ -863,9 +870,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <tbody>
             <?php foreach ($bookings as $row):
                 $fullName    = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+                // For task rows (no customer), fall back to task_contact or a generic label.
+                $displayName = $fullName !== '' ? $fullName : ($row['task_contact'] ?? '');
+                $isTask      = ($displayName === '' || $row['customer_id'] === null);
                 $location    = implode(', ', array_filter([
-                    $row['city']  ?? '',
-                    $row['state'] ?? '',
+                    $row['city']  ?? $row['destination_city']  ?? '',
+                    $row['state'] ?? $row['destination_state'] ?? '',
                 ]));
                 $machine     = implode(' ', array_filter([
                     $row['laser_brand'] ?? '',
@@ -875,15 +885,20 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 $pi          = bk_priorityInfo($row['priority_level'] ?? 'standard');
                 $srcInfo     = bk_sourceInfo($row['source'] ?? 'Website');
                 $rowJson     = htmlspecialchars(json_encode($row, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
-                $nameJson    = htmlspecialchars(json_encode($fullName), ENT_QUOTES, 'UTF-8');
+                $nameJson    = htmlspecialchars(json_encode($displayName ?: 'Task #' . (int)$row['id']), ENT_QUOTES, 'UTF-8');
             ?>
             <tr>
                 <td class="td-check"><input type="checkbox" class="row-check" value="<?= (int) $row['id'] ?>" aria-label="Select booking #<?= (int) $row['id'] ?>"></td>
                 <td class="text-zinc-500 font-mono text-xs"><?= (int) $row['id'] ?></td>
                 <td>
-                    <div class="font-medium text-white"><?= htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') ?></div>
+                    <?php if ($isTask): ?>
+                    <div class="font-medium text-amber-400"><?= htmlspecialchars($displayName ?: '—', ENT_QUOTES, 'UTF-8') ?></div>
+                    <div class="text-xs text-amber-500/70 mt-0.5">Internal Task</div>
+                    <?php else: ?>
+                    <div class="font-medium text-white"><?= htmlspecialchars($displayName, ENT_QUOTES, 'UTF-8') ?></div>
                     <?php if (!empty($row['company'])): ?>
                     <div class="text-xs text-zinc-500 mt-0.5"><?= htmlspecialchars($row['company'], ENT_QUOTES, 'UTF-8') ?></div>
+                    <?php endif; ?>
                     <?php endif; ?>
                 </td>
                 <td>

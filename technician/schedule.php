@@ -747,11 +747,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 SELECT
                     scj.id,
                     scj.scheduled_cluster_id,
-                    c.first_name,
-                    c.last_name
+                    COALESCE(c.first_name, sr.task_contact, '') AS first_name,
+                    COALESCE(c.last_name,  '') AS last_name
                 FROM scheduled_cluster_jobs scj
                 JOIN service_requests sr ON sr.id = scj.service_request_id
-                JOIN customers c ON c.id = sr.customer_id
+                LEFT JOIN customers c ON c.id = sr.customer_id
                 WHERE scj.id = :id
                 LIMIT 1
             ");
@@ -1204,9 +1204,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $jobs = $pdo->query("
     SELECT 
         sr.id,
-        c.first_name, 
-        c.last_name, 
-        c.city,
+        COALESCE(c.first_name, sr.task_contact, '') AS first_name,
+        COALESCE(c.last_name,  '') AS last_name,
+        COALESCE(c.city, sr.destination_city) AS city,
         sr.latitude,
         sr.longitude,
         sr.priority_level,
@@ -1214,7 +1214,7 @@ $jobs = $pdo->query("
         sr.preferred_date_start,
         sr.preferred_date_end
     FROM service_requests sr
-    JOIN customers c ON sr.customer_id = c.id
+    LEFT JOIN customers c ON sr.customer_id = c.id
     WHERE sr.request_status IN ('new', 'queued')
     AND NOT EXISTS (
         SELECT 1 FROM scheduled_cluster_jobs scj WHERE scj.service_request_id = sr.id
@@ -1257,25 +1257,24 @@ $scheduledJobsStmt = $pdo->prepare("
         sr.preferred_date_end,
         sr.latitude AS job_latitude,
         sr.longitude AS job_longitude,
-        c.first_name,
-        c.last_name,
-        c.email,
-        c.phone,
-        c.address,
-        c.city,
-        c.state,
-        c.zip
+        COALESCE(c.first_name, sr.task_contact, '') AS first_name,
+        COALESCE(c.last_name,  '') AS last_name,
+        COALESCE(c.email,  '') AS email,
+        COALESCE(c.phone,  '') AS phone,
+        COALESCE(c.address, sr.destination_street) AS address,
+        COALESCE(c.city,    sr.destination_city)   AS city,
+        COALESCE(c.state,   sr.destination_state)  AS state,
+        COALESCE(c.zip,     sr.destination_zip)    AS zip
     FROM scheduled_clusters sc
     JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
     JOIN service_requests sr ON sr.id = scj.service_request_id
-    JOIN customers c ON c.id = sr.customer_id
+    LEFT JOIN customers c ON c.id = sr.customer_id
     WHERE sc.scheduled_date BETWEEN :month_start AND :month_end
     ORDER BY
         sc.scheduled_date ASC,
         FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
         sc.cluster_label ASC,
-        c.last_name ASC,
-        c.first_name ASC
+        first_name ASC
 ");
 $scheduledJobsStmt->execute([
     ':month_start' => $currentMonth->format('Y-m-d'),
@@ -1289,7 +1288,7 @@ foreach ($scheduledJobs as $scheduledJob) {
     $dateKey = (string) $scheduledJob['scheduled_date'];
     $scheduledClusterId = (int) $scheduledJob['scheduled_cluster_id'];
     $customerName = trim((string) $scheduledJob['first_name'] . ' ' . (string) $scheduledJob['last_name']);
-    $scheduledJob['customer_name'] = $customerName !== '' ? $customerName : 'Unknown Customer';
+    $scheduledJob['customer_name'] = $customerName !== '' ? $customerName : 'Internal Task';
     $scheduledJob['priority_meta'] = getPriorityScheduleWindow($scheduledJob['priority_level'] ?? 'standard', $schedulingSettings);
     $scheduledJob['service_address'] = formatCustomerAddress($scheduledJob);
     $scheduledJob['time_window_label'] = formatStoredTimeWindow(
