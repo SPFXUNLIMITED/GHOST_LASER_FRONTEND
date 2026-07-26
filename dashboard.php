@@ -151,6 +151,7 @@ require_once __DIR__ . '/templates/header.php';
                     </p>
 
                     <div class="mt-6 space-y-3">
+                        <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 pt-1">Operations</p>
                         <a
                             href="technician/schedule.php"
                             class="inline-flex w-full items-center gap-2 rounded-md bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2.5 transition-all btn-glow"
@@ -164,10 +165,10 @@ require_once __DIR__ . '/templates/header.php';
                             Technician Dashboard
                         </a>
                         <a
-                            href="mileage-tracker.php"
-                            class="inline-flex w-full items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/60 hover:border-zinc-600 hover:bg-zinc-800 text-zinc-300 font-medium text-sm px-4 py-2.5 transition-all"
+                            href="bookings.php"
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-cyan-700/60 bg-cyan-950/30 hover:border-cyan-500/60 hover:bg-cyan-950/50 text-cyan-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
-                            IRS Mileage Tracker
+                            Bookings
                         </a>
                         <a
                             href="book_internal.php"
@@ -181,18 +182,24 @@ require_once __DIR__ . '/templates/header.php';
                         >
                             Internal Task Booking
                         </a>
+
+                        <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 pt-3">Tracking &amp; Compliance</p>
                         <a
-                            href="bookings.php"
-                            class="inline-flex w-full items-center gap-2 rounded-md border border-cyan-700/60 bg-cyan-950/30 hover:border-cyan-500/60 hover:bg-cyan-950/50 text-cyan-300 font-medium text-sm px-4 py-2.5 transition-all"
+                            href="mileage-tracker.php"
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/60 hover:border-zinc-600 hover:bg-zinc-800 text-zinc-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
-                            Bookings
+                            IRS Mileage Tracker
                         </a>
+
+                        <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 pt-3">Communication</p>
                         <a
                             href="sms-tool.php"
                             class="inline-flex w-full items-center gap-2 rounded-md border border-violet-700/60 bg-violet-950/30 hover:border-violet-500/60 hover:bg-violet-950/50 text-violet-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
                             SMS Invite
                         </a>
+
+                        <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 pt-3">Admin Tools</p>
                         <a
                             href="install-admin-app.php"
                             class="inline-flex w-full items-center gap-2 rounded-md border border-emerald-700/60 bg-emerald-950/30 hover:border-emerald-500/60 hover:bg-emerald-950/50 text-emerald-300 font-medium text-sm px-4 py-2.5 transition-all"
