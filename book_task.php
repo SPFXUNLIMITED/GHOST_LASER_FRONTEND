@@ -84,77 +84,6 @@ function formatUsPhoneDisplay($value): string
     return sprintf('(%s) %s-%s', substr($digits, 0, 3), substr($digits, 3, 3), substr($digits, 6));
 }
 
-if (empty($_SESSION['book_task_customer_search_csrf'])) {
-    $_SESSION['book_task_customer_search_csrf'] = bin2hex(random_bytes(32));
-}
-$customerSearchCsrfToken = (string) $_SESSION['book_task_customer_search_csrf'];
-
-$isCustomerSearchRequest = (
-    (isset($_GET['action']) && $_GET['action'] === 'customer_search')
-    || (isset($_GET['customer_search']) && (string) $_GET['customer_search'] === '1')
-);
-
-if ($isCustomerSearchRequest) {
-    header('Content-Type: application/json');
-
-    $csrfHeader = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
-    if ($csrfHeader === '' || !hash_equals($customerSearchCsrfToken, $csrfHeader)) {
-        http_response_code(403);
-        echo json_encode(['results' => [], 'error' => 'Invalid CSRF token.']);
-        exit;
-    }
-
-    $q = trim((string) ($_GET['q'] ?? ''));
-    if ($q === '' || strlen($q) < 2) {
-        echo json_encode(['results' => []]);
-        exit;
-    }
-
-    try {
-        $like = '%' . $q . '%';
-        $stmt = $pdo->prepare(
-            "SELECT id, first_name, last_name, company, email, phone, address, city, state, zip
-             FROM customers
-             WHERE first_name LIKE :first_name_q
-                OR last_name LIKE :last_name_q
-                OR company LIKE :company_q
-                OR email LIKE :email_q
-                OR phone LIKE :phone_q
-             ORDER BY last_name, first_name
-             LIMIT 8"
-        );
-        $stmt->execute([
-            ':first_name_q' => $like,
-            ':last_name_q' => $like,
-            ':company_q' => $like,
-            ':email_q' => $like,
-            ':phone_q' => $like,
-        ]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    } catch (Throwable $e) {
-        http_response_code(500);
-        echo json_encode(['results' => [], 'error' => 'Customer search failed.']);
-        exit;
-    }
-
-    $results = [];
-    foreach ($rows as $row) {
-        $results[] = [
-            'id' => (int) ($row['id'] ?? 0),
-            'customer_name' => trim((string) (($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''))),
-            'company_name' => (string) ($row['company'] ?? ''),
-            'phone' => (string) ($row['phone'] ?? ''),
-            'email' => (string) ($row['email'] ?? ''),
-            'address' => (string) ($row['address'] ?? ''),
-            'city' => (string) ($row['city'] ?? ''),
-            'state' => strtoupper((string) ($row['state'] ?? '')),
-            'zip' => (string) ($row['zip'] ?? ''),
-        ];
-    }
-
-    echo json_encode(['results' => $results]);
-    exit;
-}
 
 $googleMapsApiKey = loadGoogleMapsApiKey();
 
@@ -181,30 +110,6 @@ $extraHead = <<<'HTML'
     .input-base:focus { border-color: #06b6d4; box-shadow: 0 0 0 1px rgba(6,182,212,0.5); }
     .input-base.input-invalid { border-color: rgba(248,113,113,.95) !important; box-shadow: 0 0 0 1px rgba(248,113,113,.35) !important; }
     .field-error { margin-top: .5rem; color: rgb(248 113 113); font-size: .75rem; line-height: 1rem; }
-    #customerSuggestions {
-        position: absolute;
-        z-index: 50;
-        left: 0; right: 0;
-        top: calc(100% + 4px);
-        background: #18181b;
-        border: 1px solid rgb(63,63,70);
-        border-radius: 0.5rem;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.5);
-        max-height: 280px;
-        overflow-y: auto;
-    }
-    #customerSuggestions li {
-        padding: 0.65rem 1rem;
-        font-size: 0.8rem;
-        color: #d4d4d8;
-        cursor: pointer;
-        border-bottom: 1px solid rgba(63,63,70,0.5);
-        transition: background 0.1s;
-    }
-    #customerSuggestions li:last-child { border-bottom: none; }
-    #customerSuggestions li:hover, #customerSuggestions li.active { background: rgba(6,182,212,0.12); color: #22d3ee; }
-    #customerSuggestions li .result-name { font-weight: 600; color: #f4f4f5; }
-    #customerSuggestions li .result-meta { color: #71717a; margin-top: 1px; }
 </style>
 HTML;
 
@@ -232,39 +137,15 @@ require_once __DIR__ . '/templates/header.php';
         <div id="task-error" class="hidden mb-6 rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200"></div>
 
         <form id="task-booking-form" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box" novalidate>
-            <input type="hidden" id="customer_id" name="customer_id" value="">
             <input type="hidden" id="latitude" name="latitude" value="">
             <input type="hidden" id="longitude" name="longitude" value="">
 
             <div>
-                <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-amber-400">Customer Search</p>
-                <div class="relative" id="cust-search-wrap">
-                    <div class="relative">
-                        <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-zinc-500">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
-                            </svg>
-                        </span>
-                        <input id="customer_name" type="text" autocomplete="off" placeholder="Search by name, company, phone, or email…" class="input-base pl-9">
-                    </div>
-                    <ul id="customerSuggestions" class="hidden" role="listbox" aria-label="Customer search results"></ul>
-                </div>
-                <p class="mt-2 text-xs text-zinc-500">Optional. Select a customer to auto-fill contact and destination details, or enter task details manually.</p>
-                <div id="cust-selected-banner" class="hidden mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-950/40 px-4 py-2.5 text-sm">
-                    <span class="text-emerald-200" id="cust-selected-label"></span>
-                    <button type="button" id="cust-clear-btn" class="text-xs text-zinc-400 hover:text-white transition-colors underline flex-shrink-0">Clear</button>
-                </div>
-            </div>
-
-            <div class="border-t border-zinc-800"></div>
-
-            <div>
-                <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
-                <p class="mb-3 text-xs text-zinc-500">All contact fields are optional for tasks. Enter whatever is relevant for this dispatch.</p>
+                <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Destination Information</p>
                 <div class="grid gap-5 sm:grid-cols-2">
+                    <div class="sm:col-span-2"><input class="input-base" id="company_name" name="company_name" placeholder="Company Name *" required></div>
                     <div><input class="input-base" id="first_name" name="first_name" placeholder="First Name"></div>
                     <div><input class="input-base" id="last_name" name="last_name" placeholder="Last Name"></div>
-                    <div class="sm:col-span-2"><input class="input-base" id="company_name" name="company_name" placeholder="Company Name"></div>
                     <div>
                         <input class="input-base" type="tel" inputmode="tel" id="phone" name="phone" placeholder="Phone Number" aria-describedby="phone-error" aria-invalid="false">
                         <p id="phone-error" class="field-error hidden"></p>
@@ -322,10 +203,7 @@ require_once __DIR__ . '/templates/header.php';
 </section>
 
 <script>
-    const customerSearchCsrfToken = <?= json_encode($customerSearchCsrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const googleMapsApiKey = <?= json_encode($googleMapsApiKey, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-
-    const escHtml = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
     const formatUsPhoneDisplay = (value) => {
         let digits = String(value || '').replace(/\D/g, '');
@@ -385,155 +263,6 @@ require_once __DIR__ . '/templates/header.php';
     ['address', 'city', 'state', 'zip'].forEach(id => {
         document.getElementById(id)?.addEventListener('blur', geocodeAddress);
     });
-
-    (() => {
-        const searchInput = document.getElementById('customer_name');
-        const resultsList = document.getElementById('customerSuggestions');
-        const selectedBanner = document.getElementById('cust-selected-banner');
-        const selectedLabel = document.getElementById('cust-selected-label');
-        const clearBtn = document.getElementById('cust-clear-btn');
-        const fields = {
-            customer_id: document.getElementById('customer_id'),
-            first_name: document.getElementById('first_name'),
-            last_name: document.getElementById('last_name'),
-            company_name: document.getElementById('company_name'),
-            phone: document.getElementById('phone'),
-            email: document.getElementById('email'),
-            address: document.getElementById('address'),
-            city: document.getElementById('city'),
-            state: document.getElementById('state'),
-            zip: document.getElementById('zip'),
-        };
-        if (!searchInput) return;
-
-        let debounceTimer = null;
-        let activeIndex = -1;
-        let currentResults = [];
-
-        const syncPhoneValidationState = () => {
-            const phoneInput = document.getElementById('phone');
-            const phoneErrorEl = document.getElementById('phone-error');
-            if (!phoneInput || !phoneErrorEl) return true;
-            const digits = normalizeUsPhone(phoneInput.value);
-            const hasValue = phoneInput.value.trim() !== '';
-            const isValid = !hasValue || digits !== null;
-            phoneInput.classList.toggle('input-invalid', !isValid);
-            phoneInput.setAttribute('aria-invalid', isValid ? 'false' : 'true');
-            phoneErrorEl.textContent = isValid ? '' : 'Please enter a valid 10-digit US phone number.';
-            phoneErrorEl.classList.toggle('hidden', isValid);
-            return isValid;
-        };
-
-        const clearSelection = () => {
-            selectedBanner.classList.add('hidden');
-            selectedLabel.textContent = '';
-            if (fields.customer_id) fields.customer_id.value = '';
-        };
-
-        const fillCustomer = (customer) => {
-            if (fields.customer_id) fields.customer_id.value = customer.id || '';
-            if (fields.first_name) {
-                const fullName = customer.customer_name || '';
-                const parts = fullName.split(/\s+/).filter(Boolean);
-                fields.first_name.value = parts.shift() || '';
-                fields.last_name.value = parts.join(' ');
-            }
-            if (fields.company_name) fields.company_name.value = customer.company_name || '';
-            if (fields.phone) {
-                fields.phone.value = formatUsPhoneDisplay(customer.phone || '');
-                syncPhoneValidationState();
-            }
-            if (fields.email) fields.email.value = customer.email || '';
-            if (fields.address) fields.address.value = customer.address || '';
-            if (fields.city) fields.city.value = customer.city || '';
-            if (fields.state) fields.state.value = (customer.state || '').toUpperCase();
-            if (fields.zip) fields.zip.value = customer.zip || '';
-
-            const fullName = customer.customer_name || 'Unknown';
-            selectedLabel.textContent = `Customer loaded: ${fullName}${customer.company_name ? ' · ' + customer.company_name : ''}`;
-            selectedBanner.classList.remove('hidden');
-            resultsList.classList.add('hidden');
-            resultsList.innerHTML = '';
-            searchInput.value = fullName;
-            geocodeAddress();
-        };
-
-        const renderResults = (results) => {
-            resultsList.innerHTML = '';
-            activeIndex = -1;
-            if (results.length === 0) {
-                resultsList.classList.add('hidden');
-                return;
-            }
-            results.forEach((customer, idx) => {
-                const li = document.createElement('li');
-                li.setAttribute('role', 'option');
-                li.dataset.idx = idx;
-                const companyMeta = customer.company_name ? `${escHtml(customer.company_name)} &nbsp;&middot;&nbsp; ` : '';
-                li.innerHTML = `<div class="result-name">${escHtml(customer.customer_name || '')}</div>`
-                    + `<div class="result-meta">${companyMeta}${customer.phone ? escHtml(customer.phone) + ' &nbsp;&middot;&nbsp; ' : ''}${escHtml(customer.email)}</div>`;
-                li.addEventListener('mousedown', (e) => {
-                    e.preventDefault();
-                    fillCustomer(customer);
-                });
-                resultsList.appendChild(li);
-            });
-            resultsList.classList.remove('hidden');
-        };
-
-        searchInput.addEventListener('input', () => {
-            clearTimeout(debounceTimer);
-            const q = searchInput.value.trim();
-            if (q.length < 2) {
-                resultsList.classList.add('hidden');
-                resultsList.innerHTML = '';
-                return;
-            }
-            debounceTimer = setTimeout(async () => {
-                try {
-                    const res = await fetch(`book_task.php?customer_search=1&q=${encodeURIComponent(q)}`, {
-                        headers: { 'X-CSRF-Token': customerSearchCsrfToken }
-                    });
-                    const data = await res.json();
-                    currentResults = data.results || [];
-                    renderResults(currentResults);
-                } catch (_) {}
-            }, 180);
-        });
-
-        searchInput.addEventListener('keydown', (e) => {
-            const items = resultsList.querySelectorAll('li');
-            if (!items.length) return;
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                activeIndex = Math.min(activeIndex + 1, items.length - 1);
-                items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                activeIndex = Math.max(activeIndex - 1, 0);
-                items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
-            } else if (e.key === 'Enter' && activeIndex >= 0) {
-                e.preventDefault();
-                fillCustomer(currentResults[activeIndex]);
-            } else if (e.key === 'Escape') {
-                resultsList.classList.add('hidden');
-            }
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!document.getElementById('cust-search-wrap')?.contains(e.target)) {
-                resultsList.classList.add('hidden');
-            }
-        });
-
-        if (clearBtn) {
-            clearBtn.addEventListener('click', () => {
-                clearSelection();
-                Object.values(fields).forEach(el => { if (el) el.value = ''; });
-                searchInput.focus();
-            });
-        }
-    })();
 
     (() => {
         const phoneInput = document.getElementById('phone');
@@ -653,9 +382,6 @@ require_once __DIR__ . '/templates/header.php';
 
                 showSuccess('Task submitted successfully and added to the scheduling queue.');
                 form.reset();
-                document.getElementById('customer_id').value = '';
-                document.getElementById('customer_name').value = '';
-                document.getElementById('cust-selected-banner')?.classList.add('hidden');
             } catch (error) {
                 showError(error instanceof Error ? error.message : 'Network error — please try again.');
             } finally {
