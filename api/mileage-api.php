@@ -97,6 +97,72 @@ function laDateString(): string
     return nowLa()->format('Y-m-d');
 }
 
+function buildBusinessPurpose(array $row): string
+{
+    static $serviceLabels = [
+        'maintenance_alignment' => 'Maintenance & Alignment',
+        'tube_change'           => 'Tube Change',
+        'diagnosis'             => 'Diagnosis',
+        'training'              => 'Training',
+        'other'                 => 'Other',
+    ];
+
+    $parts = [];
+
+    $brand   = trim((string) ($row['laser_brand'] ?? ''));
+    $model   = trim((string) ($row['laser_model'] ?? ''));
+    $machine = trim("$brand $model");
+    if ($machine !== '') {
+        $parts[] = $machine;
+    }
+
+    $servicesRaw = $row['services'] ?? null;
+    if ($servicesRaw !== null && $servicesRaw !== '') {
+        $keys = json_decode((string) $servicesRaw, true);
+        if (is_array($keys) && $keys !== []) {
+            $labels = array_map(
+                static fn($k) => $serviceLabels[$k] ?? ucwords(str_replace('_', ' ', (string) $k)),
+                $keys
+            );
+            $parts[] = implode(', ', $labels);
+        }
+    }
+
+    $problem = trim((string) ($row['problem_summary'] ?? ''));
+    if ($problem !== '') {
+        $parts[] = $problem;
+    }
+
+    return $parts !== [] ? implode(' — ', $parts) : '';
+}
+
+function generatedPurposeForServiceRequest(PDO $pdo, int $serviceRequestId): ?string
+{
+    if ($serviceRequestId <= 0) {
+        return null;
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT laser_brand, laser_model, problem_summary, services
+             FROM service_requests
+             WHERE id = :id
+             LIMIT 1"
+        );
+        $stmt->execute([':id' => $serviceRequestId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return null;
+    }
+
+    if (!$row) {
+        return null;
+    }
+
+    $purpose = trim(buildBusinessPurpose($row));
+    return $purpose !== '' ? $purpose : null;
+}
+
 // ── Helper: validate coordinate ───────────────────────────────────────────────
 function validCoord(?string $v): ?float
 {
@@ -117,6 +183,7 @@ if ($action === 'on_my_way') {
     $startLat         = validCoord((string) ($data['start_lat'] ?? ''));
     $startLng         = validCoord((string) ($data['start_lng'] ?? ''));
     $startMileage     = isset($data['start_mileage']) ? (int) $data['start_mileage'] : null;
+    $notes            = trim((string) ($data['notes'] ?? ''));
 
     if ($serviceRequestId < 0) {
         http_response_code(400);
@@ -126,10 +193,12 @@ if ($action === 'on_my_way') {
 
     $startTime = laDateTimeString();
     $tripDate  = laDateString();
+    $autoPurpose = generatedPurposeForServiceRequest($pdo, $serviceRequestId);
+    $notesToPersist = $notes !== '' ? $notes : $autoPurpose;
 
     // Upsert: if a pending record already exists for this job today, update it
     $existing = $pdo->prepare(
-        "SELECT id FROM mileage_logs
+        "SELECT id, notes FROM mileage_logs
          WHERE service_request_id = :sri AND status = 'pending'
          ORDER BY id DESC LIMIT 1"
     );
@@ -145,9 +214,14 @@ if ($action === 'on_my_way') {
                  start_time     = :st,
                  start_lat      = :slat,
                  start_lng      = :slng,
-                 start_mileage  = :sm
+                 start_mileage  = :sm,
+                 notes          = :notes
              WHERE id = :id"
         );
+        $existingNotes = trim((string) ($row['notes'] ?? ''));
+        if ($existingNotes !== '') {
+            $notesToPersist = $existingNotes;
+        }
         $stmt->execute([
             ':cn'   => $clientName,
             ':addr' => $address,
@@ -156,15 +230,16 @@ if ($action === 'on_my_way') {
             ':slat' => $startLat,
             ':slng' => $startLng,
             ':sm'   => $startMileage,
+            ':notes'=> $notesToPersist,
             ':id'   => $row['id'],
         ]);
         $logId = $row['id'];
     } else {
         $stmt = $pdo->prepare(
             "INSERT INTO mileage_logs
-                (service_request_id, client_name, address, trip_date, start_time, start_lat, start_lng, start_mileage, status)
+                (service_request_id, client_name, address, trip_date, start_time, start_lat, start_lng, start_mileage, notes, status)
              VALUES
-                (:sri, :cn, :addr, :td, :st, :slat, :slng, :sm, 'pending')"
+                (:sri, :cn, :addr, :td, :st, :slat, :slng, :sm, :notes, 'pending')"
         );
         $stmt->execute([
             ':sri'  => $serviceRequestId,
@@ -175,6 +250,7 @@ if ($action === 'on_my_way') {
             ':slat' => $startLat,
             ':slng' => $startLng,
             ':sm'   => $startMileage,
+            ':notes'=> $notesToPersist,
         ]);
         $logId = (int) $pdo->lastInsertId();
     }
