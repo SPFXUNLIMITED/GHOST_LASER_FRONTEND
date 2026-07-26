@@ -150,6 +150,7 @@ try {
             start_mileage      INT UNSIGNED  NULL COMMENT 'Odometer at departure',
             end_mileage        INT UNSIGNED  NULL COMMENT 'Odometer at arrival',
             total_miles        DECIMAL(8,2)  NULL,
+            notes              VARCHAR(1000) NULL COMMENT 'Admin override for business purpose',
             status             ENUM('pending','complete') NOT NULL DEFAULT 'pending',
             created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -157,6 +158,17 @@ try {
             INDEX idx_trip_date (trip_date)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    // Migrate: add notes column for admin-editable business purpose override
+    $notesColCheck = $pdo->query(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME   = 'mileage_logs'
+           AND COLUMN_NAME  = 'notes'"
+    );
+    if ((int) $notesColCheck->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE mileage_logs ADD COLUMN notes VARCHAR(1000) NULL COMMENT 'Admin override for business purpose' AFTER total_miles");
+    }
 
     // Ensure the services JSON column exists on service_requests so that
     // purpose data can be stored and displayed for IRS documentation.
@@ -191,8 +203,9 @@ try {
 
     // Pre-compute the IRS business purpose for each row so it is available
     // both in the HTML table and in the JSON data fed to the detail modal.
+    // Admin-entered notes override the auto-generated purpose string.
     foreach ($logs as &$log) {
-        $log['purpose'] = buildPurpose($log);
+        $log['purpose'] = !empty($log['notes']) ? $log['notes'] : buildPurpose($log);
     }
     unset($log);
 } catch (PDOException $e) {
@@ -484,6 +497,24 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         }
         .delete-btn:hover { border-color: rgba(239,68,68,0.65); background: rgba(239,68,68,0.18); }
 
+        .edit-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.65rem;
+            border-radius: 0.375rem;
+            border: 1px solid rgba(6,182,212,0.35);
+            background: rgba(6,182,212,0.08);
+            color: #67e8f9;
+            font-size: 0.72rem;
+            font-weight: 600;
+            cursor: pointer;
+            letter-spacing: 0.02em;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .edit-btn:hover { border-color: rgba(6,182,212,0.65); background: rgba(6,182,212,0.18); }
+
         .modal-backdrop {
             position: fixed;
             inset: 0;
@@ -579,6 +610,57 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             line-height: 1.4;
             word-break: break-word;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        .edit-form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        .edit-form-label {
+            color: #71717a;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .edit-form-input {
+            background: rgba(24,24,27,0.9);
+            border: 1px solid rgba(63,63,70,0.9);
+            border-radius: 0.4rem;
+            color: #e4e4e7;
+            font-size: 0.82rem;
+            padding: 0.4rem 0.65rem;
+            outline: none;
+            transition: border-color 0.15s;
+            width: 100%;
+        }
+        .edit-form-input:focus { border-color: rgba(6,182,212,0.55); }
+        .edit-form-input[type="number"] { font-family: ui-monospace, monospace; }
+        .edit-form-textarea {
+            resize: vertical;
+            min-height: 4.5rem;
+        }
+        .edit-form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 0.8rem;
+        }
+        .edit-form-grid .full-width { grid-column: 1 / -1; }
+        .edit-error-msg {
+            margin-top: 0.75rem;
+            padding: 0.55rem 0.85rem;
+            border-radius: 0.5rem;
+            border: 1px solid rgba(239,68,68,0.35);
+            background: rgba(239,68,68,0.08);
+            color: #fca5a5;
+            font-size: 0.8rem;
+        }
+        .edit-actions {
+            display: flex;
+            gap: 0.65rem;
+            justify-content: flex-end;
+            margin-top: 1.1rem;
         }
     </style>
 </head>
@@ -745,7 +827,11 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <?php endif; ?>
                             </td>
                             <td class="whitespace-nowrap">
-                                <form method="POST" action="mileage-tracker.php<?= $filterStart !== '' || $filterEnd !== '' || $filterStatus !== '' ? '?' . htmlspecialchars(http_build_query(array_filter(['start' => $filterStart, 'end' => $filterEnd, 'status' => $filterStatus])), ENT_QUOTES, 'UTF-8') : '' ?>" style="display:inline;">
+                                <button type="button" class="edit-btn" data-edit-id="<?= (int) $row['id'] ?>" onclick="event.stopPropagation()">
+                                    <svg style="width:0.7rem;height:0.7rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                    Edit
+                                </button>
+                                <form method="POST" action="mileage-tracker.php<?= $filterStart !== '' || $filterEnd !== '' || $filterStatus !== '' ? '?' . htmlspecialchars(http_build_query(array_filter(['start' => $filterStart, 'end' => $filterEnd, 'status' => $filterStatus])), ENT_QUOTES, 'UTF-8') : '' ?>" style="display:inline;margin-left:0.35rem;">
                                     <input type="hidden" name="delete_id" value="<?= (int) $row['id'] ?>">
                                     <button type="submit" class="delete-btn" onclick="event.stopPropagation(); return confirm('Are you sure you want to delete this mileage record? This action cannot be undone.')">
                                         <svg style="width:0.7rem;height:0.7rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -788,6 +874,70 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             </div>
             <div class="detail-modal-body">
                 <div id="trip-detail-grid" class="detail-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Trip Modal -->
+    <div id="edit-modal" class="modal-backdrop" aria-hidden="true">
+        <div class="detail-modal" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+            <div class="detail-modal-header">
+                <div>
+                    <h2 id="edit-modal-title" class="detail-modal-title">Edit Trip Record</h2>
+                    <div class="detail-modal-subtitle" id="edit-modal-subtitle">Make corrections and click Save</div>
+                </div>
+                <button type="button" class="detail-close" id="edit-modal-close" aria-label="Close edit modal">&times;</button>
+            </div>
+            <div class="detail-modal-body">
+                <form id="edit-modal-form" novalidate>
+                    <input type="hidden" id="edit-id" name="id">
+                    <div class="edit-form-grid">
+                        <div class="edit-form-group">
+                            <label class="edit-form-label" for="edit-trip-date">Trip Date</label>
+                            <input id="edit-trip-date" type="date" class="edit-form-input" name="trip_date">
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label" for="edit-status">Status</label>
+                            <select id="edit-status" class="edit-form-input" name="status">
+                                <option value="pending">Pending</option>
+                                <option value="complete">Complete</option>
+                            </select>
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label" for="edit-start-time">Start Date &amp; Time</label>
+                            <input id="edit-start-time" type="datetime-local" class="edit-form-input" name="start_time">
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label" for="edit-end-time">End Date &amp; Time</label>
+                            <input id="edit-end-time" type="datetime-local" class="edit-form-input" name="end_time">
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label" for="edit-start-mileage">Starting Odometer (mi)</label>
+                            <input id="edit-start-mileage" type="number" min="0" step="1" class="edit-form-input" name="start_mileage" placeholder="e.g. 45200">
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label" for="edit-end-mileage">Ending Odometer (mi)</label>
+                            <input id="edit-end-mileage" type="number" min="0" step="1" class="edit-form-input" name="end_mileage" placeholder="e.g. 45247">
+                        </div>
+                        <div class="edit-form-group full-width">
+                            <label class="edit-form-label" for="edit-client-name">Client Name</label>
+                            <input id="edit-client-name" type="text" class="edit-form-input" name="client_name" placeholder="Client name">
+                        </div>
+                        <div class="edit-form-group full-width">
+                            <label class="edit-form-label" for="edit-address">Address</label>
+                            <input id="edit-address" type="text" class="edit-form-input" name="address" placeholder="Service address">
+                        </div>
+                        <div class="edit-form-group full-width">
+                            <label class="edit-form-label" for="edit-notes">Business Purpose <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#52525b;">(leave blank to auto-generate from job details)</span></label>
+                            <textarea id="edit-notes" class="edit-form-input edit-form-textarea" name="notes" placeholder="e.g. Epilog Fusion Pro 48 — Maintenance & Alignment — Beam misalignment after tube change"></textarea>
+                        </div>
+                    </div>
+                    <div id="edit-error" class="edit-error-msg" style="display:none;"></div>
+                    <div class="edit-actions">
+                        <button type="button" id="edit-cancel-btn" class="reset-btn">Cancel</button>
+                        <button type="submit" id="edit-save-btn" class="filter-btn">Save Changes</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -889,6 +1039,114 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             document.addEventListener('keydown', (event) => {
                 if (event.key === 'Escape' && modal.classList.contains('is-open')) {
                     closeModal();
+                }
+            });
+
+            // ── Edit modal ────────────────────────────────────────────────────
+            const editModal        = document.getElementById('edit-modal');
+            const editModalClose   = document.getElementById('edit-modal-close');
+            const editModalSubtitle = document.getElementById('edit-modal-subtitle');
+            const editForm         = document.getElementById('edit-modal-form');
+            const editCancelBtn    = document.getElementById('edit-cancel-btn');
+            const editSaveBtn      = document.getElementById('edit-save-btn');
+            const editError        = document.getElementById('edit-error');
+
+            const toInputDatetime = (dt) => {
+                if (!dt) return '';
+                return String(dt).replace(' ', 'T').substring(0, 16);
+            };
+
+            const closeEditModal = () => {
+                editModal.classList.remove('is-open');
+                editModal.setAttribute('aria-hidden', 'true');
+                document.body.style.overflow = '';
+            };
+
+            const openEditModal = (logId) => {
+                const record = rowMap.get(String(logId));
+                if (!record) return;
+
+                document.getElementById('edit-id').value           = record.id ?? '';
+                document.getElementById('edit-trip-date').value    = (record.trip_date ?? '').substring(0, 10);
+                document.getElementById('edit-start-time').value   = toInputDatetime(record.start_time);
+                document.getElementById('edit-end-time').value     = toInputDatetime(record.end_time);
+                document.getElementById('edit-start-mileage').value = record.start_mileage ?? '';
+                document.getElementById('edit-end-mileage').value  = record.end_mileage ?? '';
+                document.getElementById('edit-client-name').value  = record.client_name ?? '';
+                document.getElementById('edit-address').value      = record.address ?? '';
+                document.getElementById('edit-notes').value        = record.notes ?? '';
+                document.getElementById('edit-status').value       = record.status ?? 'pending';
+
+                editModalSubtitle.textContent = `Record #${record.id ?? '—'} • Job #${record.service_request_id ?? '—'}`;
+                editError.style.display = 'none';
+                editSaveBtn.disabled    = false;
+                editSaveBtn.textContent = 'Save Changes';
+
+                editModal.classList.add('is-open');
+                editModal.setAttribute('aria-hidden', 'false');
+                document.body.style.overflow = 'hidden';
+                editModalClose.focus();
+            };
+
+            document.querySelectorAll('.edit-btn[data-edit-id]').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openEditModal(btn.dataset.editId);
+                });
+            });
+
+            editModalClose.addEventListener('click', closeEditModal);
+            editCancelBtn.addEventListener('click', closeEditModal);
+            editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && editModal.classList.contains('is-open')) closeEditModal();
+            });
+
+            editForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                editSaveBtn.disabled    = true;
+                editSaveBtn.textContent = 'Saving…';
+                editError.style.display = 'none';
+
+                const val = (id) => document.getElementById(id).value.trim();
+                const toApiDatetime = (v) => v ? v.replace('T', ' ') + ':00' : null;
+                const toInt = (v) => v !== '' ? parseInt(v, 10) : null;
+
+                const payload = {
+                    action:         'update',
+                    id:             parseInt(val('edit-id'), 10),
+                    trip_date:      val('edit-trip-date') || null,
+                    start_time:     toApiDatetime(val('edit-start-time')),
+                    end_time:       toApiDatetime(val('edit-end-time')),
+                    start_mileage:  toInt(val('edit-start-mileage')),
+                    end_mileage:    toInt(val('edit-end-mileage')),
+                    client_name:    val('edit-client-name'),
+                    address:        val('edit-address'),
+                    notes:          val('edit-notes'),
+                    status:         val('edit-status'),
+                };
+
+                try {
+                    const resp   = await fetch('api/mileage-api.php', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify(payload),
+                    });
+                    const result = await resp.json();
+                    if (result.success) {
+                        closeEditModal();
+                        window.location.reload();
+                    } else {
+                        editError.textContent   = result.error || 'Failed to save. Please try again.';
+                        editError.style.display = 'block';
+                        editSaveBtn.disabled    = false;
+                        editSaveBtn.textContent = 'Save Changes';
+                    }
+                } catch {
+                    editError.textContent   = 'Network error. Please try again.';
+                    editError.style.display = 'block';
+                    editSaveBtn.disabled    = false;
+                    editSaveBtn.textContent = 'Save Changes';
                 }
             });
         })();

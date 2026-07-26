@@ -58,7 +58,8 @@ $pdo->exec("
 
 // ── Migrate: add mileage columns to existing tables ───────────────────────────
 foreach (['start_mileage INT UNSIGNED NULL COMMENT \'Odometer at departure\' AFTER end_lng',
-          'end_mileage   INT UNSIGNED NULL COMMENT \'Odometer at arrival\'   AFTER start_mileage'] as $colDef) {
+          'end_mileage   INT UNSIGNED NULL COMMENT \'Odometer at arrival\'   AFTER start_mileage',
+          'notes         VARCHAR(1000) NULL COMMENT \'Admin override for business purpose\' AFTER end_mileage'] as $colDef) {
     $col = strtok($colDef, ' ');
     $exists = $pdo->query(
         "SELECT COUNT(*) FROM information_schema.COLUMNS
@@ -258,6 +259,95 @@ if ($action === 'arrived') {
         'end_time'    => $endTime,
         'total_miles' => $totalMiles,
     ]);
+    exit;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Action: update
+// ═════════════════════════════════════════════════════════════════════════════
+if ($action === 'update') {
+    $id           = (int) ($data['id'] ?? 0);
+    $tripDate     = trim((string) ($data['trip_date']     ?? ''));
+    $startTime    = trim((string) ($data['start_time']    ?? ''));
+    $endTime      = trim((string) ($data['end_time']      ?? ''));
+    $startMileage = ($data['start_mileage'] !== '' && $data['start_mileage'] !== null) ? (int) $data['start_mileage'] : null;
+    $endMileage   = ($data['end_mileage']   !== '' && $data['end_mileage']   !== null) ? (int) $data['end_mileage']   : null;
+    $clientName   = trim((string) ($data['client_name']   ?? ''));
+    $address      = trim((string) ($data['address']       ?? ''));
+    $notes        = trim((string) ($data['notes']         ?? ''));
+    $status       = trim((string) ($data['status']        ?? 'pending'));
+
+    if ($id <= 0) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid record ID']);
+        exit;
+    }
+
+    if (!in_array($status, ['pending', 'complete'], true)) {
+        $status = 'pending';
+    }
+
+    $tripDateVal  = ($tripDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $tripDate)) ? $tripDate : null;
+
+    // datetime-local sends 'YYYY-MM-DDTHH:MM'; store as 'YYYY-MM-DD HH:MM:SS'
+    $toDbDatetime = static function (string $val): ?string {
+        if ($val === '') return null;
+        $val = str_replace('T', ' ', $val);
+        if (strlen($val) === 16) $val .= ':00';
+        return $val;
+    };
+    $startTimeVal = $toDbDatetime($startTime);
+    $endTimeVal   = $toDbDatetime($endTime);
+
+    // Recalculate total_miles from odometer readings when both are present
+    $totalMiles = null;
+    if ($startMileage !== null && $endMileage !== null) {
+        if ($endMileage < $startMileage) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'End mileage cannot be less than start mileage.']);
+            exit;
+        }
+        $totalMiles = round((float) ($endMileage - $startMileage), 2);
+    }
+
+    // Verify record exists
+    $check = $pdo->prepare("SELECT id FROM mileage_logs WHERE id = :id");
+    $check->execute([':id' => $id]);
+    if (!$check->fetch()) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'Record not found']);
+        exit;
+    }
+
+    $stmt = $pdo->prepare(
+        "UPDATE mileage_logs
+         SET trip_date     = :td,
+             start_time    = :st,
+             end_time      = :et,
+             start_mileage = :sm,
+             end_mileage   = :em,
+             total_miles   = :miles,
+             client_name   = :cn,
+             address       = :addr,
+             notes         = :notes,
+             status        = :status
+         WHERE id = :id"
+    );
+    $stmt->execute([
+        ':td'     => $tripDateVal,
+        ':st'     => $startTimeVal,
+        ':et'     => $endTimeVal,
+        ':sm'     => $startMileage,
+        ':em'     => $endMileage,
+        ':miles'  => $totalMiles,
+        ':cn'     => $clientName,
+        ':addr'   => $address,
+        ':notes'  => $notes !== '' ? $notes : null,
+        ':status' => $status,
+        ':id'     => $id,
+    ]);
+
+    echo json_encode(['success' => true]);
     exit;
 }
 
