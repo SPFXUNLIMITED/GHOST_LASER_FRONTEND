@@ -362,7 +362,7 @@ require_once __DIR__ . '/templates/header.php';
                 website: form.website.value.trim(),
                 services: [],
                 other_service: '',
-                service_speed: 'standard'
+                service_speed: null
             };
 
             try {

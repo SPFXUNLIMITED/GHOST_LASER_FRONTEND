@@ -350,9 +350,14 @@ $is_task = ($booking_source === 'Internal' && !empty($body['is_task']));
 $services_raw   = isset($body['services']) && is_array($body['services']) ? $body['services'] : [];
 $services_input = array_values(array_filter(array_map('strval', $services_raw)));
 $other_service  = str_field($body, 'other_service');
-$service_speed  = str_field($body, 'service_speed');
-if (!in_array($service_speed, ['standard', 'rush', 'emergency'], true)) {
-    $service_speed = 'standard';
+$service_speed_raw = str_field($body, 'service_speed');
+// For task bookings, service_speed is not applicable and will be stored as NULL.
+// For customer bookings, the caller must supply a recognised value; no silent default.
+$service_speed = null;
+if (!$is_task) {
+    $service_speed = in_array($service_speed_raw, ['standard', 'rush', 'emergency'], true)
+        ? $service_speed_raw
+        : null;
 }
 $service_request_id = isset($body['service_request_id']) && is_numeric($body['service_request_id'])
     ? (int) $body['service_request_id']
@@ -517,6 +522,12 @@ if ($zip === '') {
 if (!in_array($priority, ['standard', 'vip', 'emergency'], true)) {
     $msg = 'Priority must be one of: standard, vip, emergency.';
     $errors[] = $msg; $field_errors['priority'] = $msg;
+}
+
+// service_speed is required for customer bookings; tasks do not use it.
+if (!$is_task && $service_speed === null) {
+    $msg = 'Service speed is required. Please select a service option.';
+    $errors[] = $msg; $field_errors['service_speed'] = $msg;
 }
 
 if ($errors) {
