@@ -544,8 +544,11 @@ function calculateClusterTimeWindows(array $jobs, array $settings): array
             'estimated_arrival'           => sprintf('%02d:%02d', intdiv($arrivalMinutes, 60) % 24, $arrivalMinutes % 60),
         ];
 
-        // Advance the clock: complete this job, observe the buffer, then drive.
-        $currentMinutes = $arrivalMinutes + $avgJobDurationMinutes + $bufferMinutes;
+        // Advance the clock: complete this job (use per-job duration if set, otherwise global average), observe the buffer, then drive.
+        $jobDurationMinutes = isset($job['scheduled_duration_minutes']) && (int) $job['scheduled_duration_minutes'] > 0
+            ? (int) $job['scheduled_duration_minutes']
+            : $avgJobDurationMinutes;
+        $currentMinutes = $arrivalMinutes + $jobDurationMinutes + $bufferMinutes;
 
         if ($hasCoords) {
             $prevLat = (float) $job['latitude'];
@@ -903,7 +906,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $placeholders = implode(',', array_fill(0, count($clusterJobIds), '?'));
                 $validJobsStmt = $pdo->prepare("
-                    SELECT id, latitude, longitude
+                    SELECT id, latitude, longitude, scheduled_duration_minutes
                     FROM service_requests
                     WHERE id IN ({$placeholders})
                       AND request_status IN ('new', 'queued')
@@ -1212,7 +1215,8 @@ $jobs = $pdo->query("
         sr.priority_level,
         sr.problem_summary,
         sr.preferred_date_start,
-        sr.preferred_date_end
+        sr.preferred_date_end,
+        sr.scheduled_duration_minutes
     FROM service_requests sr
     LEFT JOIN customers c ON sr.customer_id = c.id
     WHERE sr.request_status IN ('new', 'queued')

@@ -358,6 +358,11 @@ $service_request_id = isset($body['service_request_id']) && is_numeric($body['se
     ? (int) $body['service_request_id']
     : 0;
 
+// Per-job duration for task bookings
+$duration_minutes = isset($body['duration_minutes']) && is_numeric($body['duration_minutes'])
+    ? (int) $body['duration_minutes']
+    : null;
+
 // Client-provided coordinates (pre-geocoded by the front-end)
 $client_lat = isset($body['latitude'])  && is_numeric($body['latitude'])  ? (float)$body['latitude']  : null;
 $client_lng = isset($body['longitude']) && is_numeric($body['longitude']) ? (float)$body['longitude'] : null;
@@ -519,6 +524,13 @@ if (!in_array($priority, ['standard', 'vip', 'emergency'], true)) {
     $errors[] = $msg; $field_errors['priority'] = $msg;
 }
 
+if ($is_task) {
+    if ($duration_minutes === null || $duration_minutes < 1) {
+        $msg = 'Duration (minutes) is required for task bookings and must be at least 1.';
+        $errors[] = $msg; $field_errors['duration_minutes'] = $msg;
+    }
+}
+
 if ($errors) {
     http_response_code(400);
     echo json_encode([
@@ -562,6 +574,7 @@ foreach ([
     'destination_city'     => "VARCHAR(100) NULL COMMENT 'Destination city for task-type service requests'",
     'destination_state'    => "VARCHAR(100) NULL COMMENT 'Destination state for task-type service requests'",
     'destination_zip'      => "VARCHAR(20)  NULL COMMENT 'Destination ZIP for task-type service requests'",
+    'scheduled_duration_minutes' => "SMALLINT UNSIGNED NULL COMMENT 'Per-job duration in minutes (used by the scheduler instead of the global default)'",
 ] as $_col => $_def) {
     try {
         $pdo->exec("ALTER TABLE service_requests ADD COLUMN {$_col} {$_def}");
@@ -690,14 +703,16 @@ try {
                 request_status, latitude, longitude, geocode_status,
                 preferred_date_start, preferred_date_end,
                 services, other_service, service_speed,
-                task_contact, destination_street, destination_city, destination_state, destination_zip
+                task_contact, destination_street, destination_city, destination_state, destination_zip,
+                scheduled_duration_minutes
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 'new', ?, ?, ?,
                 ?, ?,
                 ?, ?, ?,
-                ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?,
+                ?
             )
         ");
         $stmt->execute([
@@ -723,6 +738,7 @@ try {
             $is_task ? $city  : null,
             $is_task ? $state : null,
             $is_task ? $zip   : null,
+            $is_task ? $duration_minutes : null,
         ]);
         $serviceRequestId = (int) $pdo->lastInsertId();
     }

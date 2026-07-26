@@ -185,6 +185,10 @@ require_once __DIR__ . '/templates/header.php';
                             <option value="emergency">Emergency</option>
                         </select>
                     </div>
+                    <div>
+                        <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-zinc-400" for="duration_minutes">Duration (minutes) *</label>
+                        <input class="input-base" type="number" id="duration_minutes" name="duration_minutes" min="1" placeholder="e.g. 60" required>
+                    </div>
                 </div>
             </div>
 
@@ -358,6 +362,7 @@ require_once __DIR__ . '/templates/header.php';
                 password: '',
                 confirm_password: '',
                 priority: form.priority.value,
+                duration_minutes: parseInt(form.duration_minutes.value, 10) || null,
                 booking_source: 'Internal',
                 website: form.website.value.trim(),
                 services: [],
