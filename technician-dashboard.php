@@ -42,19 +42,20 @@ $scheduledJobsStmt = $pdo->prepare("
         sr.id AS service_request_id,
         sr.priority_level,
         sr.problem_summary,
-        c.first_name,
-        c.last_name,
-        c.phone,
-        c.email,
-        c.company,
-        c.address,
-        c.city,
-        c.state,
-        c.zip
+        sr.task_contact,
+        COALESCE(c.first_name, '') AS first_name,
+        COALESCE(c.last_name,  '') AS last_name,
+        COALESCE(c.phone,  '') AS phone,
+        COALESCE(c.email,  '') AS email,
+        COALESCE(c.company,'') AS company,
+        COALESCE(c.address, sr.destination_street) AS address,
+        COALESCE(c.city,    sr.destination_city)   AS city,
+        COALESCE(c.state,   sr.destination_state)  AS state,
+        COALESCE(c.zip,     sr.destination_zip)    AS zip
     FROM scheduled_clusters sc
     JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
     JOIN service_requests sr ON sr.id = scj.service_request_id
-    JOIN customers c ON c.id = sr.customer_id
+    LEFT JOIN customers c ON c.id = sr.customer_id
     WHERE sc.scheduled_date = :date
     ORDER BY
         FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
@@ -749,7 +750,11 @@ require_once __DIR__ . '/templates/header.php';
                         $timeWindow  = techDashTimeWindow($job['time_window_start'] ?? null, $job['time_window_end'] ?? null);
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
                         if ($customerName === '') {
-                            $customerName = 'Unknown Customer';
+                            // Fall back to task_contact (company or contact name) for task-type rows.
+                            $customerName = trim((string) ($job['task_contact'] ?? ''));
+                        }
+                        if ($customerName === '') {
+                            $customerName = 'Internal Task';
                         }
                         ?>
                         <div class="job-card">

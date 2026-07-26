@@ -32,11 +32,11 @@ try {
                 sr.*,
                 sr.latitude,
                 sr.longitude,
-                c.first_name,
-                c.last_name,
-                c.city
+                COALESCE(c.first_name, sr.task_contact, '') AS first_name,
+                COALESCE(c.last_name,  '') AS last_name,
+                COALESCE(c.city, sr.destination_city) AS city
             FROM service_requests sr
-            JOIN customers c ON sr.customer_id = c.id
+            LEFT JOIN customers c ON sr.customer_id = c.id
             WHERE sr.request_status IN ('new', 'queued')
             ORDER BY FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'), sr.created_at DESC";
 
@@ -45,7 +45,7 @@ try {
     foreach ($rows as $row) {
         $customerName = trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
         if ($customerName === '') {
-            $customerName = 'Unknown Customer';
+            $customerName = 'Internal Task';
         }
 
         $startDate = trim((string) ($row['preferred_date_start'] ?? ''));

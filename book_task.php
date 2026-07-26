@@ -260,15 +260,16 @@ require_once __DIR__ . '/templates/header.php';
 
             <div>
                 <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
+                <p class="mb-3 text-xs text-zinc-500">All contact fields are optional for tasks. Enter whatever is relevant for this dispatch.</p>
                 <div class="grid gap-5 sm:grid-cols-2">
-                    <div><input class="input-base" id="first_name" name="first_name" placeholder="First Name *" required></div>
-                    <div><input class="input-base" id="last_name" name="last_name" placeholder="Last Name *" required></div>
-                    <div class="sm:col-span-2"><input class="input-base" id="company_name" name="company_name" placeholder="Company Name (optional)"></div>
+                    <div><input class="input-base" id="first_name" name="first_name" placeholder="First Name"></div>
+                    <div><input class="input-base" id="last_name" name="last_name" placeholder="Last Name"></div>
+                    <div class="sm:col-span-2"><input class="input-base" id="company_name" name="company_name" placeholder="Company Name"></div>
                     <div>
-                        <input class="input-base" type="tel" inputmode="tel" id="phone" name="phone" placeholder="Phone Number *" required aria-describedby="phone-error" aria-invalid="false">
+                        <input class="input-base" type="tel" inputmode="tel" id="phone" name="phone" placeholder="Phone Number" aria-describedby="phone-error" aria-invalid="false">
                         <p id="phone-error" class="field-error hidden"></p>
                     </div>
-                    <div><input class="input-base" type="email" id="email" name="email" placeholder="Email Address *" required></div>
+                    <div><input class="input-base" type="email" id="email" name="email" placeholder="Email Address"></div>
                 </div>
             </div>
 
@@ -590,10 +591,15 @@ require_once __DIR__ . '/templates/header.php';
 
             if (!form.reportValidity()) return;
 
-            const normalizedPhone = normalizeUsPhone(form.phone.value);
-            if (!normalizedPhone) {
-                showError('Please enter a valid 10-digit US phone number.');
-                return;
+            // Phone is optional for tasks; validate only when a value is entered.
+            const rawPhone = form.phone.value.trim();
+            let normalizedPhone = null;
+            if (rawPhone !== '') {
+                normalizedPhone = normalizeUsPhone(rawPhone);
+                if (!normalizedPhone) {
+                    showError('If a phone number is entered, it must be a valid 10-digit US number.');
+                    return;
+                }
             }
 
             await geocodeAddress();
@@ -603,12 +609,14 @@ require_once __DIR__ . '/templates/header.php';
 
             const taskPurpose = form.problem.value.trim();
             const requestBody = {
+                is_task: true,
                 first_name: form.first_name.value.trim(),
                 last_name: form.last_name.value.trim(),
-                phone: `+1${normalizedPhone}`,
+                company_name: form.company_name.value.trim(),
+                phone: normalizedPhone ? `+1${normalizedPhone}` : '',
                 email: form.email.value.trim(),
-                machine_brand: 'Task',
-                machine_model: 'General Task',
+                machine_brand: '',
+                machine_model: '',
                 machine_watts: null,
                 machine_age: null,
                 address: form.address.value.trim(),

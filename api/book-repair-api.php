@@ -322,6 +322,7 @@ $phone         = str_field($body, 'phone');
 $email         = str_field($body, 'email');
 $password      = str_field($body, 'password');
 $confirm_password = str_field($body, 'confirm_password');
+$company_name  = str_field($body, 'company_name');
 $machine_brand = str_field($body, 'machine_brand');
 $machine_model = str_field($body, 'machine_model');
 $machine_watts = str_field($body, 'machine_watts');
@@ -338,6 +339,11 @@ $booking_source = str_field($body, 'booking_source');
 if (!in_array($booking_source, ['Internal', 'Website'], true)) {
     $booking_source = 'Website';
 }
+
+// ── Task flag: only trusted when booking_source is 'Internal' ────────────────
+// When true the submission represents an internal dispatch task (parts pickup,
+// dock run, delivery, etc.) that has no associated customer record.
+$is_task = ($booking_source === 'Internal' && !empty($body['is_task']));
 
 // ── Service fields ────────────────────────────────────────────────────────────
 // Keep only non-empty string values (service IDs submitted by the front-end)
@@ -363,75 +369,101 @@ $client_coords_valid = ($client_lat !== null && $client_lng !== null
 $errors       = [];
 $field_errors = [];
 
-if ($first_name === '') {
-    $msg = 'First name is required.';
-    $errors[] = $msg; $field_errors['first_name'] = $msg;
-} elseif (strlen($first_name) > 255) {
-    $msg = 'First name must be 255 characters or fewer.';
-    $errors[] = $msg; $field_errors['first_name'] = $msg;
-}
-
-if ($last_name === '') {
-    $msg = 'Last name is required.';
-    $errors[] = $msg; $field_errors['last_name'] = $msg;
-} elseif (strlen($last_name) > 255) {
-    $msg = 'Last name must be 255 characters or fewer.';
-    $errors[] = $msg; $field_errors['last_name'] = $msg;
-}
-
-if ($phone === '') {
-    $msg = 'Phone number is required.';
-    $errors[] = $msg; $field_errors['phone'] = $msg;
-} elseif (strlen($phone) > 100) {
-    $msg = 'Phone number must be 100 characters or fewer.';
-    $errors[] = $msg; $field_errors['phone'] = $msg;
-}
-
-if ($email === '') {
-    $msg = 'Email address is required.';
-    $errors[] = $msg; $field_errors['email'] = $msg;
-} elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    $msg = 'A valid email address is required.';
-    $errors[] = $msg; $field_errors['email'] = $msg;
-} elseif (strlen($email) > 255) {
-    $msg = 'Email address must be 255 characters or fewer.';
-    $errors[] = $msg; $field_errors['email'] = $msg;
-}
-
-if (empty($_SESSION['customer_id']) && empty($_SESSION['admin_id'])) {
-    if ($password === '') {
-        $msg = 'Password is required.';
-        $errors[] = $msg; $field_errors['password'] = $msg;
-    } elseif (strlen($password) < 8) {
-        $msg = 'Password must be at least 8 characters.';
-        $errors[] = $msg; $field_errors['password'] = $msg;
+// Customer-identity fields: required for regular bookings, optional for tasks.
+if (!$is_task) {
+    if ($first_name === '') {
+        $msg = 'First name is required.';
+        $errors[] = $msg; $field_errors['first_name'] = $msg;
+    } elseif (strlen($first_name) > 255) {
+        $msg = 'First name must be 255 characters or fewer.';
+        $errors[] = $msg; $field_errors['first_name'] = $msg;
     }
 
-    if ($confirm_password === '') {
-        $msg = 'Confirm password is required.';
-        $errors[] = $msg; $field_errors['confirm_password'] = $msg;
-    } elseif ($password !== '' && $password !== $confirm_password) {
-        $msg = 'Passwords do not match.';
-        $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+    if ($last_name === '') {
+        $msg = 'Last name is required.';
+        $errors[] = $msg; $field_errors['last_name'] = $msg;
+    } elseif (strlen($last_name) > 255) {
+        $msg = 'Last name must be 255 characters or fewer.';
+        $errors[] = $msg; $field_errors['last_name'] = $msg;
+    }
+
+    if ($phone === '') {
+        $msg = 'Phone number is required.';
+        $errors[] = $msg; $field_errors['phone'] = $msg;
+    } elseif (strlen($phone) > 100) {
+        $msg = 'Phone number must be 100 characters or fewer.';
+        $errors[] = $msg; $field_errors['phone'] = $msg;
+    }
+
+    if ($email === '') {
+        $msg = 'Email address is required.';
+        $errors[] = $msg; $field_errors['email'] = $msg;
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $msg = 'A valid email address is required.';
+        $errors[] = $msg; $field_errors['email'] = $msg;
+    } elseif (strlen($email) > 255) {
+        $msg = 'Email address must be 255 characters or fewer.';
+        $errors[] = $msg; $field_errors['email'] = $msg;
+    }
+
+    if (empty($_SESSION['customer_id']) && empty($_SESSION['admin_id'])) {
+        if ($password === '') {
+            $msg = 'Password is required.';
+            $errors[] = $msg; $field_errors['password'] = $msg;
+        } elseif (strlen($password) < 8) {
+            $msg = 'Password must be at least 8 characters.';
+            $errors[] = $msg; $field_errors['password'] = $msg;
+        }
+
+        if ($confirm_password === '') {
+            $msg = 'Confirm password is required.';
+            $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+        } elseif ($password !== '' && $password !== $confirm_password) {
+            $msg = 'Passwords do not match.';
+            $errors[] = $msg; $field_errors['confirm_password'] = $msg;
+        }
+    }
+
+    if ($machine_brand === '') {
+        $msg = 'Machine brand is required.';
+        $errors[] = $msg; $field_errors['machine_brand'] = $msg;
+    } elseif (strlen($machine_brand) > 100) {
+        $msg = 'Machine brand must be 100 characters or fewer.';
+        $errors[] = $msg; $field_errors['machine_brand'] = $msg;
+    }
+
+    if ($machine_model === '') {
+        $msg = 'Machine model is required.';
+        $errors[] = $msg; $field_errors['machine_model'] = $msg;
+    } elseif (strlen($machine_model) > 100) {
+        $msg = 'Machine model must be 100 characters or fewer.';
+        $errors[] = $msg; $field_errors['machine_model'] = $msg;
+    }
+} else {
+    // Tasks: validate length-only for optional contact fields when provided.
+    if ($first_name !== '' && strlen($first_name) > 255) {
+        $msg = 'First name must be 255 characters or fewer.';
+        $errors[] = $msg; $field_errors['first_name'] = $msg;
+    }
+    if ($last_name !== '' && strlen($last_name) > 255) {
+        $msg = 'Last name must be 255 characters or fewer.';
+        $errors[] = $msg; $field_errors['last_name'] = $msg;
+    }
+    if ($phone !== '' && strlen($phone) > 100) {
+        $msg = 'Phone number must be 100 characters or fewer.';
+        $errors[] = $msg; $field_errors['phone'] = $msg;
+    }
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $msg = 'If provided, email must be a valid address.';
+        $errors[] = $msg; $field_errors['email'] = $msg;
+    }
+    if ($company_name !== '' && strlen($company_name) > 255) {
+        $msg = 'Company name must be 255 characters or fewer.';
+        $errors[] = $msg; $field_errors['company_name'] = $msg;
     }
 }
 
-if ($machine_brand === '') {
-    $msg = 'Machine brand is required.';
-    $errors[] = $msg; $field_errors['machine_brand'] = $msg;
-} elseif (strlen($machine_brand) > 100) {
-    $msg = 'Machine brand must be 100 characters or fewer.';
-    $errors[] = $msg; $field_errors['machine_brand'] = $msg;
-}
-
-if ($machine_model === '') {
-    $msg = 'Machine model is required.';
-    $errors[] = $msg; $field_errors['machine_model'] = $msg;
-} elseif (strlen($machine_model) > 100) {
-    $msg = 'Machine model must be 100 characters or fewer.';
-    $errors[] = $msg; $field_errors['machine_model'] = $msg;
-}
-
+// These fields are required for all submission types.
 if ($machine_watts !== '' && strlen($machine_watts) > 50) {
     $msg = 'Machine wattage must be 50 characters or fewer.';
     $errors[] = $msg; $field_errors['machine_watts'] = $msg;
@@ -443,7 +475,7 @@ if ($machine_age !== '' && strlen($machine_age) > 50) {
 }
 
 if ($problem === '') {
-    $msg = 'Problem description is required.';
+    $msg = $is_task ? 'Task purpose / destination notes are required.' : 'Problem description is required.';
     $errors[] = $msg; $field_errors['problem'] = $msg;
 } elseif (strlen($problem) > 5000) {
     $msg = 'Problem description must be 5000 characters or fewer.';
@@ -451,7 +483,7 @@ if ($problem === '') {
 }
 
 if ($street === '') {
-    $msg = 'Street address is required.';
+    $msg = $is_task ? 'Destination address is required.' : 'Street address is required.';
     $errors[] = $msg; $field_errors['address'] = $msg;
 } elseif (strlen($street) > 255) {
     $msg = 'Street address must be 255 characters or fewer.';
@@ -499,6 +531,7 @@ if ($errors) {
             'last_name'     => $last_name,
             'phone'         => $phone,
             'email'         => $email,
+            'company_name'  => $company_name,
             'machine_brand' => $machine_brand,
             'machine_model' => $machine_model,
             'machine_watts' => $machine_watts,
@@ -510,6 +543,7 @@ if ($errors) {
             'zip'           => $zip,
             'country'       => $country,
             'priority'      => $priority,
+            'is_task'       => $is_task,
         ],
     ]);
     exit;
@@ -520,9 +554,14 @@ $problem_summary = mb_substr($problem, 0, 255);
 
 // ── Ensure service columns exist on service_requests ─────────────────────────
 foreach ([
-    'services'      => "JSON        NULL COMMENT 'Selected service IDs as JSON array'",
-    'other_service' => "TEXT        NULL COMMENT 'Other service description when \"Other\" is selected'",
-    'service_speed' => "VARCHAR(50) NULL COMMENT 'Service speed/tier key'",
+    'services'             => "JSON         NULL COMMENT 'Selected service IDs as JSON array'",
+    'other_service'        => "TEXT         NULL COMMENT 'Other service description when \"Other\" is selected'",
+    'service_speed'        => "VARCHAR(50)  NULL COMMENT 'Service speed/tier key'",
+    'task_contact'         => "VARCHAR(255) NULL COMMENT 'Company or contact name for task-type service requests'",
+    'destination_street'   => "VARCHAR(255) NULL COMMENT 'Destination street address for task-type service requests'",
+    'destination_city'     => "VARCHAR(100) NULL COMMENT 'Destination city for task-type service requests'",
+    'destination_state'    => "VARCHAR(100) NULL COMMENT 'Destination state for task-type service requests'",
+    'destination_zip'      => "VARCHAR(20)  NULL COMMENT 'Destination ZIP for task-type service requests'",
 ] as $_col => $_def) {
     try {
         $pdo->exec("ALTER TABLE service_requests ADD COLUMN {$_col} {$_def}");
@@ -532,21 +571,55 @@ foreach ([
 }
 unset($_col, $_def);
 
+// Ensure customer_id is nullable so task rows can omit it.
+try {
+    $pdo->exec("ALTER TABLE service_requests MODIFY COLUMN customer_id INT NULL");
+} catch (\Throwable $_ex) {
+    // Column already nullable — non-fatal
+}
+
 // ── Insert/update service_requests ────────────────────────────────────────────
 try {
-    $customer_id = resolve_customer_id(
-        $pdo,
-        $first_name,
-        $last_name,
-        $phone,
-        $email,
-        $password,
-        $street,
-        $city,
-        $state,
-        $zip,
-        $country
-    );
+    if ($is_task) {
+        // Task path: skip customer record entirely.
+        $customer_id = null;
+
+        // Build a structured contact header and prepend it to problem_details
+        // so the full context is visible anywhere problem_details is displayed.
+        $contact_parts = array_filter([
+            $company_name !== '' ? $company_name  : null,
+            $first_name !== '' || $last_name !== '' ? trim("{$first_name} {$last_name}") : null,
+            $phone !== '' ? $phone : null,
+            $email !== '' ? $email : null,
+        ]);
+        $task_contact_label = implode(' | ', $contact_parts);
+        if ($task_contact_label !== '') {
+            $problem = "[Task Contact: {$task_contact_label}]\n\n" . $problem;
+            // Rebuild summary after prepending (cap at 255 chars)
+            $problem_summary = mb_substr($problem, 0, 255);
+        }
+
+        // task_contact column: prefer company_name, fall back to personal name.
+        $task_contact_value = $company_name !== ''
+            ? $company_name
+            : trim("{$first_name} {$last_name}");
+        $task_contact_value = $task_contact_value !== '' ? $task_contact_value : null;
+    } else {
+        $customer_id = resolve_customer_id(
+            $pdo,
+            $first_name,
+            $last_name,
+            $phone,
+            $email,
+            $password,
+            $street,
+            $city,
+            $state,
+            $zip,
+            $country
+        );
+        $task_contact_value = null;
+    }
 
     // Geocode the service address (use client-provided coords if valid, otherwise geocode server-side)
     if ($client_coords_valid) {
@@ -616,19 +689,21 @@ try {
                 problem_summary, problem_details, priority_level, source,
                 request_status, latitude, longitude, geocode_status,
                 preferred_date_start, preferred_date_end,
-                services, other_service, service_speed
+                services, other_service, service_speed,
+                task_contact, destination_street, destination_city, destination_state, destination_zip
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 'new', ?, ?, ?,
                 ?, ?,
-                ?, ?, ?
+                ?, ?, ?,
+                ?, ?, ?, ?, ?
             )
         ");
         $stmt->execute([
             $customer_id,
-            $machine_brand,
-            $machine_model,
+            $is_task ? 'Task' : $machine_brand,
+            $is_task ? 'General Task' : $machine_model,
             $machine_watts ?: null,
             $machine_age ?: null,
             $problem_summary,
@@ -643,6 +718,11 @@ try {
             $servicePayloadJson,
             $other_service !== '' ? $other_service : null,
             $service_speed,
+            $task_contact_value,
+            $is_task ? $street : null,
+            $is_task ? $city  : null,
+            $is_task ? $state : null,
+            $is_task ? $zip   : null,
         ]);
         $serviceRequestId = (int) $pdo->lastInsertId();
     }
