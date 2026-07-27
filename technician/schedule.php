@@ -249,12 +249,37 @@ function formatCustomerAddress(array $customer): string
 /**
  * Build the scheduling window each job should follow based on its priority.
  */
-function getPriorityScheduleWindow($priorityLevel, array $settings)
+function formatVisitDurationSummary(?int $durationMinutes, array $settings): string
+{
+    $resolvedMinutes = (int) ($durationMinutes ?? 0);
+    if ($resolvedMinutes <= 0) {
+        $hours = max(1, (int) ($settings['default_time_window_size_hours'] ?? 2));
+        return $hours . ' hour' . ($hours === 1 ? '' : 's') . ' per visit';
+    }
+
+    $hours = intdiv($resolvedMinutes, 60);
+    $minutes = $resolvedMinutes % 60;
+    $parts = [];
+
+    if ($hours > 0) {
+        $parts[] = $hours . ' hour' . ($hours === 1 ? '' : 's');
+    }
+
+    if ($minutes > 0) {
+        $parts[] = $minutes . ' min';
+    }
+
+    return implode(' ', $parts) . ' per visit';
+}
+
+/**
+ * Build the scheduling window each job should follow based on its priority.
+ */
+function getPriorityScheduleWindow($priorityLevel, array $settings, ?int $durationMinutes = null)
 {
     $today = new DateTimeImmutable('today');
     $normalizedPriority = strtolower((string) $priorityLevel);
-    $timeWindowHours = max(1, (int) ($settings['default_time_window_size_hours'] ?? 2));
-    $timeWindowSummary = $timeWindowHours . ' hour' . ($timeWindowHours === 1 ? '' : 's') . ' per visit';
+    $timeWindowSummary = formatVisitDurationSummary($durationMinutes, $settings);
 
     switch ($normalizedPriority) {
         case 'emergency':
@@ -1330,12 +1355,16 @@ $jobs = $pdo->query("
     ORDER BY FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'), sr.id DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
+$jobsDurationError = resolveJobDurationsFromServices($pdo, $jobs);
+
 foreach ($jobs as &$job) {
-    $job['priority_meta'] = getPriorityScheduleWindow($job['priority_level'] ?? 'standard', $schedulingSettings);
+    $job['priority_meta'] = getPriorityScheduleWindow(
+        $job['priority_level'] ?? 'standard',
+        $schedulingSettings,
+        isset($job['duration_minutes']) ? (int) $job['duration_minutes'] : null
+    );
 }
 unset($job);
-
-$jobsDurationError = resolveJobDurationsFromServices($pdo, $jobs);
 
 $clusterableJobs = array_values(array_filter($jobs, function ($job) {
     return hasValidCoordinates($job['latitude'] ?? null, $job['longitude'] ?? null);
@@ -1399,7 +1428,21 @@ foreach ($scheduledJobs as $scheduledJob) {
     $scheduledClusterId = (int) $scheduledJob['scheduled_cluster_id'];
     $customerName = trim((string) $scheduledJob['first_name'] . ' ' . (string) $scheduledJob['last_name']);
     $scheduledJob['customer_name'] = $customerName !== '' ? $customerName : 'Internal Task';
-    $scheduledJob['priority_meta'] = getPriorityScheduleWindow($scheduledJob['priority_level'] ?? 'standard', $schedulingSettings);
+    $durationFromWindow = null;
+    $storedStart = trim((string) ($scheduledJob['time_window_start'] ?? ''));
+    $storedEnd = trim((string) ($scheduledJob['time_window_end'] ?? ''));
+    if ($storedStart !== '' && $storedEnd !== '') {
+        $startMinutes = (int) substr($storedStart, 0, 2) * 60 + (int) substr($storedStart, 3, 2);
+        $endMinutes = (int) substr($storedEnd, 0, 2) * 60 + (int) substr($storedEnd, 3, 2);
+        if ($endMinutes > $startMinutes) {
+            $durationFromWindow = $endMinutes - $startMinutes;
+        }
+    }
+    $scheduledJob['priority_meta'] = getPriorityScheduleWindow(
+        $scheduledJob['priority_level'] ?? 'standard',
+        $schedulingSettings,
+        $durationFromWindow
+    );
     $scheduledJob['service_address'] = formatCustomerAddress($scheduledJob);
     $scheduledJob['time_window_label'] = formatStoredTimeWindow(
         $scheduledJob['time_window_start'] ?? null,
