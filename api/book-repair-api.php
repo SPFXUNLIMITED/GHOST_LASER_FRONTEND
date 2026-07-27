@@ -354,6 +354,9 @@ $service_speed  = str_field($body, 'service_speed');
 if (!in_array($service_speed, ['standard', 'rush', 'emergency'], true)) {
     $service_speed = 'standard';
 }
+$duration_minutes = isset($body['duration_minutes']) && is_numeric($body['duration_minutes']) && (int)$body['duration_minutes'] > 0
+    ? (int)$body['duration_minutes']
+    : null;
 $service_request_id = isset($body['service_request_id']) && is_numeric($body['service_request_id'])
     ? (int) $body['service_request_id']
     : 0;
@@ -562,6 +565,7 @@ foreach ([
     'destination_city'     => "VARCHAR(100) NULL COMMENT 'Destination city for task-type service requests'",
     'destination_state'    => "VARCHAR(100) NULL COMMENT 'Destination state for task-type service requests'",
     'destination_zip'      => "VARCHAR(20)  NULL COMMENT 'Destination ZIP for task-type service requests'",
+    'duration_minutes'     => "SMALLINT     UNSIGNED NULL COMMENT 'Estimated task duration in minutes'",
 ] as $_col => $_def) {
     try {
         $pdo->exec("ALTER TABLE service_requests ADD COLUMN {$_col} {$_def}");
@@ -690,14 +694,16 @@ try {
                 request_status, latitude, longitude, geocode_status,
                 preferred_date_start, preferred_date_end,
                 services, other_service, service_speed,
-                task_contact, destination_street, destination_city, destination_state, destination_zip
+                task_contact, destination_street, destination_city, destination_state, destination_zip,
+                duration_minutes
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 'new', ?, ?, ?,
                 ?, ?,
                 ?, ?, ?,
-                ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?,
+                ?
             )
         ");
         $stmt->execute([
@@ -723,6 +729,7 @@ try {
             $is_task ? $city  : null,
             $is_task ? $state : null,
             $is_task ? $zip   : null,
+            $duration_minutes,
         ]);
         $serviceRequestId = (int) $pdo->lastInsertId();
     }
