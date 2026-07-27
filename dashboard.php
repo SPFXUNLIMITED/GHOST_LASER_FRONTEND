@@ -166,21 +166,21 @@ require_once __DIR__ . '/templates/header.php';
                         </a>
                         <a
                             href="bookings.php"
-                            class="inline-flex w-full items-center gap-2 rounded-md border border-cyan-700/60 bg-cyan-950/30 hover:border-cyan-500/60 hover:bg-cyan-950/50 text-cyan-300 font-medium text-sm px-4 py-2.5 transition-all"
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-violet-700/60 bg-violet-950/30 hover:border-violet-500/60 hover:bg-violet-950/50 text-violet-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
-                            Bookings
+                            All Bookings
                         </a>
                         <a
                             href="book_internal.php"
                             class="inline-flex w-full items-center gap-2 rounded-md border border-amber-700/60 bg-amber-950/30 hover:border-amber-500/60 hover:bg-amber-950/50 text-amber-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
-                            Internal Booking (Phone-In)
+                            Book Customer
                         </a>
                         <a
                             href="book_task.php"
-                            class="inline-flex w-full items-center gap-2 rounded-md border border-cyan-700/60 bg-cyan-950/30 hover:border-cyan-500/60 hover:bg-cyan-950/50 text-cyan-300 font-medium text-sm px-4 py-2.5 transition-all"
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-emerald-700/60 bg-emerald-950/30 hover:border-emerald-500/60 hover:bg-emerald-950/50 text-emerald-300 font-medium text-sm px-4 py-2.5 transition-all"
                         >
-                            Internal Task Booking
+                            Book Task
                         </a>
 
                         <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 pt-3">Tracking &amp; Compliance</p>
