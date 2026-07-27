@@ -17,10 +17,24 @@ function ensureServicesTable(PDO $pdo): void
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             service_name VARCHAR(255) NOT NULL,
             base_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            duration_minutes INT UNSIGNED NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
     ");
+}
+
+function ensureServicesDurationColumn(PDO $pdo): void
+{
+    $exists = (int) $pdo->query("
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'services'
+          AND COLUMN_NAME  = 'duration_minutes'
+    ")->fetchColumn();
+    if (!$exists) {
+        $pdo->exec("ALTER TABLE services ADD COLUMN duration_minutes INT UNSIGNED NOT NULL DEFAULT 0 AFTER base_price");
+    }
 }
 
 function seedServicesIfEmpty(PDO $pdo): void
@@ -30,24 +44,25 @@ function seedServicesIfEmpty(PDO $pdo): void
         return;
     }
     $defaults = [
-        ['Maintenance & Alignment', 150.00],
-        ['Tube Change',             320.00],
-        ['Diagnosis',               120.00],
-        ['Training',                180.00],
-        ['Other',                   100.00],
+        ['Maintenance & Alignment', 150.00, 90],
+        ['Tube Change',             320.00, 120],
+        ['Diagnosis',               120.00, 60],
+        ['Training',                180.00, 120],
+        ['Other',                   100.00, 60],
     ];
-    $stmt = $pdo->prepare("INSERT INTO services (service_name, base_price) VALUES (:name, :price)");
-    foreach ($defaults as [$name, $price]) {
-        $stmt->execute([':name' => $name, ':price' => $price]);
+    $stmt = $pdo->prepare("INSERT INTO services (service_name, base_price, duration_minutes) VALUES (:name, :price, :duration)");
+    foreach ($defaults as [$name, $price, $duration]) {
+        $stmt->execute([':name' => $name, ':price' => $price, ':duration' => $duration]);
     }
 }
 
 function getServices(PDO $pdo): array
 {
-    return $pdo->query("SELECT id, service_name, base_price FROM services ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+    return $pdo->query("SELECT id, service_name, base_price, duration_minutes FROM services ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 }
 
 ensureServicesTable($pdo);
+ensureServicesDurationColumn($pdo);
 seedServicesIfEmpty($pdo);
 
 // --- Handle POST actions ---
@@ -59,23 +74,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string) ($_POST['action'] ?? ''));
 
     if ($action === 'add') {
-        $name  = trim((string) ($_POST['service_name'] ?? ''));
-        $price = trim((string) ($_POST['base_price'] ?? ''));
+        $name     = trim((string) ($_POST['service_name'] ?? ''));
+        $price    = trim((string) ($_POST['base_price'] ?? ''));
+        $duration = trim((string) ($_POST['duration_minutes'] ?? ''));
 
         if ($name === '') {
             $errorMessage = 'Service name is required.';
         } elseif (!is_numeric($price) || (float) $price < 0) {
             $errorMessage = 'Base price must be a valid non-negative number.';
+        } elseif (!ctype_digit($duration) || (int) $duration < 1) {
+            $errorMessage = 'Duration must be a whole number of minutes (minimum 1).';
         } else {
-            $stmt = $pdo->prepare("INSERT INTO services (service_name, base_price) VALUES (:name, :price)");
-            $stmt->execute([':name' => $name, ':price' => round((float) $price, 2)]);
+            $stmt = $pdo->prepare("INSERT INTO services (service_name, base_price, duration_minutes) VALUES (:name, :price, :duration)");
+            $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration]);
             $successMessage = 'Service added successfully.';
         }
 
     } elseif ($action === 'edit') {
-        $id    = (int) ($_POST['id'] ?? 0);
-        $name  = trim((string) ($_POST['service_name'] ?? ''));
-        $price = trim((string) ($_POST['base_price'] ?? ''));
+        $id       = (int) ($_POST['id'] ?? 0);
+        $name     = trim((string) ($_POST['service_name'] ?? ''));
+        $price    = trim((string) ($_POST['base_price'] ?? ''));
+        $duration = trim((string) ($_POST['duration_minutes'] ?? ''));
 
         if ($id <= 0) {
             $errorMessage = 'Invalid service ID.';
@@ -83,9 +102,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errorMessage = 'Service name is required.';
         } elseif (!is_numeric($price) || (float) $price < 0) {
             $errorMessage = 'Base price must be a valid non-negative number.';
+        } elseif (!ctype_digit($duration) || (int) $duration < 1) {
+            $errorMessage = 'Duration must be a whole number of minutes (minimum 1).';
         } else {
-            $stmt = $pdo->prepare("UPDATE services SET service_name = :name, base_price = :price WHERE id = :id");
-            $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':id' => $id]);
+            $stmt = $pdo->prepare("UPDATE services SET service_name = :name, base_price = :price, duration_minutes = :duration WHERE id = :id");
+            $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration, ':id' => $id]);
             $successMessage = 'Service updated successfully.';
         }
 
@@ -182,6 +203,7 @@ require_once __DIR__ . '/templates/header.php';
                             <tr class="border-b border-zinc-800">
                                 <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Service Name</th>
                                 <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Base Price</th>
+                                <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Duration</th>
                                 <th class="pb-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500">Actions</th>
                             </tr>
                         </thead>
@@ -194,11 +216,14 @@ require_once __DIR__ . '/templates/header.php';
                                 <td class="py-3.5 pr-4 text-zinc-300">
                                     $<?= number_format((float) $svc['base_price'], 2) ?>
                                 </td>
+                                <td class="py-3.5 pr-4 text-zinc-300">
+                                    <?= (int) $svc['duration_minutes'] ?> min
+                                </td>
                                 <td class="py-3.5 text-right">
                                     <div class="inline-flex items-center gap-2">
                                         <button
                                             type="button"
-                                            onclick="openEditModal(<?= (int) $svc['id'] ?>, <?= htmlspecialchars(json_encode($svc['service_name']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode($svc['base_price']), ENT_QUOTES, 'UTF-8') ?>)"
+                                            onclick="openEditModal(<?= (int) $svc['id'] ?>, <?= htmlspecialchars(json_encode($svc['service_name']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode($svc['base_price']), ENT_QUOTES, 'UTF-8') ?>, <?= (int) $svc['duration_minutes'] ?>)"
                                             class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-cyan-500/50 hover:text-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
                                         >
                                             Edit
@@ -258,6 +283,19 @@ require_once __DIR__ . '/templates/header.php';
                             placeholder="0.00"
                         >
                     </div>
+                    <div>
+                        <label for="add-duration-minutes" class="block text-xs font-medium text-zinc-400 mb-1.5">Duration (minutes)</label>
+                        <input
+                            type="number"
+                            id="add-duration-minutes"
+                            name="duration_minutes"
+                            required
+                            min="1"
+                            step="1"
+                            class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                            placeholder="e.g. 90"
+                        >
+                    </div>
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button
@@ -309,6 +347,18 @@ require_once __DIR__ . '/templates/header.php';
                             class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
                         >
                     </div>
+                    <div>
+                        <label for="edit-duration-minutes" class="block text-xs font-medium text-zinc-400 mb-1.5">Duration (minutes)</label>
+                        <input
+                            type="number"
+                            id="edit-duration-minutes"
+                            name="duration_minutes"
+                            required
+                            min="1"
+                            step="1"
+                            class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+                        >
+                    </div>
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button
@@ -340,10 +390,11 @@ require_once __DIR__ . '/templates/header.php';
         function closeAddModal() {
             addModal.classList.add('hidden');
         }
-        function openEditModal(id, name, price) {
-            document.getElementById('edit-id').value          = id;
-            document.getElementById('edit-service-name').value = name;
-            document.getElementById('edit-base-price').value  = parseFloat(price).toFixed(2);
+        function openEditModal(id, name, price, duration) {
+            document.getElementById('edit-id').value               = id;
+            document.getElementById('edit-service-name').value     = name;
+            document.getElementById('edit-base-price').value       = parseFloat(price).toFixed(2);
+            document.getElementById('edit-duration-minutes').value = parseInt(duration, 10);
             editModal.classList.remove('hidden');
             document.getElementById('edit-service-name').focus();
         }
