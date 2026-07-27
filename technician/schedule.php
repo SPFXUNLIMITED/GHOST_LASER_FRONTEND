@@ -468,20 +468,111 @@ function formatStoredTimeWindow(?string $start, ?string $end): ?string
 }
 
 /**
+ * Resolve per-job duration by summing the `duration_minutes` of every service
+ * referenced in the job's `services` JSON column.
+ *
+ * On success each job element receives a `duration_minutes` key holding the
+ * summed value and the function returns null.
+ *
+ * On failure (no services assigned, unknown service ID, or any service that has
+ * duration_minutes = 0) the function returns a human-readable error string and
+ * leaves $jobs unmodified.
+ *
+ * @param PDO     $pdo
+ * @param array[] $jobs  Each element must carry an 'id' and a 'services' key
+ *                        (the raw JSON stored in service_requests.services).
+ *
+ * @return string|null  null on success, error message on failure.
+ */
+function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
+{
+    // Collect every unique service ID referenced across all jobs.
+    $allServiceIds = [];
+    foreach ($jobs as $job) {
+        $servicesJson = trim((string) ($job['services'] ?? ''));
+        if ($servicesJson === '') {
+            return sprintf(
+                'Service request #%d has no services assigned. Duration cannot be calculated.',
+                (int) $job['id']
+            );
+        }
+        $ids = json_decode($servicesJson, true);
+        if (!is_array($ids) || $ids === []) {
+            return sprintf(
+                'Service request #%d has no services assigned. Duration cannot be calculated.',
+                (int) $job['id']
+            );
+        }
+        foreach ($ids as $id) {
+            $allServiceIds[(int) $id] = true;
+        }
+    }
+
+    if ($allServiceIds === []) {
+        return 'No service IDs found across jobs. Duration cannot be calculated.';
+    }
+
+    // Fetch duration_minutes and name for every referenced service in one query.
+    $uniqueIds    = array_keys($allServiceIds);
+    $placeholders = implode(',', array_fill(0, count($uniqueIds), '?'));
+    $stmt = $pdo->prepare("SELECT id, service_name, duration_minutes FROM services WHERE id IN ({$placeholders})");
+    $stmt->execute($uniqueIds);
+    $serviceRows = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $serviceRows[(int) $row['id']] = $row;
+    }
+
+    // Resolve each job's total duration.
+    $resolved = [];
+    foreach ($jobs as $job) {
+        $ids   = json_decode((string) $job['services'], true);
+        $total = 0;
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if (!array_key_exists($id, $serviceRows)) {
+                return sprintf(
+                    'Service #%d used by request #%d was not found in the services table.',
+                    $id,
+                    (int) $job['id']
+                );
+            }
+            $mins = (int) $serviceRows[$id]['duration_minutes'];
+            if ($mins <= 0) {
+                return sprintf(
+                    '"%s" has no duration set. Please set its duration in Service Settings before scheduling.',
+                    $serviceRows[$id]['service_name']
+                );
+            }
+            $total += $mins;
+        }
+        $resolved[(int) $job['id']] = $total;
+    }
+
+    // Write resolved durations back into the jobs array.
+    foreach ($jobs as &$job) {
+        $job['duration_minutes'] = $resolved[(int) $job['id']];
+    }
+    unset($job);
+
+    return null;
+}
+
+/**
  * Calculate a realistic arrival time window for every job in a cluster.
  *
  * The route starts at the shop location defined in scheduling settings and
  * walks through each job in the supplied order.  Every parameter — shop
- * coordinates, business start time, average job duration, buffer between
- * jobs, and customer-facing window size — is read exclusively from
- * $settings (the return value of getSchedulingSettings()).  Nothing is
- * hard-coded.
+ * coordinates, business start time, buffer between jobs, and customer-facing
+ * window size — is read exclusively from $settings.  Job duration is read
+ * from $job['duration_minutes'], which must be pre-resolved by
+ * resolveJobDurationsFromServices() before calling this function.  Nothing
+ * is hard-coded and no fallback to a global average is performed.
  *
  * Driving speed is estimated at 30 mph, a conservative figure for Southern
  * California urban/suburban routes that keeps windows realistic.
  *
  * @param array[] $jobs     Ordered list of jobs.  Each must carry 'id',
- *                          'latitude', and 'longitude'.
+ *                          'latitude', 'longitude', and 'duration_minutes'.
  * @param array   $settings Full scheduling-settings array from
  *                          getSchedulingSettings().
  *
@@ -504,9 +595,8 @@ function calculateClusterTimeWindows(array $jobs, array $settings): array
     $currentMinutes = $startHour * 60 + $startMin;
 
     // ── Timing parameters from settings ──────────────────────────────────────
-    $avgJobDurationMinutes = max(1, (int) $settings['average_job_duration_minutes']);
-    $bufferMinutes         = max(0, (int) $settings['default_buffer_between_jobs_minutes']);
-    $windowSizeMinutes     = max(60, (int) $settings['default_time_window_size_hours'] * 60);
+    $bufferMinutes     = max(0, (int) $settings['default_buffer_between_jobs_minutes']);
+    $windowSizeMinutes = max(60, (int) $settings['default_time_window_size_hours'] * 60);
 
     // Conservative urban/suburban driving speed for SoCal routes.
     $averageDrivingSpeedMph = 30.0;
@@ -545,7 +635,8 @@ function calculateClusterTimeWindows(array $jobs, array $settings): array
         ];
 
         // Advance the clock: complete this job, observe the buffer, then drive.
-        $currentMinutes = $arrivalMinutes + $avgJobDurationMinutes + $bufferMinutes;
+        $jobDurationMinutes = max(1, (int) ($job['duration_minutes'] ?? 0));
+        $currentMinutes = $arrivalMinutes + $jobDurationMinutes + $bufferMinutes;
 
         if ($hasCoords) {
             $prevLat = (float) $job['latitude'];
@@ -903,7 +994,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $placeholders = implode(',', array_fill(0, count($clusterJobIds), '?'));
                 $validJobsStmt = $pdo->prepare("
-                    SELECT id, latitude, longitude
+                    SELECT id, latitude, longitude, services
                     FROM service_requests
                     WHERE id IN ({$placeholders})
                       AND request_status IN ('new', 'queued')
@@ -944,6 +1035,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     // Calculate time windows from shop location + business start
                     // time — both read from scheduling settings, nothing hard-coded.
+                    // Job duration is the sum of duration_minutes for each selected service.
+                    $durationError = resolveJobDurationsFromServices($pdo, $validJobs);
+                    if ($durationError !== null) {
+                        $clusterAssignError = $durationError;
+                    } else {
                     $clusterTimeWindows = calculateClusterTimeWindows($validJobs, $schedulingSettings);
 
                     $pdo->beginTransaction();
@@ -974,6 +1070,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $parsedDate->format('M j, Y'),
                         count($validJobIds)
                     );
+                    } // end if no duration error
                 }
             } catch (Throwable $e) {
                 if ($pdo->inTransaction()) {
@@ -1212,7 +1309,8 @@ $jobs = $pdo->query("
         sr.priority_level,
         sr.problem_summary,
         sr.preferred_date_start,
-        sr.preferred_date_end
+        sr.preferred_date_end,
+        sr.services
     FROM service_requests sr
     LEFT JOIN customers c ON sr.customer_id = c.id
     WHERE sr.request_status IN ('new', 'queued')
@@ -1226,6 +1324,8 @@ foreach ($jobs as &$job) {
     $job['priority_meta'] = getPriorityScheduleWindow($job['priority_level'] ?? 'standard', $schedulingSettings);
 }
 unset($job);
+
+$jobsDurationError = resolveJobDurationsFromServices($pdo, $jobs);
 
 $clusterableJobs = array_values(array_filter($jobs, function ($job) {
     return hasValidCoordinates($job['latitude'] ?? null, $job['longitude'] ?? null);
@@ -1707,8 +1807,19 @@ require_once __DIR__ . '/../templates/header.php';
 
                                 <div class="mt-4 space-y-3">
                                     <?php
-                                    $previewTimeWindows = calculateClusterTimeWindows($cluster['jobs'], $schedulingSettings);
+                                    $previewTimeWindows  = [];
+                                    $previewDurationError = null;
+                                    if ($jobsDurationError !== null) {
+                                        $previewDurationError = $jobsDurationError;
+                                    } else {
+                                        $previewTimeWindows = calculateClusterTimeWindows($cluster['jobs'], $schedulingSettings);
+                                    }
                                     ?>
+                                    <?php if ($previewDurationError !== null): ?>
+                                        <div class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                                            <?= htmlspecialchars($previewDurationError, ENT_QUOTES, 'UTF-8') ?>
+                                        </div>
+                                    <?php endif; ?>
                                     <?php foreach ($cluster['jobs'] as $clusteredJob): ?>
                                         <?php $previewTw = $previewTimeWindows[(int) $clusteredJob['id']] ?? null; ?>
                                         <div class="rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 cluster-job-card" data-job-id="<?= (int) $clusteredJob['id'] ?>">
