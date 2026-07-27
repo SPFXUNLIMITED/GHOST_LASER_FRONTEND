@@ -3,6 +3,7 @@
 function getSchedulingSettingsDefaults(): array
 {
     return [
+        'home_address' => '',
         'shop_address' => 'Yorba Linda, CA',
         'shop_latitude' => '33.888600',
         'shop_longitude' => '-117.813100',
@@ -89,6 +90,7 @@ function ensureSchedulingSettingsTable(PDO $pdo): void
     ");
 
     $columnDefinitions = [
+        'home_address' => "VARCHAR(255) NOT NULL DEFAULT ''",
         'initial_appointment_confirmation_subject' => "VARCHAR(255) NOT NULL DEFAULT ''",
         'initial_appointment_confirmation_body' => "TEXT NOT NULL",
         'day_before_reminder_subject' => "VARCHAR(255) NOT NULL DEFAULT ''",
@@ -181,6 +183,7 @@ function normalizeSchedulingSettings(array $settings): array
     $merged = array_merge($defaults, $settings);
 
     $merged['shop_address'] = trim((string) $merged['shop_address']);
+    $merged['home_address'] = trim((string) $merged['home_address']);
     $merged['shop_latitude'] = number_format((float) $merged['shop_latitude'], 6, '.', '');
     $merged['shop_longitude'] = number_format((float) $merged['shop_longitude'], 6, '.', '');
     $merged['business_start_time'] = substr((string) $merged['business_start_time'], 0, 5);
@@ -222,6 +225,7 @@ function updateSchedulingSettings(PDO $pdo, array $settings): void
     $stmt = $pdo->prepare("
         UPDATE scheduling_settings
         SET
+            home_address = :home_address,
             shop_address = :shop_address,
             shop_latitude = :shop_latitude,
             shop_longitude = :shop_longitude,
@@ -241,6 +245,7 @@ function updateSchedulingSettings(PDO $pdo, array $settings): void
         WHERE id = 1
     ");
     $stmt->execute([
+        ':home_address' => $settings['home_address'],
         ':shop_address' => $settings['shop_address'],
         ':shop_latitude' => $settings['shop_latitude'],
         ':shop_longitude' => $settings['shop_longitude'],

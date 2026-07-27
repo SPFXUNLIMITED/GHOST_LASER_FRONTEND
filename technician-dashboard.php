@@ -83,6 +83,7 @@ $clusters = array_values($clusters);
 // ── Load scheduling settings (provides shop_address for Returning Home card) ─
 $schedSettings = getSchedulingSettings($pdo);
 $shopAddress   = $schedSettings['shop_address'];
+$homeAddress   = $schedSettings['home_address'];
 
 // ── Load trip states for the selected date ───────────────────────────────────
 // Keyed by service_request_id; allows the UI to restore button states after
@@ -906,18 +907,31 @@ require_once __DIR__ . '/templates/header.php';
                     <!-- Row 2: heading -->
                     <div class="text-sm font-semibold text-zinc-100 mb-1.5">Returning Home</div>
 
+                    <!-- Destination selector (shown only when home address is configured) -->
+                    <?php if ($homeAddress !== ''): ?>
+                    <div class="mb-2.5">
+                        <label class="text-xs text-zinc-400 block mb-1">Return destination</label>
+                        <select id="returnDestSelect" class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none"
+                            data-shop-address="<?= htmlspecialchars($shopAddress, ENT_QUOTES, 'UTF-8') ?>"
+                            data-home-address="<?= htmlspecialchars($homeAddress, ENT_QUOTES, 'UTF-8') ?>">
+                            <option value="shop">Shop — <?= htmlspecialchars($shopAddress, ENT_QUOTES, 'UTF-8') ?></option>
+                            <option value="home">Home — <?= htmlspecialchars($homeAddress, ENT_QUOTES, 'UTF-8') ?></option>
+                        </select>
+                    </div>
+                    <?php endif; ?>
+
                     <!-- Row 3: address + navigation buttons -->
                     <div class="mb-2">
                         <div class="address-text">
                             <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                            <?= htmlspecialchars($shopAddress, ENT_QUOTES, 'UTF-8') ?>
+                            <span id="returnDestAddress"><?= htmlspecialchars($shopAddress, ENT_QUOTES, 'UTF-8') ?></span>
                         </div>
                         <div class="nav-btns">
-                            <a href="<?= htmlspecialchars($hubWazeUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="nav-btn btn-waze">
+                            <a id="returnWazeLink" href="<?= htmlspecialchars($hubWazeUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="nav-btn btn-waze">
                                 <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 7.28C19.54 3.1 15.82 0 11.36 0 6.17 0 1.96 4.21 1.96 9.4c0 2.78 1.22 5.28 3.16 7.01-.06.34-.31 1.37-.84 1.9-.1.1-.07.27.06.33.85.36 3.46.95 5.87-1.13.76.15 1.54.23 2.35.23.31 0 .62-.01.92-.04 4.16-.37 7.56-3.37 8.24-7.45.15-.91.17-1.36.08-2.97h-.26z"/></svg>
                                 Waze
                             </a>
-                            <a href="<?= htmlspecialchars($hubGmapsUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="nav-btn btn-gmaps">
+                            <a id="returnGmapsLink" href="<?= htmlspecialchars($hubGmapsUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="nav-btn btn-gmaps">
                                 <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
                                 Google Maps
                             </a>
@@ -928,6 +942,7 @@ require_once __DIR__ . '/templates/header.php';
                     <div class="mt-3 pt-3 border-t border-zinc-700/40">
                         <div class="flex items-center gap-2">
                             <button
+                                id="returnOnWayBtn"
                                 class="mileage-btn btn-on-way"
                                 data-action="on_my_way"
                                 data-job-id="0"
@@ -1350,6 +1365,32 @@ function saveContact(btn) {
     URL.revokeObjectURL(url);
 }
 
+</script>
+
+<script>
+// ── Return destination dropdown ───────────────────────────────────────────────
+(function () {
+    var sel = document.getElementById('returnDestSelect');
+    if (!sel) return; // no dropdown if home address is not configured
+
+    function updateReturnDest() {
+        var addr = sel.value === 'home' ? sel.dataset.homeAddress : sel.dataset.shopAddress;
+
+        var addrEl = document.getElementById('returnDestAddress');
+        if (addrEl) addrEl.textContent = addr;
+
+        var wazeLink = document.getElementById('returnWazeLink');
+        if (wazeLink) wazeLink.href = 'https://waze.com/ul?q=' + encodeURIComponent(addr) + '&navigate=yes';
+
+        var gmapsLink = document.getElementById('returnGmapsLink');
+        if (gmapsLink) gmapsLink.href = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(addr);
+
+        var btn = document.getElementById('returnOnWayBtn');
+        if (btn) btn.dataset.address = addr;
+    }
+
+    sel.addEventListener('change', updateReturnDest);
+}());
 </script>
 
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
