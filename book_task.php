@@ -178,6 +178,10 @@ require_once __DIR__ . '/templates/header.php';
                         <textarea class="input-base resize-none" id="problem" name="problem" rows="4" required placeholder="Example: Pick up machine from warehouse dock and deliver to customer site."></textarea>
                     </div>
                     <div>
+                        <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-zinc-400" for="duration_minutes">Duration (minutes) *</label>
+                        <input class="input-base" type="number" id="duration_minutes" name="duration_minutes" min="1" step="1" required placeholder="e.g. 60">
+                    </div>
+                    <div>
                         <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-zinc-400" for="priority">Priority</label>
                         <select id="priority" name="priority" class="input-base">
                             <option value="standard">Standard</option>
@@ -355,6 +359,7 @@ require_once __DIR__ . '/templates/header.php';
                 latitude: form.latitude.value.trim() || null,
                 longitude: form.longitude.value.trim() || null,
                 problem: taskPurpose,
+                duration_minutes: parseInt(form.duration_minutes.value, 10) || null,
                 password: '',
                 confirm_password: '',
                 priority: form.priority.value,
