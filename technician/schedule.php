@@ -1004,7 +1004,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $placeholders = implode(',', array_fill(0, count($clusterJobIds), '?'));
                 $validJobsStmt = $pdo->prepare("
-                    SELECT id, latitude, longitude, services
+                    SELECT id, latitude, longitude, services, duration_minutes
                     FROM service_requests
                     WHERE id IN ({$placeholders})
                       AND request_status IN ('new', 'queued')
@@ -1320,7 +1320,8 @@ $jobs = $pdo->query("
         sr.problem_summary,
         sr.preferred_date_start,
         sr.preferred_date_end,
-        sr.services
+        sr.services,
+        sr.duration_minutes
     FROM service_requests sr
     LEFT JOIN customers c ON sr.customer_id = c.id
     WHERE sr.request_status IN ('new', 'queued')
