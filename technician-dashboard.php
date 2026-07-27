@@ -866,6 +866,7 @@ require_once __DIR__ . '/templates/header.php';
                                         data-action="arrived"
                                         data-job-id="<?= (int) $job['service_request_id'] ?>"
                                         title="Record arrival time, GPS coordinates, and ending odometer"
+                                        disabled
                                     >
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                                         Arrived
@@ -958,6 +959,7 @@ require_once __DIR__ . '/templates/header.php';
                                 data-action="arrived"
                                 data-job-id="0"
                                 title="Record arrival time, GPS coordinates, and ending odometer"
+                                disabled
                             >
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                                 Arrived
@@ -1062,6 +1064,20 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         el.className = 'eta-status' + (type ? ' ' + type : '');
     }
 
+    function setTripButtons(jobId, state) {
+        var onWayBtn   = document.querySelector('[data-action="on_my_way"][data-job-id="' + jobId + '"]');
+        var arrivedBtn = document.querySelector('[data-action="arrived"][data-job-id="' + jobId + '"]');
+
+        if (onWayBtn) {
+            onWayBtn.classList.toggle('active', state === 'pending');
+            onWayBtn.disabled = state === 'pending';
+        }
+        if (arrivedBtn) {
+            arrivedBtn.classList.remove('active');
+            arrivedBtn.disabled = state !== 'pending';
+        }
+    }
+
     // ── API call ──────────────────────────────────────────────────────────────
     function callMileageApi(payload, btn, jobId) {
         btn.disabled = true;
@@ -1093,12 +1109,10 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
             }
 
             if (payload.action === 'on_my_way') {
-                btn.classList.add('active');
-                var arrivedBtn = btn.parentElement.querySelector('[data-action="arrived"]');
-                if (arrivedBtn) arrivedBtn.disabled = false;
+                setTripButtons(jobId, 'pending');
                 setStatus(jobId, '✓ Departed at ' + data.start_time, 'ok');
             } else {
-                btn.classList.add('active');
+                setTripButtons(jobId, 'ready');
                 var miles = hasMiles(data.total_miles)
                     ? ' — ' + data.total_miles + ' miles'
                     : '';
@@ -1134,18 +1148,15 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         if (!states) { return; }
         Object.keys(states).forEach(function (jobId) {
             var state      = states[jobId];
-            var onWayBtn   = document.querySelector('[data-action="on_my_way"][data-job-id="' + jobId + '"]');
-            var arrivedBtn = document.querySelector('[data-action="arrived"][data-job-id="' + jobId + '"]');
 
             if (state.status === 'pending') {
                 // Departed — waiting for arrival
-                if (onWayBtn)   { onWayBtn.classList.add('active');   onWayBtn.disabled = true; }
+                setTripButtons(jobId, 'pending');
                 var depTime = formatDbTime(state.start_time);
                 setStatus(jobId, '\u2713 Departed' + (depTime ? ' at ' + depTime : ''), 'ok');
             } else if (state.status === 'complete') {
-                // Both actions recorded
-                if (onWayBtn)   { onWayBtn.classList.add('active');   onWayBtn.disabled = true; }
-                if (arrivedBtn) { arrivedBtn.classList.add('active'); arrivedBtn.disabled = true; }
+                // Trip completed — allow a new cycle.
+                setTripButtons(jobId, 'ready');
                 var arrTime = formatDbTime(state.end_time);
                 var miles   = hasMiles(state.total_miles) ? ' \u2014 ' + state.total_miles + ' miles' : '';
                 setStatus(jobId, '\u2713 Arrived' + (arrTime ? ' at ' + arrTime : '') + miles, 'ok');
