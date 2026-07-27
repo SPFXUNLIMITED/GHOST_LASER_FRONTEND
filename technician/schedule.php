@@ -487,10 +487,16 @@ function formatStoredTimeWindow(?string $start, ?string $end): ?string
 function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
 {
     // Collect every unique service ID referenced across all jobs.
+    // Task bookings leave services NULL and store duration directly in
+    // duration_minutes; skip the service-lookup path for those jobs.
     $allServiceIds = [];
     foreach ($jobs as $job) {
         $servicesJson = trim((string) ($job['services'] ?? ''));
         if ($servicesJson === '') {
+            // Task booking: duration_minutes must already be set.
+            if ((int) ($job['duration_minutes'] ?? 0) > 0) {
+                continue;
+            }
             return sprintf(
                 'Service request #%d has no services assigned. Duration cannot be calculated.',
                 (int) $job['id']
@@ -508,24 +514,28 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
         }
     }
 
-    if ($allServiceIds === []) {
-        return 'No service IDs found across jobs. Duration cannot be calculated.';
-    }
-
     // Fetch duration_minutes and name for every referenced service in one query.
-    $uniqueIds    = array_keys($allServiceIds);
-    $placeholders = implode(',', array_fill(0, count($uniqueIds), '?'));
-    $stmt = $pdo->prepare("SELECT id, service_name, duration_minutes FROM services WHERE id IN ({$placeholders})");
-    $stmt->execute($uniqueIds);
     $serviceRows = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $serviceRows[(int) $row['id']] = $row;
+    if ($allServiceIds !== []) {
+        $uniqueIds    = array_keys($allServiceIds);
+        $placeholders = implode(',', array_fill(0, count($uniqueIds), '?'));
+        $stmt = $pdo->prepare("SELECT id, service_name, duration_minutes FROM services WHERE id IN ({$placeholders})");
+        $stmt->execute($uniqueIds);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $serviceRows[(int) $row['id']] = $row;
+        }
     }
 
     // Resolve each job's total duration.
     $resolved = [];
     foreach ($jobs as $job) {
-        $ids   = json_decode((string) $job['services'], true);
+        $servicesJson = trim((string) ($job['services'] ?? ''));
+        if ($servicesJson === '') {
+            // Task booking: duration_minutes is already set; preserve it.
+            $resolved[(int) $job['id']] = (int) $job['duration_minutes'];
+            continue;
+        }
+        $ids   = json_decode($servicesJson, true);
         $total = 0;
         foreach ($ids as $id) {
             $id = (int) $id;
