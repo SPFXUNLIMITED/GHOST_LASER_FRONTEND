@@ -14,22 +14,10 @@ $workDayOptions = getSchedulingWorkDayOptions();
 $successMessage = null;
 $errorMessage = null;
 $formErrors = [];
-$homeSuccessMessage = null;
-$homeErrorMessage = null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_home_address'])) {
-    $newHomeAddress = trim((string) ($_POST['home_address'] ?? ''));
-    try {
-        $merged = array_merge($settings, ['home_address' => $newHomeAddress]);
-        $merged = normalizeSchedulingSettings($merged);
-        updateSchedulingSettings($pdo, $merged);
-        $settings = getSchedulingSettings($pdo);
-        $homeSuccessMessage = 'Home address saved successfully.';
-    } catch (Throwable $e) {
-        $homeErrorMessage = 'Unable to save home address right now.';
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $submittedSettings = [
+        'home_address' => trim((string) ($_POST['home_address'] ?? '')),
         'shop_address' => trim((string) ($_POST['shop_address'] ?? '')),
         'shop_latitude' => trim((string) ($_POST['shop_latitude'] ?? '')),
         'shop_longitude' => trim((string) ($_POST['shop_longitude'] ?? '')),
@@ -203,17 +191,6 @@ require_once __DIR__ . '/templates/header.php';
 
                     <hr class="border-zinc-700/60">
 
-                    <?php if ($homeSuccessMessage !== null): ?>
-                        <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">
-                            <?= htmlspecialchars($homeSuccessMessage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>
-                        </div>
-                    <?php endif; ?>
-                    <?php if ($homeErrorMessage !== null): ?>
-                        <div class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-200">
-                            <?= htmlspecialchars($homeErrorMessage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>
-                        </div>
-                    <?php endif; ?>
-
                     <div>
                         <h2 class="text-xl font-semibold text-white">Home Location</h2>
                         <p class="mt-2 text-sm text-zinc-400">Set your home address as an optional return destination on the technician dashboard.</p>
@@ -222,11 +199,8 @@ require_once __DIR__ . '/templates/header.php';
                     <div class="space-y-3">
                         <label class="block">
                             <span class="text-sm font-medium text-zinc-200">Home address</span>
-                            <input type="text" name="home_address" form="home-address-form" value="<?= htmlspecialchars((string) $settings['home_address'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" placeholder="e.g. 123 Main St, Yorba Linda, CA">
+                            <input type="text" name="home_address" value="<?= htmlspecialchars((string) $settings['home_address'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" placeholder="e.g. 123 Main St, Yorba Linda, CA">
                         </label>
-                        <button type="submit" form="home-address-form" class="inline-flex items-center justify-center rounded-lg bg-zinc-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-600">
-                            Save Home Address
-                        </button>
                     </div>
 
                     <div>
@@ -337,7 +311,4 @@ require_once __DIR__ . '/templates/header.php';
             </form>
         </div>
     </main>
-    <form id="home-address-form" method="POST" style="display:none">
-        <input type="hidden" name="save_home_address" value="1">
-    </form>
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
