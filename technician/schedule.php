@@ -572,8 +572,8 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
  *
  * The route starts at the shop location defined in scheduling settings and
  * walks through each job in the supplied order.  Every parameter — shop
- * coordinates, business start time, buffer between jobs, and customer-facing
- * window size — is read exclusively from $settings.  Job duration is read
+ * coordinates, business start time, and buffer between jobs — is read
+ * exclusively from $settings.  Job duration is read
  * from $job['duration_minutes'], which must be pre-resolved by
  * resolveJobDurationsFromServices() before calling this function.  Nothing
  * is hard-coded and no fallback to a global average is performed.
@@ -606,7 +606,6 @@ function calculateClusterTimeWindows(array $jobs, array $settings): array
 
     // ── Timing parameters from settings ──────────────────────────────────────
     $bufferMinutes     = max(0, (int) $settings['default_buffer_between_jobs_minutes']);
-    $windowSizeMinutes = max(60, (int) $settings['default_time_window_size_hours'] * 60);
 
     // Conservative urban/suburban driving speed for SoCal routes.
     $averageDrivingSpeedMph = 30.0;
@@ -632,9 +631,10 @@ function calculateClusterTimeWindows(array $jobs, array $settings): array
             $driveMinutes = 15;
         }
 
+        $jobDurationMinutes = (int) ($job['duration_minutes'] ?? 0);
         $arrivalMinutes     = $currentMinutes + $driveMinutes;
         $windowStartMinutes = $arrivalMinutes;
-        $windowEndMinutes   = $windowStartMinutes + $windowSizeMinutes;
+        $windowEndMinutes   = $windowStartMinutes + $jobDurationMinutes;
 
         $timeWindows[$jobId] = [
             'time_window_start'           => sprintf('%02d:%02d', intdiv($windowStartMinutes, 60) % 24, $windowStartMinutes % 60),
@@ -645,7 +645,6 @@ function calculateClusterTimeWindows(array $jobs, array $settings): array
         ];
 
         // Advance the clock: complete this job, observe the buffer, then drive.
-        $jobDurationMinutes = max(1, (int) ($job['duration_minutes'] ?? 0));
         $currentMinutes = $arrivalMinutes + $jobDurationMinutes + $bufferMinutes;
 
         if ($hasCoords) {
