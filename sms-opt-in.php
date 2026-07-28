@@ -1,12 +1,6 @@
 <?php
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
-
-$redirect = isset($_GET['redirect']) ? trim((string) $_GET['redirect']) : 'customer-login.php';
-
-$pageTitle       = 'SMS Terms & Opt-In | Ghost Laser';
-$pageDescription = 'Review Ghost Laser SMS/text message terms and opt in to receive service-related updates.';
+$pageTitle       = 'SMS Terms | Ghost Laser';
+$pageDescription = 'Read Ghost Laser SMS/text message terms and communications policy.';
 $logoHref        = '/';
 $extraHead       = <<<'HTML'
     <style>
@@ -46,7 +40,7 @@ require_once __DIR__ . '/templates/header.php';
                 <h1 class="text-4xl sm:text-5xl font-black tracking-tight text-white mb-3">
                     SMS / Text Message <span class="text-cyan-400 glow-cyan">Terms</span>
                 </h1>
-                <p class="text-sm text-zinc-500">Please review before opting in.</p>
+                <p class="text-sm text-zinc-500">Read-only legal terms for text communications.</p>
             </div>
 
             <div class="card-glow rounded-2xl border border-zinc-800/70 bg-zinc-900/80 backdrop-blur-sm divide-y divide-zinc-800/70">
@@ -101,34 +95,11 @@ require_once __DIR__ . '/templates/header.php';
                 </section>
 
                 <section class="px-8 sm:px-10 py-8 bg-zinc-900/40 rounded-b-2xl">
-                    <button
-                        type="button"
-                        id="sms-agree-btn"
-                        data-redirect="<?= htmlspecialchars($redirect, ENT_QUOTES, 'UTF-8') ?>"
-                        class="flex w-full items-center justify-center gap-2.5 rounded-xl bg-cyan-500 px-6 py-4 text-base font-bold text-zinc-950 transition-all hover:bg-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-zinc-900"
-                    >
-                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                        </svg>
-                        I Agree &amp; Continue
-                    </button>
-
-                    <div class="mt-4 text-center">
-                        <a href="<?= htmlspecialchars($redirect, ENT_QUOTES, 'UTF-8') ?>" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2">
-                            No thanks, continue without SMS
-                        </a>
-                    </div>
+                    <p class="text-xs text-zinc-500 text-center">
+                        This page is provided for reference only and does not collect or update SMS consent.
+                    </p>
                 </section>
             </div>
-
-            <script>
-            document.getElementById('sms-agree-btn').addEventListener('click', function () {
-                var expires = new Date();
-                expires.setFullYear(expires.getFullYear() + 1);
-                document.cookie = 'sms_consent=1; path=/; expires=' + expires.toUTCString() + '; SameSite=Lax';
-                window.location.href = this.dataset.redirect;
-            });
-            </script>
         </div>
     </main>
 
