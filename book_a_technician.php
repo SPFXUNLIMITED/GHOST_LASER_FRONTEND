@@ -1106,6 +1106,14 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                     <?php endif; ?>
 
+                    <div>
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="checkbox" id="sms-consent" name="sms_consent" class="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-zinc-600 bg-zinc-800 accent-cyan-500" value="1">
+                            <span class="text-sm text-zinc-300 leading-snug">I consent to receive SMS messages about my booking. <span class="text-red-400">*</span></span>
+                        </label>
+                        <p id="sms-consent-error" class="hidden mt-1.5 text-xs text-red-400" role="alert">Please check this box to continue — SMS consent is required.</p>
+                    </div>
+
                     <div class="flex gap-3">
                         <a href="book_a_technician.php?step=2" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
                         <button id="step-2-submit-btn" type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
@@ -1339,8 +1347,24 @@ require_once __DIR__ . '/templates/header.php';
         });
         updateDisplayedTotal();
 
+        const smsConsentCheckbox = document.getElementById('sms-consent');
+        const smsConsentError = document.getElementById('sms-consent-error');
+
+        smsConsentCheckbox.addEventListener('change', () => {
+            if (smsConsentCheckbox.checked) {
+                smsConsentError.classList.add('hidden');
+            }
+        });
+
         stepTwoForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+
+            if (!smsConsentCheckbox.checked) {
+                smsConsentError.classList.remove('hidden');
+                smsConsentCheckbox.closest('div').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                return;
+            }
+            smsConsentError.classList.add('hidden');
 
             successBox.classList.add('hidden');
             errorBox.classList.add('hidden');
