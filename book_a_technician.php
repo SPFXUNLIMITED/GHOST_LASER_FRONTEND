@@ -1264,35 +1264,64 @@ require_once __DIR__ . '/templates/header.php';
 
     if (stepOneForm) {
         if (smsConsentCheckbox && smsConsentError) {
-            smsConsentCheckbox.addEventListener('change', () => {
-                const hasConsent = smsConsentCheckbox.checked;
-                smsConsentCheckbox.setAttribute('aria-invalid', hasConsent ? 'false' : 'true');
-                smsConsentError.classList.toggle('hidden', hasConsent);
-            });
-        }
-
-        stepOneForm.addEventListener('submit', (event) => {
-            if (phoneInput) {
-                phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
-            }
-            if (!syncPasswordMatchValidity()) {
-                event.preventDefault();
-                confirmPasswordInput?.reportValidity();
-                confirmPasswordInput?.focus();
-                return;
-            }
-            if (!syncPhoneValidationState()) {
-                event.preventDefault();
-                phoneInput?.focus();
-                return;
-            }
-            if (smsConsentCheckbox && smsConsentError && !smsConsentCheckbox.checked) {
-                event.preventDefault();
+            const smsConsentRequiredMessage = 'Please check this box to continue — SMS consent is required.';
+            const showSmsConsentError = () => {
+                const message = smsConsentError.textContent.trim() || smsConsentRequiredMessage;
+                smsConsentError.textContent = message;
                 smsConsentCheckbox.setAttribute('aria-invalid', 'true');
                 smsConsentError.classList.remove('hidden');
-                smsConsentCheckbox.focus();
-            }
-        });
+                smsConsentError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            };
+            const clearSmsConsentError = () => {
+                smsConsentCheckbox.setAttribute('aria-invalid', 'false');
+                smsConsentError.classList.add('hidden');
+                smsConsentError.textContent = '';
+            };
+
+            smsConsentCheckbox.addEventListener('change', () => {
+                if (smsConsentCheckbox.checked) {
+                    clearSmsConsentError();
+                }
+            });
+            stepOneForm.addEventListener('submit', (event) => {
+                if (phoneInput) {
+                    phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
+                }
+                if (!syncPasswordMatchValidity()) {
+                    event.preventDefault();
+                    confirmPasswordInput?.reportValidity();
+                    confirmPasswordInput?.focus();
+                    return;
+                }
+                if (!syncPhoneValidationState()) {
+                    event.preventDefault();
+                    phoneInput?.focus();
+                    return;
+                }
+                if (!smsConsentCheckbox.checked) {
+                    event.preventDefault();
+                    showSmsConsentError();
+                    return;
+                }
+                clearSmsConsentError();
+            });
+        } else {
+            stepOneForm.addEventListener('submit', (event) => {
+                if (phoneInput) {
+                    phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
+                }
+                if (!syncPasswordMatchValidity()) {
+                    event.preventDefault();
+                    confirmPasswordInput?.reportValidity();
+                    confirmPasswordInput?.focus();
+                    return;
+                }
+                if (!syncPhoneValidationState()) {
+                    event.preventDefault();
+                    phoneInput?.focus();
+                }
+            });
+        }
     }
 
     if (otherServiceCheckbox && otherServiceWrap && otherServiceInput) {
