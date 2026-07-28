@@ -430,6 +430,7 @@ if (!in_array($step, [2, 3, 4], true)) {
 $errors = [];
 $success = '';
 $phoneError = '';
+$smsConsentError = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1')) {
     $services = array_values(array_intersect(array_keys($serviceLabels), (array) ($_POST['services'] ?? [])));
@@ -452,6 +453,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
     if (!$errors && $normalizedPhone === null) {
         $phoneError = 'Please enter a valid 10-digit US phone number.';
         $errors[] = $phoneError;
+    }
+    if (!$errors && (string) ($_POST['sms_consent'] ?? '') !== '1') {
+        $smsConsentError = 'Please check this box to continue — SMS consent is required.';
+        $errors[] = $smsConsentError;
     }
 
     $password        = $_POST['password'] ?? '';
@@ -493,6 +498,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
                     'problem' => trim((string) ($_POST['problem'] ?? '')),
                     'services' => $services,
                     'other_service' => $otherService,
+                    'sms_consent' => (string) ($_POST['sms_consent'] ?? ''),
                     'password' => $password,
                     'confirm_password' => $password,
                 ];
@@ -542,6 +548,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
                     'problem' => trim((string) ($_POST['problem'] ?? '')),
                     'services' => $services,
                     'other_service' => $otherService,
+                    'sms_consent' => (string) ($_POST['sms_consent'] ?? ''),
                     'password' => '',
                     'confirm_password' => '',
                 ];
@@ -580,6 +587,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
             'problem' => trim((string) ($_POST['problem'] ?? '')),
             'services' => $services,
             'other_service' => $otherService,
+            'sms_consent' => (string) ($_POST['sms_consent'] ?? ''),
             'password' => $password,
             'confirm_password' => $passwordConfirm,
         ];
@@ -860,7 +868,7 @@ require_once __DIR__ . '/templates/header.php';
         <?php endif; ?>
 
         <?php if ($step === 2): ?>
-            <form method="post" action="book_a_technician.php?step=2" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
+            <form id="step-1-booking-form" method="post" action="book_a_technician.php?step=2" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box">
                 <input type="hidden" name="form_step" value="1">
                 <div>
                     <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Contact Information</p>
@@ -956,9 +964,28 @@ require_once __DIR__ . '/templates/header.php';
                 </div>
                 <?php endif; ?>
 
-                <button type="submit" class="w-full rounded-lg bg-cyan-500 py-3.5 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
-                    Continue to Service Speed →
-                </button>
+                <div>
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            id="sms-consent"
+                            name="sms_consent"
+                            class="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-zinc-600 bg-zinc-800 accent-cyan-500"
+                            value="1"
+                            <?= (string) ($_POST['sms_consent'] ?? '') === '1' ? 'checked' : '' ?>
+                            aria-describedby="sms-consent-error"
+                            aria-invalid="<?= $smsConsentError !== '' ? 'true' : 'false' ?>"
+                        >
+                        <span class="text-sm text-zinc-300 leading-snug">I consent to receive SMS messages about my booking. <span class="text-red-400">*</span></span>
+                    </label>
+                    <p id="sms-consent-error" class="field-error<?= $smsConsentError === '' ? ' hidden' : '' ?>" role="alert"><?= h($smsConsentError) ?></p>
+                </div>
+
+                <div>
+                    <button type="submit" class="w-full rounded-lg bg-cyan-500 py-3.5 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
+                        Continue to Service Speed →
+                    </button>
+                </div>
             </form>
         <?php elseif ($step === 3): ?>
             <?php
@@ -1106,14 +1133,6 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                     <?php endif; ?>
 
-                    <div>
-                        <label class="flex items-start gap-3 cursor-pointer">
-                            <input type="checkbox" id="sms-consent" name="sms_consent" class="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-zinc-600 bg-zinc-800 accent-cyan-500" value="1">
-                            <span class="text-sm text-zinc-300 leading-snug">I consent to receive SMS messages about my booking. <span class="text-red-400">*</span></span>
-                        </label>
-                        <p id="sms-consent-error" class="hidden mt-1.5 text-xs text-red-400" role="alert">Please check this box to continue — SMS consent is required.</p>
-                    </div>
-
                     <div class="flex gap-3">
                         <a href="book_a_technician.php?step=2" class="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-center text-sm font-semibold text-zinc-200 hover:bg-zinc-800 transition-all">Start Over</a>
                         <button id="step-2-submit-btn" type="submit" class="flex-1 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
@@ -1160,11 +1179,13 @@ require_once __DIR__ . '/templates/header.php';
     const otherServiceCheckbox = document.getElementById('service-<?= h($otherServiceId) ?>');
     const otherServiceWrap = document.getElementById('other-service-wrap');
     const otherServiceInput = document.getElementById('other-service-input');
-    const stepOneForm = document.querySelector('form[action="book_a_technician.php?step=2"]');
+    const stepOneForm = document.getElementById('step-1-booking-form');
     const phoneInput = document.getElementById('phone');
     const phoneErrorEl = document.getElementById('phone-error');
     const passwordInput = document.getElementById('password');
     const confirmPasswordInput = document.getElementById('confirm_password');
+    const smsConsentCheckbox = document.getElementById('sms-consent');
+    const smsConsentError = document.getElementById('sms-consent-error');
 
     const normalizeUsPhone = (value) => {
         let digits = String(value || '').replace(/\D/g, '');
@@ -1232,6 +1253,14 @@ require_once __DIR__ . '/templates/header.php';
     }
 
     if (stepOneForm) {
+        if (smsConsentCheckbox && smsConsentError) {
+            smsConsentCheckbox.addEventListener('change', () => {
+                const hasConsent = smsConsentCheckbox.checked;
+                smsConsentCheckbox.setAttribute('aria-invalid', hasConsent ? 'false' : 'true');
+                smsConsentError.classList.toggle('hidden', hasConsent);
+            });
+        }
+
         stepOneForm.addEventListener('submit', (event) => {
             if (phoneInput) {
                 phoneInput.value = formatUsPhoneDisplay(phoneInput.value);
@@ -1245,6 +1274,13 @@ require_once __DIR__ . '/templates/header.php';
             if (!syncPhoneValidationState()) {
                 event.preventDefault();
                 phoneInput?.focus();
+                return;
+            }
+            if (smsConsentCheckbox && smsConsentError && !smsConsentCheckbox.checked) {
+                event.preventDefault();
+                smsConsentCheckbox.setAttribute('aria-invalid', 'true');
+                smsConsentError.classList.remove('hidden');
+                smsConsentCheckbox.focus();
             }
         });
     }
@@ -1347,24 +1383,8 @@ require_once __DIR__ . '/templates/header.php';
         });
         updateDisplayedTotal();
 
-        const smsConsentCheckbox = document.getElementById('sms-consent');
-        const smsConsentError = document.getElementById('sms-consent-error');
-
-        smsConsentCheckbox.addEventListener('change', () => {
-            if (smsConsentCheckbox.checked) {
-                smsConsentError.classList.add('hidden');
-            }
-        });
-
         stepTwoForm.addEventListener('submit', async (event) => {
             event.preventDefault();
-
-            if (!smsConsentCheckbox.checked) {
-                smsConsentError.classList.remove('hidden');
-                smsConsentCheckbox.closest('div').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                return;
-            }
-            smsConsentError.classList.add('hidden');
 
             successBox.classList.add('hidden');
             errorBox.classList.add('hidden');
