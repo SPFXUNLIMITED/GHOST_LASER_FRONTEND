@@ -883,9 +883,9 @@ require_once __DIR__ . '/templates/header.php';
                             <input class="input-base<?= $phoneError !== '' ? ' input-invalid' : '' ?>" type="tel" inputmode="tel" id="phone" name="phone" placeholder="Phone Number *" required value="<?= h(formatUsPhoneDisplay($_POST['phone'] ?? '')) ?>" aria-describedby="phone-error" aria-invalid="<?= $phoneError !== '' ? 'true' : 'false' ?>">
                             <p id="phone-error" class="field-error<?= $phoneError === '' ? ' hidden' : '' ?>"><?= h($phoneError) ?></p>
                         </div>
-                    </div>
-                    <div class="mt-5">
-                        <input class="input-base" type="email" name="email" placeholder="Email Address *" required value="<?= h($_POST['email'] ?? '') ?>">
+                        <div>
+                            <input class="input-base" type="email" name="email" placeholder="Email Address *" required value="<?= h($_POST['email'] ?? '') ?>">
+                        </div>
                     </div>
                 </div>
 
@@ -973,7 +973,7 @@ require_once __DIR__ . '/templates/header.php';
                             aria-describedby="sms-consent-error"
                             aria-invalid="<?= $smsConsentError !== '' ? 'true' : 'false' ?>"
                         >
-                        <span class="text-sm text-zinc-300 leading-snug">I consent to receive SMS messages about my booking. <span class="text-red-400">*</span></span>
+                        <span class="text-sm text-zinc-300 leading-snug">I consent to receive <a href="#sms-policy" class="underline hover:text-cyan-400 transition-colors">SMS messages</a> about my booking. <span class="text-red-400">*</span></span>
                     </label>
                     <p id="sms-consent-error" class="field-error<?= $smsConsentError === '' ? ' hidden' : '' ?>" role="alert"><?= h($smsConsentError) ?></p>
                 </div>
@@ -1169,6 +1169,19 @@ require_once __DIR__ . '/templates/header.php';
             </div>
         <?php endif; ?>
         <?php endif; /* end $view === 'new' */ ?>
+    </div>
+</section>
+
+<section id="sms-policy" class="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+    <div class="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8">
+        <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-cyan-400">SMS Policy</p>
+        <h2 class="mb-4 text-lg font-bold text-zinc-100">SMS Messaging Terms</h2>
+        <div class="space-y-3 text-sm text-zinc-400 leading-relaxed">
+            <p>By providing your phone number and checking the consent box, you agree to receive SMS text messages from Ghost Laser regarding your repair booking, appointment scheduling, technician status updates, and related service communications.</p>
+            <p>Message frequency varies based on your booking activity. Message and data rates may apply depending on your carrier and plan.</p>
+            <p>You may opt out at any time by replying <strong class="text-zinc-300">STOP</strong> to any message. After opting out you will receive a single confirmation message and no further SMS messages will be sent. Reply <strong class="text-zinc-300">HELP</strong> for assistance.</p>
+            <p>For full details, see our <a href="/sms-opt-in.php" class="text-cyan-400 underline hover:text-cyan-300 transition-colors">SMS Terms</a> and <a href="/privacy-policy.php" class="text-cyan-400 underline hover:text-cyan-300 transition-colors">Privacy Policy</a>.</p>
+        </div>
     </div>
 </section>
 
