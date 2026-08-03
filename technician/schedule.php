@@ -1639,16 +1639,6 @@ require_once __DIR__ . '/../templates/header.php';
     <div class="max-w-7xl mx-auto">
         <h1 class="text-5xl font-bold mb-2">Scheduling Dashboard</h1>
 
-        <div class="mb-6 flex flex-wrap gap-3">
-            <a
-                href="../book_internal.php"
-                class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
-            >Book a Customer</a>
-            <a
-                href="../book_task.php"
-                class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
-            >Book a Task</a>
-        </div>
 
         <div class="mb-8">
             <div>
@@ -2032,19 +2022,29 @@ require_once __DIR__ . '/../templates/header.php';
                         <h2 class="text-2xl font-semibold text-white">Jobs Awaiting Scheduling</h2>
                         <p class="mt-2 text-sm text-zinc-400">Review the current unassigned jobs below before routing them to a technician schedule.</p>
                     </div>
-                    <form method="POST" class="shrink-0" id="run-clustering-form">
-                        <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
-                        <input type="hidden" name="run_clustering" value="1">
-                        <input type="hidden" name="cluster_override_start_time" id="cluster-override-start-time" value="">
-                        <input type="hidden" name="cluster_override_end_time" id="cluster-override-end-time" value="">
-                        <button
-                            type="button"
-                            id="open-cluster-time-modal"
-                            class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
-                        >
-                            Run Clustering
-                        </button>
-                    </form>
+                    <div class="flex shrink-0 flex-wrap gap-3">
+                        <a
+                            href="../book_internal.php"
+                            class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
+                        >Book a Customer</a>
+                        <a
+                            href="../book_task.php"
+                            class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
+                        >Book a Task</a>
+                        <form method="POST" id="run-clustering-form">
+                            <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                            <input type="hidden" name="run_clustering" value="1">
+                            <input type="hidden" name="cluster_override_start_time" id="cluster-override-start-time" value="">
+                            <input type="hidden" name="cluster_override_end_time" id="cluster-override-end-time" value="">
+                            <button
+                                type="button"
+                                id="open-cluster-time-modal"
+                                class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
+                            >
+                                Run Clustering
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </section>
 
