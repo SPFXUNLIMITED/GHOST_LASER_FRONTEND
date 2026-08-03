@@ -1164,6 +1164,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $clusterCustomersStmt->execute([':cluster_id' => $notifyClusterId]);
                 $clusterCustomers = $clusterCustomersStmt->fetchAll(PDO::FETCH_ASSOC);
 
+                // Deduplicate by email so each customer receives exactly one notification
+                // even when they have multiple jobs in the cluster.
+                $seenEmails = [];
+                $clusterCustomers = array_values(array_filter($clusterCustomers, function ($row) use (&$seenEmails) {
+                    $email = strtolower(trim((string) ($row['email'] ?? '')));
+                    if ($email === '' || isset($seenEmails[$email])) {
+                        return false;
+                    }
+                    $seenEmails[$email] = true;
+                    return true;
+                }));
+
                 if (empty($clusterCustomers)) {
                     $notifyClusterError = 'No customers found in that cluster.';
                 } else {
