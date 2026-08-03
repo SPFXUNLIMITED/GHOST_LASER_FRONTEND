@@ -1382,6 +1382,20 @@ $clusterableJobs = array_values(array_filter($jobs, function ($job) {
     return hasValidCoordinates($job['latitude'] ?? null, $job['longitude'] ?? null);
 }));
 
+// Build a local settings copy so overrides apply only to this cluster run
+// and never mutate $schedulingSettings (which drives all other logic).
+$clusteringSettings = $schedulingSettings;
+if ($clusteringRequested) {
+    $overrideStart = trim((string) ($_POST['cluster_override_start_time'] ?? ''));
+    $overrideEnd   = trim((string) ($_POST['cluster_override_end_time']   ?? ''));
+    if (preg_match('/^\d{2}:\d{2}$/', $overrideStart)) {
+        $clusteringSettings['business_start_time'] = $overrideStart;
+    }
+    if (preg_match('/^\d{2}:\d{2}$/', $overrideEnd)) {
+        $clusteringSettings['business_end_time'] = $overrideEnd;
+    }
+}
+
 $clusters = $clusteringRequested ? buildGeographicClusters($clusterableJobs, $schedulingSettings) : [];
 $clusterLookup = [];
 
@@ -1877,7 +1891,7 @@ require_once __DIR__ . '/../templates/header.php';
                                     if ($jobsDurationError !== null) {
                                         $previewDurationError = $jobsDurationError;
                                     } else {
-                                        $previewTimeWindows = calculateClusterTimeWindows($cluster['jobs'], $schedulingSettings);
+                                        $previewTimeWindows = calculateClusterTimeWindows($cluster['jobs'], $clusteringSettings);
                                     }
                                     ?>
                                     <?php if ($previewDurationError !== null): ?>
@@ -1932,12 +1946,14 @@ require_once __DIR__ . '/../templates/header.php';
                         <h2 class="text-2xl font-semibold text-white">Jobs Awaiting Scheduling</h2>
                         <p class="mt-2 text-sm text-zinc-400">Review the current unassigned jobs below before routing them to a technician schedule.</p>
                     </div>
-                    <form method="POST" class="shrink-0">
+                    <form method="POST" class="shrink-0" id="run-clustering-form">
                         <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="run_clustering" value="1">
+                        <input type="hidden" name="cluster_override_start_time" id="cluster-override-start-time" value="">
+                        <input type="hidden" name="cluster_override_end_time" id="cluster-override-end-time" value="">
                         <button
-                            type="submit"
-                            name="run_clustering"
-                            value="1"
+                            type="button"
+                            id="open-cluster-time-modal"
                             class="inline-flex items-center justify-center rounded-lg bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
                         >
                             Run Clustering
@@ -2004,6 +2020,58 @@ require_once __DIR__ . '/../templates/header.php';
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+    <div id="cluster-time-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-zinc-950/80 px-4">
+        <div class="absolute inset-0 cluster-time-modal-overlay"></div>
+        <div class="relative z-10 w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl shadow-black/40">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-sm uppercase tracking-[0.2em] text-cyan-300">Cluster Run</p>
+                    <h3 class="mt-2 text-xl font-semibold text-white">Set Start &amp; End Time</h3>
+                    <p class="mt-1 text-sm text-zinc-400">Override the business hours for this clustering run only. Settings are not changed.</p>
+                </div>
+                <button type="button" id="cluster-time-modal-close" class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-800 hover:text-white" aria-label="Close">&times;</button>
+            </div>
+            <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                <label class="flex flex-col gap-1 text-sm text-zinc-300">
+                    Start time
+                    <input
+                        type="time"
+                        id="cluster-time-modal-start"
+                        value="<?= htmlspecialchars($schedulingSettings['business_start_time'], ENT_QUOTES, 'UTF-8') ?>"
+                        class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
+                        required
+                    >
+                </label>
+                <label class="flex flex-col gap-1 text-sm text-zinc-300">
+                    End time
+                    <input
+                        type="time"
+                        id="cluster-time-modal-end"
+                        value="<?= htmlspecialchars($schedulingSettings['business_end_time'], ENT_QUOTES, 'UTF-8') ?>"
+                        class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
+                        required
+                    >
+                </label>
+            </div>
+            <div id="cluster-time-modal-error" class="mt-3 hidden rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+            <div class="mt-6 flex gap-3">
+                <button
+                    type="button"
+                    id="cluster-time-modal-confirm"
+                    class="flex-1 inline-flex items-center justify-center rounded-lg bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400"
+                >
+                    Confirm &amp; Run
+                </button>
+                <button
+                    type="button"
+                    id="cluster-time-modal-cancel"
+                    class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
+                >
+                    Cancel
+                </button>
             </div>
         </div>
     </div>
@@ -2238,6 +2306,67 @@ require_once __DIR__ . '/../templates/header.php';
         if (event.key === 'Escape' && !clusterSummaryModal.classList.contains('hidden')) {
             closeClusterSummaryModal();
         }
+        if (event.key === 'Escape' && !clusterTimeModal.classList.contains('hidden')) {
+            closeClusterTimeModal();
+        }
+    });
+
+    // ── Cluster time-override modal ───────────────────────────────────────────
+    const clusterTimeModal         = document.getElementById('cluster-time-modal');
+    const clusterTimeModalOverlay  = clusterTimeModal.querySelector('.cluster-time-modal-overlay');
+    const clusterTimeModalClose    = document.getElementById('cluster-time-modal-close');
+    const clusterTimeModalCancel   = document.getElementById('cluster-time-modal-cancel');
+    const clusterTimeModalConfirm  = document.getElementById('cluster-time-modal-confirm');
+    const clusterTimeModalStart    = document.getElementById('cluster-time-modal-start');
+    const clusterTimeModalEnd      = document.getElementById('cluster-time-modal-end');
+    const clusterTimeModalError    = document.getElementById('cluster-time-modal-error');
+    const openClusterTimeModalBtn  = document.getElementById('open-cluster-time-modal');
+    const runClusteringForm        = document.getElementById('run-clustering-form');
+    const overrideStartInput       = document.getElementById('cluster-override-start-time');
+    const overrideEndInput         = document.getElementById('cluster-override-end-time');
+
+    function openClusterTimeModal() {
+        clusterTimeModalError.classList.add('hidden');
+        clusterTimeModalError.textContent = '';
+        clusterTimeModal.classList.remove('hidden');
+        clusterTimeModal.classList.add('flex');
+        clusterTimeModalStart.focus();
+    }
+
+    function closeClusterTimeModal() {
+        clusterTimeModal.classList.add('hidden');
+        clusterTimeModal.classList.remove('flex');
+        overrideStartInput.value = '';
+        overrideEndInput.value   = '';
+    }
+
+    openClusterTimeModalBtn.addEventListener('click', openClusterTimeModal);
+    clusterTimeModalClose.addEventListener('click', closeClusterTimeModal);
+    clusterTimeModalCancel.addEventListener('click', closeClusterTimeModal);
+    clusterTimeModalOverlay.addEventListener('click', closeClusterTimeModal);
+
+    clusterTimeModalConfirm.addEventListener('click', function () {
+        const startVal = clusterTimeModalStart.value;
+        const endVal   = clusterTimeModalEnd.value;
+        const timePattern = /^\d{2}:\d{2}$/;
+
+        if (!timePattern.test(startVal) || !timePattern.test(endVal)) {
+            clusterTimeModalError.textContent = 'Please enter valid start and end times.';
+            clusterTimeModalError.classList.remove('hidden');
+            return;
+        }
+
+        if (startVal >= endVal) {
+            clusterTimeModalError.textContent = 'Start time must be before end time.';
+            clusterTimeModalError.classList.remove('hidden');
+            return;
+        }
+
+        overrideStartInput.value = startVal;
+        overrideEndInput.value   = endVal;
+        clusterTimeModal.classList.add('hidden');
+        clusterTimeModal.classList.remove('flex');
+        runClusteringForm.submit();
     });
 </script>
 <?php require_once __DIR__ . '/../templates/footer.php'; ?>
