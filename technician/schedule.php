@@ -1396,7 +1396,7 @@ if ($clusteringRequested) {
     }
 }
 
-$clusters = $clusteringRequested ? buildGeographicClusters($clusterableJobs, $schedulingSettings) : [];
+$clusters = $clusteringRequested ? buildGeographicClusters($clusterableJobs, $clusteringSettings) : [];
 $clusterLookup = [];
 
 foreach ($clusters as $cluster) {
