@@ -886,6 +886,22 @@ require_once __DIR__ . '/templates/header.php';
                         <div>
                             <input class="input-base" type="email" name="email" placeholder="Email Address *" required value="<?= h($_POST['email'] ?? '') ?>">
                         </div>
+                        <div class="sm:col-span-2">
+                            <label class="flex items-start gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    id="sms-consent"
+                                    name="sms_consent"
+                                    class="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-zinc-600 bg-zinc-800 accent-cyan-500"
+                                    value="1"
+                                    <?= (string) ($_POST['sms_consent'] ?? '') === '1' ? 'checked' : '' ?>
+                                    aria-describedby="sms-consent-error"
+                                    aria-invalid="<?= $smsConsentError !== '' ? 'true' : 'false' ?>"
+                                >
+                                <span class="text-sm text-zinc-300 leading-snug">Send me text messages about my service appointment. <span class="text-red-400">*</span></span>
+                            </label>
+                            <p id="sms-consent-error" class="field-error<?= $smsConsentError === '' ? ' hidden' : '' ?>" role="alert"><?= h($smsConsentError) ?></p>
+                        </div>
                     </div>
                 </div>
 
@@ -960,23 +976,6 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                 </div>
                 <?php endif; ?>
-
-                <div>
-                    <label class="flex items-start gap-3 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            id="sms-consent"
-                            name="sms_consent"
-                            class="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-zinc-600 bg-zinc-800 accent-cyan-500"
-                            value="1"
-                            <?= (string) ($_POST['sms_consent'] ?? '') === '1' ? 'checked' : '' ?>
-                            aria-describedby="sms-consent-error"
-                            aria-invalid="<?= $smsConsentError !== '' ? 'true' : 'false' ?>"
-                        >
-                        <span class="text-sm text-zinc-300 leading-snug">Send me text messages about my service appointment. <span class="text-red-400">*</span></span>
-                    </label>
-                    <p id="sms-consent-error" class="field-error<?= $smsConsentError === '' ? ' hidden' : '' ?>" role="alert"><?= h($smsConsentError) ?></p>
-                </div>
 
                 <div>
                     <button type="submit" class="w-full rounded-lg bg-cyan-500 py-3.5 text-sm font-bold text-zinc-950 hover:bg-cyan-400 btn-glow transition-all flex items-center justify-center gap-2">
