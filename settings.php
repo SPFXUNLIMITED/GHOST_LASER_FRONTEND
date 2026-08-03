@@ -27,6 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'average_job_duration_minutes' => trim((string) ($_POST['average_job_duration_minutes'] ?? '')),
         'maximum_jobs_per_technician_per_day' => trim((string) ($_POST['maximum_jobs_per_technician_per_day'] ?? '')),
         'default_time_window_size_hours' => trim((string) ($_POST['default_time_window_size_hours'] ?? '')),
+        'max_booking_advance_days' => trim((string) ($_POST['max_booking_advance_days'] ?? '')),
+        'simmer_days_threshold' => trim((string) ($_POST['simmer_days_threshold'] ?? '')),
         'work_days' => trim((string) ($_POST['work_days'] ?? '')),
         'initial_appointment_confirmation_subject' => trim((string) ($_POST['initial_appointment_confirmation_subject'] ?? '')),
         'initial_appointment_confirmation_body' => trim((string) ($_POST['initial_appointment_confirmation_body'] ?? '')),
@@ -63,6 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'average_job_duration_minutes' => 'Average job duration',
         'maximum_jobs_per_technician_per_day' => 'Maximum jobs per technician per day',
         'default_time_window_size_hours' => 'Default time window size',
+        'max_booking_advance_days' => 'Max booking advance days',
+        'simmer_days_threshold' => 'Simmer days threshold',
     ];
     foreach ($integerFields as $field => $label) {
         if (filter_var($submittedSettings[$field], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false) {
@@ -243,6 +247,27 @@ require_once __DIR__ . '/templates/header.php';
                             <span class="text-sm font-medium text-zinc-200">Default time window size (hours)</span>
                             <input type="number" min="1" name="default_time_window_size_hours" value="<?= htmlspecialchars((string) $settings['default_time_window_size_hours'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required>
                         </label>
+
+                        <hr class="border-zinc-700/60">
+
+                        <div>
+                            <h3 class="text-base font-semibold text-white">Job Status Badge Thresholds</h3>
+                            <p class="mt-1 text-xs text-zinc-400">Controls the informational status badges shown on jobs in the scheduling view.</p>
+                        </div>
+
+                        <label class="block">
+                            <span class="text-sm font-medium text-zinc-200">Max booking advance days</span>
+                            <p class="mt-1 text-xs text-zinc-500">Jobs due within this many days show <em>Due Today</em> or <em>Due Tomorrow</em> badges.</p>
+                            <input type="number" min="1" name="max_booking_advance_days" value="<?= htmlspecialchars((string) $settings['max_booking_advance_days'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required>
+                        </label>
+                        <label class="block">
+                            <span class="text-sm font-medium text-zinc-200">Simmer days threshold</span>
+                            <p class="mt-1 text-xs text-zinc-500">Jobs due within this many days (but beyond the advance window) show a <em>Simmering</em> badge. Jobs further out show <em>Ready to Cluster</em>.</p>
+                            <input type="number" min="1" name="simmer_days_threshold" value="<?= htmlspecialchars((string) $settings['simmer_days_threshold'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required>
+                        </label>
+
+                        <hr class="border-zinc-700/60">
+
                         <label class="block">
                             <span class="text-sm font-medium text-zinc-200">Work days</span>
                             <select name="work_days" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" required>
