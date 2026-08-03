@@ -2031,6 +2031,10 @@ require_once __DIR__ . '/../templates/header.php';
                             href="../book_task.php"
                             class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
                         >Book a Task</a>
+                        <a
+                            href="../recurring-services.php"
+                            class="inline-flex items-center justify-center rounded-lg border border-cyan-700/60 bg-cyan-950/30 px-4 py-2 text-sm font-medium text-cyan-300 transition hover:bg-cyan-950/50 hover:border-cyan-500/60"
+                        >Recurring Services</a>
                         <form method="POST" id="run-clustering-form">
                             <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
                             <input type="hidden" name="run_clustering" value="1">

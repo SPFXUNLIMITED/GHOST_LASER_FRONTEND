@@ -70,6 +70,42 @@ function bk_deleteBookings(PDO $pdo, array $ids): int
         return 0;
     }
 
+    function bk_columnExists(PDO $pdo, string $table, string $column): bool
+    {
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = ?
+              AND COLUMN_NAME = ?
+        ");
+        $stmt->execute([$table, $column]);
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    function bk_advanceRecurringDueDate(PDO $pdo, int $recurringProfileId, string $serviceDate): void
+    {
+        if (!bk_tableExists($pdo, 'recurring_service_customers')) {
+            return;
+        }
+        $stmt = $pdo->prepare("
+            UPDATE recurring_service_customers
+            SET
+                last_serviced_date = :service_date,
+                next_due_date = CASE frequency_unit
+                    WHEN 'days'   THEN DATE_ADD(:service_date, INTERVAL frequency_value DAY)
+                    WHEN 'weeks'  THEN DATE_ADD(:service_date, INTERVAL frequency_value WEEK)
+                    WHEN 'months' THEN DATE_ADD(:service_date, INTERVAL frequency_value MONTH)
+                    ELSE next_due_date
+                END
+            WHERE id = :id
+        ");
+        $stmt->execute([
+            ':service_date' => $serviceDate,
+            ':id' => $recurringProfileId,
+        ]);
+    }
+
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
 
     try {
@@ -153,14 +189,39 @@ try {
             geocode_status       VARCHAR(50)  NULL,
             preferred_date_start DATE NULL,
             preferred_date_end   DATE NULL,
+            recurring_profile_id INT UNSIGNED NULL,
             created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_customer   (customer_id),
-            INDEX idx_status     (request_status)
+            INDEX idx_status     (request_status),
+            INDEX idx_recurring_profile (recurring_profile_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 } catch (PDOException $e) {
     // Table already exists — non-fatal
+}
+
+try {
+    if (!bk_columnExists($pdo, 'service_requests', 'recurring_profile_id')) {
+        $pdo->exec("ALTER TABLE service_requests ADD COLUMN recurring_profile_id INT UNSIGNED NULL AFTER preferred_date_end");
+    }
+} catch (Throwable $e) {
+    // Non-fatal
+}
+
+try {
+    $idxExistsStmt = $pdo->query("
+        SELECT COUNT(*)
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'service_requests'
+          AND INDEX_NAME = 'idx_recurring_profile'
+    ");
+    if ((int) $idxExistsStmt->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE service_requests ADD INDEX idx_recurring_profile (recurring_profile_id)");
+    }
+} catch (Throwable $e) {
+    // Non-fatal
 }
 
 // ── POST handler (PRG pattern) ────────────────────────────────────────────────
@@ -252,7 +313,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $srPrefEnd   = ($srPrefEnd   !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $srPrefEnd))   ? $srPrefEnd   : null;
 
             try {
-                $srRow = $pdo->prepare("SELECT customer_id FROM service_requests WHERE id = ?");
+                $srRow = $pdo->prepare("SELECT customer_id, request_status, recurring_profile_id FROM service_requests WHERE id = ?");
                 $srRow->execute([$editId]);
                 $srData = $srRow->fetch();
 
@@ -275,6 +336,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ")->execute([$srBrand, $srModel, $srWatts ?: null, $srAge ?: null,
                                  $srSummary, $srDetails, $srPriority,
                                  $srStatus, $srPrefStart, $srPrefEnd, $editId]);
+
+                    $previousStatus = strtolower(trim((string) ($srData['request_status'] ?? '')));
+                    $nextStatus = strtolower(trim($srStatus));
+                    $recurringProfileId = (int) ($srData['recurring_profile_id'] ?? 0);
+                    if ($recurringProfileId > 0 && $previousStatus !== 'completed' && $nextStatus === 'completed') {
+                        $serviceDate = (new DateTimeImmutable('today'))->format('Y-m-d');
+                        bk_advanceRecurringDueDate($pdo, $recurringProfileId, $serviceDate);
+                    }
 
                     $_SESSION['bk_flash_success'] = 'Booking #' . $editId . ' has been updated.';
                 } else {
@@ -372,6 +441,7 @@ try {
             sr.geocode_status,
             sr.preferred_date_start,
             sr.preferred_date_end,
+            sr.recurring_profile_id,
             sr.created_at,
             sr.updated_at,
             sr.task_contact,

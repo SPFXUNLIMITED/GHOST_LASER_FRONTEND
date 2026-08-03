@@ -182,6 +182,12 @@ require_once __DIR__ . '/templates/header.php';
                         >
                             Book Task
                         </a>
+                        <a
+                            href="recurring-services.php"
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-cyan-700/60 bg-cyan-950/30 hover:border-cyan-500/60 hover:bg-cyan-950/50 text-cyan-300 font-medium text-sm px-4 py-2.5 transition-all"
+                        >
+                            Recurring Services
+                        </a>
 
                         <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 pt-3">Tracking &amp; Compliance</p>
                         <a
