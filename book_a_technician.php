@@ -1189,7 +1189,7 @@ require_once __DIR__ . '/templates/header.php';
     <div class="w-full max-w-xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl sm:p-8">
         <h2 id="sms-consent-modal-title" class="text-xl font-bold text-zinc-100">SMS Messaging</h2>
         <p class="mt-4 text-sm leading-relaxed text-zinc-300">
-            By entering your phone number and clicking on Notify Me, you agree to receive text messages from Ghost Laser. You agree that your consent is not a condition of purchasing any property, good, or services from Ghost Laser. You understand that these texts will be sent using an automated dialing system. Messages and data rates may apply.
+            By entering your phone number and clicking on SMS Me, you agree to receive text messages from Ghost Laser. You agree that your consent is not a condition of purchasing any property, good, or services from Ghost Laser. You understand that these texts will be sent using an automated dialing system. Messages and data rates may apply.
         </p>
         <p class="mt-4 text-sm text-zinc-300">
             Read our
