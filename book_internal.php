@@ -440,7 +440,7 @@ require_once __DIR__ . '/templates/header.php';
             <span class="text-xs text-amber-400 font-medium tracking-wider uppercase">Internal Use Only</span>
         </div>
         <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight mb-5">
-            Internal Booking &mdash; <span class="text-cyan-400 glow-cyan">Book a Technician</span>
+            Internal Booking &mdash; <span class="text-cyan-400 glow-cyan">Book a Customer</span>
         </h1>
         <p class="text-zinc-400 text-lg leading-relaxed max-w-xl mx-auto">
             Search for an existing customer to auto-fill their details, or manually enter a new customer&rsquo;s information to create a service request.
