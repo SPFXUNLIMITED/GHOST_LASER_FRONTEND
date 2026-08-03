@@ -566,6 +566,7 @@ foreach ([
     'destination_state'    => "VARCHAR(100) NULL COMMENT 'Destination state for task-type service requests'",
     'destination_zip'      => "VARCHAR(20)  NULL COMMENT 'Destination ZIP for task-type service requests'",
     'duration_minutes'     => "SMALLINT     UNSIGNED NULL COMMENT 'Estimated task duration in minutes'",
+    'recurring_profile_id' => "INT          UNSIGNED NULL COMMENT 'Recurring profile linkage for traceability'",
 ] as $_col => $_def) {
     try {
         $pdo->exec("ALTER TABLE service_requests ADD COLUMN {$_col} {$_def}");
