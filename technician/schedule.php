@@ -1639,6 +1639,17 @@ require_once __DIR__ . '/../templates/header.php';
     <div class="max-w-7xl mx-auto">
         <h1 class="text-5xl font-bold mb-2">Scheduling Dashboard</h1>
 
+        <div class="mb-6 flex flex-wrap gap-3">
+            <a
+                href="../book_internal.php"
+                class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
+            >Book a Customer</a>
+            <a
+                href="../book_task.php"
+                class="inline-flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
+            >Book a Task</a>
+        </div>
+
         <div class="mb-8">
             <div>
                 <p class="text-zinc-400">Pending service requests (<?= count($jobs) ?> found)</p>
