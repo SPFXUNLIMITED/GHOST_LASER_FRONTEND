@@ -274,17 +274,23 @@ function formatVisitDurationSummary(?int $durationMinutes, array $settings): str
 
 /**
  * Build the scheduling window each job should follow based on its priority.
+ *
+ * @param ?DateTimeImmutable $submittedAt The date the job was originally submitted.
+ *                                        When provided the window is anchored to that
+ *                                        date so the deadline never drifts forward on
+ *                                        subsequent page loads.  Falls back to today
+ *                                        when null (e.g. legacy rows without created_at).
  */
-function getPriorityScheduleWindow($priorityLevel, array $settings, ?int $durationMinutes = null)
+function getPriorityScheduleWindow($priorityLevel, array $settings, ?int $durationMinutes = null, ?DateTimeImmutable $submittedAt = null)
 {
-    $today = new DateTimeImmutable('today');
+    $anchor = $submittedAt ?? new DateTimeImmutable('today');
     $normalizedPriority = strtolower((string) $priorityLevel);
     $timeWindowSummary = formatVisitDurationSummary($durationMinutes, $settings);
 
     switch ($normalizedPriority) {
         case 'emergency':
-            $startDate = $today;
-            $endDate = $today->modify('+1 day');
+            $startDate = $anchor;
+            $endDate = $anchor->modify('+1 day');
 
             return [
                 'label' => 'Emergency',
@@ -293,7 +299,7 @@ function getPriorityScheduleWindow($priorityLevel, array $settings, ?int $durati
             ];
 
         case 'vip':
-            $endDate = addBusinessDays($today, 2, $settings);
+            $endDate = addBusinessDays($anchor, 2, $settings);
 
             return [
                 'label' => 'VIP',
@@ -302,8 +308,8 @@ function getPriorityScheduleWindow($priorityLevel, array $settings, ?int $durati
             ];
 
         default:
-            $startDate = addBusinessDays($today, 3, $settings);
-            $endDate = addBusinessDays($today, 5, $settings);
+            $startDate = addBusinessDays($anchor, 3, $settings);
+            $endDate = addBusinessDays($anchor, 5, $settings);
 
             return [
                 'label' => 'Standard',
@@ -1357,7 +1363,8 @@ $jobs = $pdo->query("
         sr.preferred_date_start,
         sr.preferred_date_end,
         sr.services,
-        sr.duration_minutes
+        sr.duration_minutes,
+        sr.created_at
     FROM service_requests sr
     LEFT JOIN customers c ON sr.customer_id = c.id
     WHERE sr.request_status IN ('new', 'queued')
@@ -1370,10 +1377,18 @@ $jobs = $pdo->query("
 $jobsDurationError = resolveJobDurationsFromServices($pdo, $jobs);
 
 foreach ($jobs as &$job) {
+    $submittedAt = null;
+    if (!empty($job['created_at'])) {
+        $parsed = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $job['created_at']);
+        if ($parsed !== false) {
+            $submittedAt = $parsed->setTime(0, 0, 0);
+        }
+    }
     $job['priority_meta'] = getPriorityScheduleWindow(
         $job['priority_level'] ?? 'standard',
         $schedulingSettings,
-        isset($job['duration_minutes']) ? (int) $job['duration_minutes'] : null
+        isset($job['duration_minutes']) ? (int) $job['duration_minutes'] : null,
+        $submittedAt
     );
 }
 unset($job);
@@ -1420,6 +1435,7 @@ $scheduledJobsStmt = $pdo->prepare("
         sr.problem_summary,
         sr.preferred_date_start,
         sr.preferred_date_end,
+        sr.created_at,
         sr.latitude AS job_latitude,
         sr.longitude AS job_longitude,
         COALESCE(c.first_name, sr.task_contact, '') AS first_name,
@@ -1464,10 +1480,18 @@ foreach ($scheduledJobs as $scheduledJob) {
             $durationFromWindow = $endMinutes - $startMinutes;
         }
     }
+    $scheduledSubmittedAt = null;
+    if (!empty($scheduledJob['created_at'])) {
+        $parsed = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $scheduledJob['created_at']);
+        if ($parsed !== false) {
+            $scheduledSubmittedAt = $parsed->setTime(0, 0, 0);
+        }
+    }
     $scheduledJob['priority_meta'] = getPriorityScheduleWindow(
         $scheduledJob['priority_level'] ?? 'standard',
         $schedulingSettings,
-        $durationFromWindow
+        $durationFromWindow,
+        $scheduledSubmittedAt
     );
     $scheduledJob['service_address'] = formatCustomerAddress($scheduledJob);
     $scheduledJob['time_window_label'] = formatStoredTimeWindow(
