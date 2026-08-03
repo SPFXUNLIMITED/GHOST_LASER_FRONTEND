@@ -13,6 +13,8 @@ function getSchedulingSettingsDefaults(): array
         'average_job_duration_minutes' => 120,
         'maximum_jobs_per_technician_per_day' => 4,
         'default_time_window_size_hours' => 2,
+        'max_booking_advance_days' => 2,
+        'simmer_days_threshold' => 3,
         'work_days' => 'mon-fri',
         'initial_appointment_confirmation_subject' => 'Your Ghost Laser appointment is confirmed',
         'initial_appointment_confirmation_body' => "Hi {{customer_name}},\n\nYour appointment with Ghost Laser is confirmed for {{appointment_date}} at {{appointment_time}}.\n\nReply to this message if you need to make any changes.\n\n- Ghost Laser Team",
@@ -97,6 +99,8 @@ function ensureSchedulingSettingsTable(PDO $pdo): void
         'day_before_reminder_body' => "TEXT NOT NULL",
         'one_hour_arrival_notification_subject' => "VARCHAR(255) NOT NULL DEFAULT ''",
         'one_hour_arrival_notification_body' => "TEXT NOT NULL",
+        'max_booking_advance_days' => "SMALLINT UNSIGNED NOT NULL DEFAULT 2",
+        'simmer_days_threshold' => "SMALLINT UNSIGNED NOT NULL DEFAULT 3",
     ];
 
     foreach ($columnDefinitions as $columnName => $columnDefinition) {
@@ -192,6 +196,8 @@ function normalizeSchedulingSettings(array $settings): array
     $merged['average_job_duration_minutes'] = (int) $merged['average_job_duration_minutes'];
     $merged['maximum_jobs_per_technician_per_day'] = (int) $merged['maximum_jobs_per_technician_per_day'];
     $merged['default_time_window_size_hours'] = (int) $merged['default_time_window_size_hours'];
+    $merged['max_booking_advance_days'] = max(1, (int) $merged['max_booking_advance_days']);
+    $merged['simmer_days_threshold'] = max(1, (int) $merged['simmer_days_threshold']);
     $merged['work_days'] = array_key_exists($merged['work_days'], getSchedulingWorkDayOptions())
         ? $merged['work_days']
         : $defaults['work_days'];
@@ -235,6 +241,8 @@ function updateSchedulingSettings(PDO $pdo, array $settings): void
             average_job_duration_minutes = :average_job_duration_minutes,
             maximum_jobs_per_technician_per_day = :maximum_jobs_per_technician_per_day,
             default_time_window_size_hours = :default_time_window_size_hours,
+            max_booking_advance_days = :max_booking_advance_days,
+            simmer_days_threshold = :simmer_days_threshold,
             work_days = :work_days,
             initial_appointment_confirmation_subject = :initial_appointment_confirmation_subject,
             initial_appointment_confirmation_body = :initial_appointment_confirmation_body,
@@ -255,6 +263,8 @@ function updateSchedulingSettings(PDO $pdo, array $settings): void
         ':average_job_duration_minutes' => $settings['average_job_duration_minutes'],
         ':maximum_jobs_per_technician_per_day' => $settings['maximum_jobs_per_technician_per_day'],
         ':default_time_window_size_hours' => $settings['default_time_window_size_hours'],
+        ':max_booking_advance_days' => $settings['max_booking_advance_days'],
+        ':simmer_days_threshold' => $settings['simmer_days_threshold'],
         ':work_days' => $settings['work_days'],
         ':initial_appointment_confirmation_subject' => $settings['initial_appointment_confirmation_subject'],
         ':initial_appointment_confirmation_body' => $settings['initial_appointment_confirmation_body'],

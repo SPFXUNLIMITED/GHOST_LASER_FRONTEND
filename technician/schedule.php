@@ -499,6 +499,54 @@ function formatStoredTimeWindow(?string $start, ?string $end): ?string
 }
 
 /**
+ * Return a status badge array for a job based on how close it is to its
+ * target window end date.  Both thresholds are read from $settings so that
+ * changes on the settings page take effect immediately.
+ *
+ * Badge labels:
+ *   'Overdue'          – window end date is in the past
+ *   'Due Today'        – window end date is today
+ *   'Due Tomorrow'     – within max_booking_advance_days (but not today)
+ *   'Simmering'        – within simmer_days_threshold but beyond the advance window
+ *   'Ready to Cluster' – beyond the simmer threshold
+ *
+ * @return array{ label: string, classes: string }
+ */
+function getJobStatusBadge(?string $windowEndDate, array $settings): array
+{
+    $advanceDays = max(1, (int) ($settings['max_booking_advance_days'] ?? 2));
+    $simmerDays  = max(1, (int) ($settings['simmer_days_threshold'] ?? 3));
+
+    if ($windowEndDate === null || $windowEndDate === '') {
+        return ['label' => 'Ready to Cluster', 'classes' => 'bg-green-500/20 text-green-300'];
+    }
+
+    $windowEnd = DateTimeImmutable::createFromFormat('Y-m-d', $windowEndDate);
+    if ($windowEnd === false) {
+        return ['label' => 'Ready to Cluster', 'classes' => 'bg-green-500/20 text-green-300'];
+    }
+
+    $today = new DateTimeImmutable('today');
+    $isPast = $windowEnd < $today;
+    $daysUntilDue = (int) $today->diff($windowEnd)->days;
+
+    if ($isPast) {
+        return ['label' => 'Overdue', 'classes' => 'bg-red-500/20 text-red-300'];
+    }
+    if ($daysUntilDue === 0) {
+        return ['label' => 'Due Today', 'classes' => 'bg-red-500/20 text-red-300'];
+    }
+    if ($daysUntilDue <= $advanceDays) {
+        return ['label' => 'Due Tomorrow', 'classes' => 'bg-orange-500/20 text-orange-300'];
+    }
+    if ($daysUntilDue <= $simmerDays) {
+        return ['label' => 'Simmering', 'classes' => 'bg-yellow-500/20 text-yellow-300'];
+    }
+
+    return ['label' => 'Ready to Cluster', 'classes' => 'bg-green-500/20 text-green-300'];
+}
+
+/**
  * Resolve per-job duration by summing the `duration_minutes` of every service
  * referenced in the job's `services` JSON column.
  *
@@ -1787,6 +1835,9 @@ require_once __DIR__ . '/../templates/header.php';
                                                             'scheduled_date' => $scheduledJob['scheduled_date'],
                                                             'cluster_label' => $scheduledJob['cluster_label'],
                                                         ];
+                                                        $modalStatusBadge = getJobStatusBadge($scheduledJob['preferred_date_end'] ?? null, $schedulingSettings);
+                                                        $modalPayload['status_badge_label'] = $modalStatusBadge['label'];
+                                                        $modalPayload['status_badge_classes'] = $modalStatusBadge['classes'];
                                                         ?>
                                                         <button
                                                             type="button"
@@ -2021,7 +2072,15 @@ require_once __DIR__ . '/../templates/header.php';
                                             <?= htmlspecialchars($job['priority_meta']['label']) ?>
                                         </span>
                                     </td>
-                                    <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job['priority_meta']['window_summary']) ?></td>
+                                    <td class="p-6 text-sm text-zinc-400">
+                                        <?= htmlspecialchars($job['priority_meta']['window_summary']) ?>
+                                        <?php
+                                        $tableStatusBadge = getJobStatusBadge($job['preferred_date_end'] ?? null, $schedulingSettings);
+                                        ?>
+                                        <span class="mt-1 inline-block px-2 py-0.5 rounded-full text-xs font-semibold <?= htmlspecialchars($tableStatusBadge['classes'], ENT_QUOTES, 'UTF-8') ?>">
+                                            <?= htmlspecialchars($tableStatusBadge['label'], ENT_QUOTES, 'UTF-8') ?>
+                                        </span>
+                                    </td>
                                     <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job['problem_summary'] ?? 'No summary') ?></td>
                                     <td class="p-6 text-sm text-zinc-400">
                                         <?= htmlspecialchars($job['preferred_date_start'] ?? 'N/A') ?>
@@ -2131,6 +2190,7 @@ require_once __DIR__ . '/../templates/header.php';
                     <div><span class="text-zinc-500">Priority:</span> <span id="modal-priority">N/A</span></div>
                     <div><span class="text-zinc-500">Time window:</span> <span id="modal-time-window-label" class="font-medium text-cyan-300">N/A</span></div>
                     <div><span class="text-zinc-500">Target window:</span> <span id="modal-window-summary">N/A</span></div>
+                    <div><span class="text-zinc-500">Status:</span> <span id="modal-status-badge" class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold"></span></div>
                 </div>
             </div>
             <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
@@ -2220,6 +2280,7 @@ require_once __DIR__ . '/../templates/header.php';
     const scheduledJobModal = document.getElementById('scheduled-job-modal');
     const modalOverlay = scheduledJobModal.querySelector('.modal-overlay');
     const modalCloseButton = document.getElementById('modal-close-button');
+    const modalStatusBadge = document.getElementById('modal-status-badge');
     const modalFields = {
         customer_name: document.getElementById('modal-customer-name'),
         service_address: document.getElementById('modal-address'),
@@ -2243,6 +2304,13 @@ require_once __DIR__ . '/../templates/header.php';
         Object.entries(modalFields).forEach(([key, element]) => {
             element.textContent = payload[key] || 'N/A';
         });
+
+        if (modalStatusBadge) {
+            const label = payload.status_badge_label || '';
+            const classes = payload.status_badge_classes || '';
+            modalStatusBadge.textContent = label || 'N/A';
+            modalStatusBadge.className = 'inline-block px-2 py-0.5 rounded-full text-xs font-semibold ' + classes;
+        }
 
         scheduledJobModal.classList.remove('hidden');
         scheduledJobModal.classList.add('flex');
