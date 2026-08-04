@@ -2121,6 +2121,13 @@ require_once __DIR__ . '/../templates/header.php';
             </div>
         </div>
     </div>
+    <div id="cluster-processing-banner" class="fixed bottom-6 left-1/2 z-[60] hidden -translate-x-1/2 items-center gap-3 rounded-2xl border border-cyan-500/30 bg-zinc-900 px-5 py-3 shadow-2xl shadow-black/50">
+        <svg class="h-5 w-5 animate-spin text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        <span class="text-sm font-medium text-zinc-200">Running clustering — please wait&hellip;</span>
+    </div>
     <div id="cluster-time-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-zinc-950/80 px-4">
         <div class="absolute inset-0 cluster-time-modal-overlay"></div>
         <div class="relative z-10 w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl shadow-black/40">
@@ -2452,6 +2459,8 @@ require_once __DIR__ . '/../templates/header.php';
     clusterTimeModalCancel.addEventListener('click', closeClusterTimeModal);
     clusterTimeModalOverlay.addEventListener('click', closeClusterTimeModal);
 
+    const clusterProcessingBanner = document.getElementById('cluster-processing-banner');
+
     clusterTimeModalConfirm.addEventListener('click', function () {
         const startVal = clusterTimeModalStart.value;
         const endVal   = clusterTimeModalEnd.value;
@@ -2469,10 +2478,23 @@ require_once __DIR__ . '/../templates/header.php';
             return;
         }
 
+        // Show loading state on the confirm button.
+        clusterTimeModalConfirm.disabled = true;
+        clusterTimeModalConfirm.innerHTML =
+            '<svg class="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">' +
+                '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>' +
+                '<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>' +
+            '</svg>Processing\u2026';
+
         overrideStartInput.value = startVal;
         overrideEndInput.value   = endVal;
         clusterTimeModal.classList.add('hidden');
         clusterTimeModal.classList.remove('flex');
+
+        // Show the page-level progress banner while the form posts and the page reloads.
+        clusterProcessingBanner.classList.remove('hidden');
+        clusterProcessingBanner.classList.add('flex');
+
         runClusteringForm.submit();
     });
 </script>
