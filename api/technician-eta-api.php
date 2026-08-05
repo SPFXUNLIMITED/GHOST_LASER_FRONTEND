@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../bootstrap_env.php';
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.gc_maxlifetime', 43200);
     session_start();
@@ -42,40 +43,12 @@ function loadTechnicianEtaGoogleMapsApiKey(): string
         return $apiKey;
     }
 
-    $dotenvValues = [];
-    $dotenvPath = __DIR__ . '/.env';
-    if (is_file($dotenvPath) && is_readable($dotenvPath)) {
-        $lines = file($dotenvPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        if (is_array($lines)) {
-            foreach ($lines as $line) {
-                $line = trim($line);
-                if ($line === '' || str_starts_with($line, '#') || strpos($line, '=') === false) {
-                    continue;
-                }
-
-                [$key, $value] = array_map('trim', explode('=', $line, 2));
-                if ($key === '') {
-                    continue;
-                }
-
-                if (strlen($value) >= 2) {
-                    if (($value[0] === '"' && $value[-1] === '"') || ($value[0] === "'" && $value[-1] === "'")) {
-                        $value = substr($value, 1, -1);
-                    }
-                }
-
-                $dotenvValues[$key] = $value;
-            }
-        }
-    }
-
     foreach ([
         getenv('GOOGLE_MAPS_API_KEY'),
         getenv('REDIRECT_GOOGLE_MAPS_API_KEY'),
         $_ENV['GOOGLE_MAPS_API_KEY'] ?? null,
         $_SERVER['GOOGLE_MAPS_API_KEY'] ?? null,
         $_SERVER['REDIRECT_GOOGLE_MAPS_API_KEY'] ?? null,
-        $dotenvValues['GOOGLE_MAPS_API_KEY'] ?? null,
     ] as $candidate) {
         if ($candidate !== null && trim((string) $candidate) !== '') {
             $apiKey = trim((string) $candidate);
