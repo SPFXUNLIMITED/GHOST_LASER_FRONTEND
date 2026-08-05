@@ -293,7 +293,7 @@ $extraHead       = <<<'HTML'
             align-items: center;
             gap: 0.35rem;
             font-size: 0.875rem;
-            font-weight: 600;
+            font-weight: 700;
             text-decoration: none;
             padding: 0.25rem 0.6rem;
             border-radius: 0.4rem;
@@ -306,27 +306,27 @@ $extraHead       = <<<'HTML'
             white-space: nowrap;
         }
         .phone-link {
-            color: #86efac;
-            background: rgba(74, 222, 128, 0.10);
-            border: 1px solid rgba(74, 222, 128, 0.28);
+            color: #4ade80;
+            background: rgba(74, 222, 128, 0.22);
+            border: 1px solid rgba(74, 222, 128, 0.65);
         }
-        .phone-link:active { transform: scale(0.96); background: rgba(74, 222, 128, 0.20); }
+        .phone-link:active { transform: scale(0.96); background: rgba(74, 222, 128, 0.35); }
         .sms-link {
-            color: #7dd3fc;
-            background: rgba(56, 189, 248, 0.10);
-            border: 1px solid rgba(56, 189, 248, 0.28);
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.22);
+            border: 1px solid rgba(56, 189, 248, 0.65);
         }
-        .sms-link:active { transform: scale(0.96); background: rgba(56, 189, 248, 0.20); }
+        .sms-link:active { transform: scale(0.96); background: rgba(56, 189, 248, 0.35); }
         .sms-link:disabled {
             opacity: 0.45;
             cursor: not-allowed;
         }
         .vcf-link {
             color: #c4b5fd;
-            background: rgba(167, 139, 250, 0.10);
-            border: 1px solid rgba(167, 139, 250, 0.28);
+            background: rgba(167, 139, 250, 0.22);
+            border: 1px solid rgba(167, 139, 250, 0.65);
         }
-        .vcf-link:active { transform: scale(0.96); background: rgba(167, 139, 250, 0.20); }
+        .vcf-link:active { transform: scale(0.96); background: rgba(167, 139, 250, 0.35); }
         .eta-status {
             font-size: 0.75rem;
             color: var(--dash-muted);
@@ -358,14 +358,14 @@ $extraHead       = <<<'HTML'
         }
         .nav-btn:active { transform: scale(0.96); }
         .btn-waze {
-            background: rgba(0, 190, 240, 0.12);
-            border: 1px solid rgba(0, 190, 240, 0.38);
-            color: #67e8f9;
+            background: rgba(0, 190, 240, 0.28);
+            border: 1px solid rgba(0, 190, 240, 0.75);
+            color: #22d3ee;
         }
         .btn-gmaps {
-            background: rgba(52, 211, 153, 0.12);
-            border: 1px solid rgba(52, 211, 153, 0.35);
-            color: #6ee7b7;
+            background: rgba(52, 211, 153, 0.28);
+            border: 1px solid rgba(52, 211, 153, 0.75);
+            color: #34d399;
         }
 
         .mileage-btn {
@@ -387,23 +387,23 @@ $extraHead       = <<<'HTML'
         .mileage-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
         .btn-on-way {
-            background: rgba(103, 232, 249, 0.12);
-            border: 1px solid rgba(103, 232, 249, 0.38);
-            color: var(--dash-accent);
+            background: rgba(103, 232, 249, 0.25);
+            border: 1px solid rgba(103, 232, 249, 0.75);
+            color: #22d3ee;
         }
         .btn-on-way.active {
-            background: rgba(103, 232, 249, 0.25);
-            border-color: rgba(103, 232, 249, 0.65);
+            background: rgba(103, 232, 249, 0.42);
+            border-color: rgba(103, 232, 249, 0.95);
         }
 
         .btn-arrived {
-            background: rgba(34,197,94,0.12);
-            border: 1px solid rgba(34,197,94,0.35);
-            color: #86efac;
+            background: rgba(34,197,94,0.25);
+            border: 1px solid rgba(34,197,94,0.75);
+            color: #4ade80;
         }
         .btn-arrived.active {
-            background: rgba(34,197,94,0.25);
-            border-color: rgba(34,197,94,0.65);
+            background: rgba(34,197,94,0.42);
+            border-color: rgba(34,197,94,0.95);
         }
 
         .mileage-status {
@@ -422,18 +422,18 @@ $extraHead       = <<<'HTML'
             gap: 0.4rem;
             padding: 0.55rem 1.1rem;
             border-radius: 0.625rem;
-            border: 1px solid var(--dash-border-strong);
-            background: rgba(24, 24, 27, 0.7);
-            color: var(--dash-accent);
+            border: 1px solid rgba(103, 232, 249, 0.55);
+            background: rgba(103, 232, 249, 0.14);
+            color: #22d3ee;
             font-size: 0.875rem;
-            font-weight: 600;
+            font-weight: 700;
             text-decoration: none;
             transition: border-color 0.15s, background 0.15s;
             -webkit-tap-highlight-color: transparent;
         }
         .nav-btn:active {
-            border-color: rgba(103, 232, 249, 0.6);
-            background: rgba(103, 232, 249, 0.08);
+            border-color: rgba(103, 232, 249, 0.85);
+            background: rgba(103, 232, 249, 0.25);
         }
 
         .today-chip {
@@ -580,33 +580,33 @@ $extraHead       = <<<'HTML'
 
         .keypad-num {
             font-size: 1.3rem;
-            background: rgba(39,39,42,0.7);
-            border: 1px solid rgba(63,63,70,0.8);
-            color: #e4e4e7;
+            background: rgba(63,63,70,0.85);
+            border: 1px solid rgba(113,113,122,0.9);
+            color: #ffffff;
         }
         .keypad-num:hover {
-            background: rgba(63,63,70,0.65);
-            border-color: rgba(6,182,212,0.3);
+            background: rgba(82,82,91,0.9);
+            border-color: rgba(6,182,212,0.6);
         }
         .keypad-back {
             font-size: 1.15rem;
-            background: rgba(39,39,42,0.7);
-            border: 1px solid rgba(63,63,70,0.8);
-            color: #a1a1aa;
+            background: rgba(63,63,70,0.85);
+            border: 1px solid rgba(113,113,122,0.9);
+            color: #d4d4d8;
         }
         .keypad-back:hover {
-            background: rgba(63,63,70,0.65);
-            border-color: rgba(6,182,212,0.3);
+            background: rgba(82,82,91,0.9);
+            border-color: rgba(6,182,212,0.6);
         }
         .keypad-clear {
             font-size: 0.72rem;
             letter-spacing: 0.1em;
-            background: rgba(39,39,42,0.7);
-            border: 1px solid rgba(63,63,70,0.8);
-            color: #a1a1aa;
+            background: rgba(63,63,70,0.85);
+            border: 1px solid rgba(113,113,122,0.9);
+            color: #d4d4d8;
         }
         .keypad-clear:hover {
-            border-color: rgba(239,68,68,0.4);
+            border-color: rgba(239,68,68,0.7);
             color: #fca5a5;
         }
 
@@ -618,25 +618,25 @@ $extraHead       = <<<'HTML'
         }
         .keypad-cancel {
             height: 3rem;
-            background: rgba(39,39,42,0.45);
-            border: 1px solid rgba(63,63,70,0.55);
-            color: #71717a;
+            background: rgba(63,63,70,0.6);
+            border: 1px solid rgba(113,113,122,0.75);
+            color: #a1a1aa;
             font-size: 0.78rem;
-            font-weight: 600;
+            font-weight: 700;
             letter-spacing: 0.07em;
             border-radius: 0.625rem;
             cursor: pointer;
             transition: color 0.1s, border-color 0.1s, transform 0.08s;
             -webkit-tap-highlight-color: transparent;
         }
-        .keypad-cancel:hover { color: #a1a1aa; border-color: rgba(113,113,122,0.6); }
+        .keypad-cancel:hover { color: #d4d4d8; border-color: rgba(161,161,170,0.85); }
         .keypad-cancel:active { transform: scale(0.96); }
 
         .keypad-confirm {
             height: 3rem;
-            background: linear-gradient(135deg, rgba(6,182,212,0.22), rgba(6,182,212,0.13));
-            border: 1px solid rgba(6,182,212,0.48);
-            color: #22d3ee;
+            background: linear-gradient(135deg, rgba(6,182,212,0.42), rgba(6,182,212,0.28));
+            border: 1px solid rgba(6,182,212,0.85);
+            color: #ffffff;
             font-size: 0.88rem;
             font-weight: 700;
             letter-spacing: 0.14em;
@@ -648,8 +648,8 @@ $extraHead       = <<<'HTML'
             -webkit-tap-highlight-color: transparent;
         }
         .keypad-confirm:hover {
-            background: linear-gradient(135deg, rgba(6,182,212,0.32), rgba(6,182,212,0.22));
-            box-shadow: 0 0 26px rgba(6,182,212,0.28);
+            background: linear-gradient(135deg, rgba(6,182,212,0.58), rgba(6,182,212,0.40));
+            box-shadow: 0 0 26px rgba(6,182,212,0.45);
         }
         .keypad-confirm:active { transform: scale(0.97); }
         .keypad-confirm:disabled { opacity: 0.35; cursor: not-allowed; }
