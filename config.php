@@ -1,20 +1,22 @@
 <?php
 // config.php
 
+require_once __DIR__ . '/bootstrap_env.php';
+
 return [
   'version' => '1.0.0',
   'db' => [
-    'host' => '127.0.0.1',
-    'name' => 'spfx_ghostlaser',
-    'user' => 'spfx_ghost',
-    'pass' => 'Beverly90210##',
-    'charset' => 'utf8mb4',
+    'host' => getenv('DB_HOST') ?: '127.0.0.1',
+    'name' => getenv('DB_DATABASE') ?: 'spfx_ghostlaser',
+    'user' => getenv('DB_USERNAME') ?: 'spfx_ghost',
+    'pass' => getenv('DB_PASSWORD') ?: '',
+    'charset' => getenv('DB_CHARSET') ?: 'utf8mb4',
   ],
   'recaptcha' => [
-    'site_key'   => '6LdUs-csAAAAAO0OwhwPWMTV941Vs7jN3XWB7MhT',
-    'secret_key' => '6LdUs-csAAAAAC1ezjVMiAAUtS0GWoQrvYSsITCo',
+    'site_key'   => getenv('RECAPTCHA_SITE_KEY') ?: '',
+    'secret_key' => getenv('RECAPTCHA_SECRET_KEY') ?: '',
   ],
   'google_maps' => [
-    'api_key' => getenv('') ?: '',
+    'api_key' => getenv('GOOGLE_MAPS_API_KEY') ?: '',
   ],
 ];
