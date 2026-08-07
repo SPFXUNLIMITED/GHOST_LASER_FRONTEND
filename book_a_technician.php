@@ -1171,19 +1171,6 @@ require_once __DIR__ . '/templates/header.php';
     </div>
 </section>
 
-<section id="sms-policy" class="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-    <div class="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8">
-        <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-cyan-400">SMS Policy</p>
-        <h2 class="mb-4 text-lg font-bold text-zinc-100">SMS Messaging Terms</h2>
-        <div class="space-y-3 text-sm text-zinc-400 leading-relaxed">
-            <p>By providing your phone number and checking the consent box, you agree to receive SMS text messages from Ghost Laser regarding your repair booking, appointment scheduling, technician status updates, and related service communications.</p>
-            <p>Message frequency varies based on your booking activity. Message and data rates may apply depending on your carrier and plan.</p>
-            <p>You may opt out at any time by replying <strong class="text-zinc-300">STOP</strong> to any message. After opting out you will receive a single confirmation message and no further SMS messages will be sent. Reply <strong class="text-zinc-300">HELP</strong> for assistance.</p>
-            <p>For full details, see our <a href="/sms-opt-in.php" class="text-cyan-400 underline hover:text-cyan-300 transition-colors">SMS Terms</a> and <a href="/privacy-policy.php" class="text-cyan-400 underline hover:text-cyan-300 transition-colors">Privacy Policy</a>.</p>
-        </div>
-    </div>
-</section>
-
 <script>
     const otherServiceCheckbox = document.getElementById('service-<?= h($otherServiceId) ?>');
     const otherServiceWrap = document.getElementById('other-service-wrap');
