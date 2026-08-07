@@ -898,7 +898,7 @@ require_once __DIR__ . '/templates/header.php';
                                     aria-describedby="sms-consent-error"
                                     aria-invalid="<?= $smsConsentError !== '' ? 'true' : 'false' ?>"
                                 >
-                                <span class="text-sm text-zinc-300 leading-snug">Send me text messages about my service appointment. <span class="text-red-400">*</span></span>
+                                <span class="text-sm text-zinc-300 leading-snug">By checking this box you agree to receive recurring text messages from Acme Co. Message frequency varies. Message and data rates may apply. Reply STOP to cancel. <span class="text-red-400">*</span></span>
                             </label>
                             <p id="sms-consent-error" class="field-error<?= $smsConsentError === '' ? ' hidden' : '' ?>" role="alert"><?= h($smsConsentError) ?></p>
                         </div>
@@ -1184,23 +1184,6 @@ require_once __DIR__ . '/templates/header.php';
     </div>
 </section>
 
-<div id="sms-consent-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-zinc-950/80 px-4" role="dialog" aria-modal="true" aria-labelledby="sms-consent-modal-title">
-    <div class="w-full max-w-xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl sm:p-8">
-        <h2 id="sms-consent-modal-title" class="text-xl font-bold text-zinc-100">SMS Messaging</h2>
-        <p class="mt-4 text-sm leading-relaxed text-zinc-300">
-            By entering your phone number and clicking on SMS Me, you agree to receive text messages from Ghost Laser. You agree that your consent is not a condition of purchasing any property, good, or services from Ghost Laser. You understand that these texts will be sent using an automated dialing system. Messages and data rates may apply.
-        </p>
-        <p class="mt-4 text-sm text-zinc-300">
-            Read our
-            <a href="/privacy-policy.php" class="text-cyan-400 underline hover:text-cyan-300 transition-colors">Privacy Policy</a>.
-        </p>
-        <div class="mt-6 flex justify-end gap-3">
-            <button type="button" id="sms-consent-cancel" class="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-semibold text-zinc-200 transition-colors hover:bg-zinc-800">Cancel</button>
-            <button type="button" id="sms-consent-confirm" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition-colors hover:bg-cyan-400">SMS Me</button>
-        </div>
-    </div>
-</div>
-
 <script>
     const otherServiceCheckbox = document.getElementById('service-<?= h($otherServiceId) ?>');
     const otherServiceWrap = document.getElementById('other-service-wrap');
@@ -1212,10 +1195,6 @@ require_once __DIR__ . '/templates/header.php';
     const confirmPasswordInput = document.getElementById('confirm_password');
     const smsConsentCheckbox = document.getElementById('sms-consent');
     const smsConsentError = document.getElementById('sms-consent-error');
-    const smsConsentModal = document.getElementById('sms-consent-modal');
-    const smsConsentCancelButton = document.getElementById('sms-consent-cancel');
-    const smsConsentConfirmButton = document.getElementById('sms-consent-confirm');
-    let isSmsConsentProgrammaticUpdate = false;
 
     const normalizeUsPhone = (value) => {
         let digits = String(value || '').replace(/\D/g, '');
@@ -1297,48 +1276,9 @@ require_once __DIR__ . '/templates/header.php';
                 smsConsentError.classList.add('hidden');
                 smsConsentError.textContent = '';
             };
-            const openSmsConsentModal = () => {
-                if (!smsConsentModal) return;
-                smsConsentModal.classList.remove('hidden');
-                smsConsentModal.classList.add('flex');
-            };
-            const closeSmsConsentModal = () => {
-                if (!smsConsentModal) return;
-                smsConsentModal.classList.add('hidden');
-                smsConsentModal.classList.remove('flex');
-            };
-
             smsConsentCheckbox.addEventListener('change', () => {
-                if (isSmsConsentProgrammaticUpdate) {
-                    clearSmsConsentError();
-                    isSmsConsentProgrammaticUpdate = false;
-                    return;
-                }
                 if (smsConsentCheckbox.checked) {
-                    smsConsentCheckbox.checked = false;
-                    openSmsConsentModal();
-                }
-            });
-            smsConsentCancelButton?.addEventListener('click', () => {
-                smsConsentCheckbox.checked = false;
-                closeSmsConsentModal();
-            });
-            smsConsentConfirmButton?.addEventListener('click', () => {
-                isSmsConsentProgrammaticUpdate = true;
-                smsConsentCheckbox.checked = true;
-                clearSmsConsentError();
-                closeSmsConsentModal();
-            });
-            smsConsentModal?.addEventListener('click', (event) => {
-                if (event.target === smsConsentModal) {
-                    smsConsentCheckbox.checked = false;
-                    closeSmsConsentModal();
-                }
-            });
-            document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && smsConsentModal && !smsConsentModal.classList.contains('hidden')) {
-                    smsConsentCheckbox.checked = false;
-                    closeSmsConsentModal();
+                    clearSmsConsentError();
                 }
             });
             stepOneForm.addEventListener('submit', (event) => {
