@@ -898,7 +898,7 @@ require_once __DIR__ . '/templates/header.php';
                                     aria-describedby="sms-consent-error"
                                     aria-invalid="<?= $smsConsentError !== '' ? 'true' : 'false' ?>"
                                 >
-                                <span class="text-sm text-zinc-300 leading-snug">By checking this box you agree to receive recurring text messages from Acme Co. Message frequency varies. Message and data rates may apply. Reply STOP to cancel.</span>
+                                <span class="text-sm text-zinc-300 leading-snug">By checking this box you agree to receive recurring text messages from Ghost Laser. Message frequency varies. Message and data rates may apply. Reply STOP to cancel.</span>
                             </label>
                             <p id="sms-consent-error" class="field-error<?= $smsConsentError === '' ? ' hidden' : '' ?>" role="alert"><?= h($smsConsentError) ?></p>
                         </div>
