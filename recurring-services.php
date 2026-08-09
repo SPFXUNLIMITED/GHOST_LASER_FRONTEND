@@ -160,6 +160,35 @@ function recGetCustomerSearchSelectColumns(PDO $pdo): array
     return $baseColumns;
 }
 
+function recGetLatestBookingHistoryByCustomerIds(PDO $pdo, array $customerIds): array
+{
+    $customerIds = array_values(array_filter(array_unique(array_map('intval', $customerIds)), static fn($id) => $id > 0));
+    if ($customerIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(', ', array_fill(0, count($customerIds), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT sr.customer_id, sr.laser_brand, sr.laser_model, sr.laser_watts, sr.laser_age, sr.problem_summary, sr.problem_details, DATE(sr.created_at) AS last_service_date
+         FROM service_requests sr
+         INNER JOIN (
+             SELECT customer_id, MAX(id) AS latest_id
+             FROM service_requests
+             WHERE customer_id IN ($placeholders)
+               AND request_status <> 'deleted'
+             GROUP BY customer_id
+         ) latest ON latest.latest_id = sr.id"
+    );
+    $stmt->execute($customerIds);
+
+    $historyByCustomerId = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $historyByCustomerId[(int) ($row['customer_id'] ?? 0)] = $row;
+    }
+
+    return $historyByCustomerId;
+}
+
 recEnsureSchema($pdo);
 
 if (empty($_SESSION['recurring_csrf'])) {
@@ -218,10 +247,22 @@ if ($isCustomerSearchRequest) {
     }
 
     $results = [];
+    $latestBookingHistory = [];
+    try {
+        $latestBookingHistory = recGetLatestBookingHistoryByCustomerIds(
+            $pdo,
+            array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), $rows)
+        );
+    } catch (Throwable $e) {
+        $latestBookingHistory = [];
+    }
+
     foreach ($rows as $row) {
+        $customerId = (int) ($row['id'] ?? 0);
+        $latestBooking = $latestBookingHistory[$customerId] ?? [];
         $customerName = trim((string) (($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')));
         $results[] = [
-            'id' => (int) $row['id'],
+            'id' => $customerId,
             'customer_name' => $customerName,
             'company_name' => (string) ($row['company'] ?? ''),
             'phone' => (string) ($row['phone'] ?? ''),
@@ -230,14 +271,88 @@ if ($isCustomerSearchRequest) {
             'city' => (string) ($row['city'] ?? ''),
             'state' => strtoupper((string) ($row['state'] ?? '')),
             'zip' => (string) ($row['zip'] ?? ''),
-            'machine_brand' => (string) ($row['machine_brand'] ?? ''),
-            'machine_model' => (string) ($row['machine_model'] ?? ''),
-            'machine_watts' => (string) ($row['machine_watts'] ?? ''),
-            'machine_age' => (string) ($row['machine_age'] ?? ''),
+            'machine_brand' => trim((string) ($latestBooking['laser_brand'] ?? '')) !== ''
+                ? (string) $latestBooking['laser_brand']
+                : (string) ($row['machine_brand'] ?? ''),
+            'machine_model' => trim((string) ($latestBooking['laser_model'] ?? '')) !== ''
+                ? (string) $latestBooking['laser_model']
+                : (string) ($row['machine_model'] ?? ''),
+            'machine_watts' => trim((string) ($latestBooking['laser_watts'] ?? '')) !== ''
+                ? (string) $latestBooking['laser_watts']
+                : (string) ($row['machine_watts'] ?? ''),
+            'machine_age' => trim((string) ($latestBooking['laser_age'] ?? '')) !== ''
+                ? (string) $latestBooking['laser_age']
+                : (string) ($row['machine_age'] ?? ''),
+            'problem_summary' => (string) ($latestBooking['problem_summary'] ?? ''),
+            'problem_details' => (string) ($latestBooking['problem_details'] ?? ''),
+            'last_service_date' => (string) ($latestBooking['last_service_date'] ?? ''),
         ];
     }
 
     echo json_encode(['results' => $results]);
+    exit;
+}
+
+if (
+    isset($_GET['action']) && $_GET['action'] === 'customer_data'
+    && isset($_GET['id'])
+) {
+    header('Content-Type: application/json');
+
+    $csrfHeader = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if ($csrfHeader === '' || !hash_equals($customerSearchCsrfToken, $csrfHeader)) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Invalid CSRF token.']);
+        exit;
+    }
+
+    $customerId = (int) ($_GET['id'] ?? 0);
+    if ($customerId <= 0) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid customer id.']);
+        exit;
+    }
+
+    try {
+        $selectColumns = recGetCustomerSearchSelectColumns($pdo);
+        $custStmt = $pdo->prepare('SELECT ' . implode(', ', $selectColumns) . ' FROM customers WHERE id = :id LIMIT 1');
+        $custStmt->execute([':id' => $customerId]);
+        $custRow = $custStmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Customer lookup failed.']);
+        exit;
+    }
+
+    if (!$custRow) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Customer not found.']);
+        exit;
+    }
+
+    $latestBooking = [];
+    try {
+        $history = recGetLatestBookingHistoryByCustomerIds($pdo, [$customerId]);
+        $latestBooking = $history[$customerId] ?? [];
+    } catch (Throwable $e) {
+        $latestBooking = [];
+    }
+
+    echo json_encode([
+        'machine_brand' => trim((string) ($latestBooking['laser_brand'] ?? '')) !== ''
+            ? (string) $latestBooking['laser_brand']
+            : (string) ($custRow['machine_brand'] ?? ''),
+        'machine_model' => trim((string) ($latestBooking['laser_model'] ?? '')) !== ''
+            ? (string) $latestBooking['laser_model']
+            : (string) ($custRow['machine_model'] ?? ''),
+        'machine_watts' => trim((string) ($latestBooking['laser_watts'] ?? '')) !== ''
+            ? (string) $latestBooking['laser_watts']
+            : (string) ($custRow['machine_watts'] ?? ''),
+        'machine_age' => trim((string) ($latestBooking['laser_age'] ?? '')) !== ''
+            ? (string) $latestBooking['laser_age']
+            : (string) ($custRow['machine_age'] ?? ''),
+        'last_service_date' => (string) ($latestBooking['last_service_date'] ?? ''),
+    ]);
     exit;
 }
 
@@ -975,10 +1090,28 @@ function setSelectedCustomer(customer) {
     customerSearchInput.value = fullName || (customer.company_name || '');
     customerResultsEl.classList.add('hidden');
     customerResultsEl.innerHTML = '';
-    if (!document.getElementById('defaultMachineBrand').value) document.getElementById('defaultMachineBrand').value = customer.machine_brand || '';
-    if (!document.getElementById('defaultMachineModel').value) document.getElementById('defaultMachineModel').value = customer.machine_model || '';
-    if (!document.getElementById('defaultMachineWatts').value) document.getElementById('defaultMachineWatts').value = customer.machine_watts || '';
-    if (!document.getElementById('defaultMachineAge').value) document.getElementById('defaultMachineAge').value = customer.machine_age || '';
+    document.getElementById('defaultProblemSummary').value = customer.problem_summary || '';
+    document.getElementById('defaultProblemDetails').value = customer.problem_details || '';
+
+    // Fetch machine data directly from the customers table for this customer.
+    fetch(`recurring-services.php?action=customer_data&id=${encodeURIComponent(customer.id)}`, {
+        headers: { 'X-CSRF-Token': customerSearchCsrfToken }
+    })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(data => {
+        document.getElementById('defaultMachineBrand').value = data.machine_brand || '';
+        document.getElementById('defaultMachineModel').value = data.machine_model || '';
+        document.getElementById('defaultMachineWatts').value = data.machine_watts || '';
+        document.getElementById('defaultMachineAge').value = data.machine_age || '';
+        document.getElementById('lastServicedDate').value = data.last_service_date || '';
+    })
+    .catch(() => {
+        document.getElementById('defaultMachineBrand').value = '';
+        document.getElementById('defaultMachineModel').value = '';
+        document.getElementById('defaultMachineWatts').value = '';
+        document.getElementById('defaultMachineAge').value = '';
+        document.getElementById('lastServicedDate').value = '';
+    });
 }
 
 function openEditModal(profile) {
