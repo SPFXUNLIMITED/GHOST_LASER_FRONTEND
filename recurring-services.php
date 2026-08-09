@@ -169,7 +169,7 @@ function recGetLatestBookingHistoryByCustomerIds(PDO $pdo, array $customerIds): 
 
     $placeholders = implode(', ', array_fill(0, count($customerIds), '?'));
     $stmt = $pdo->prepare(
-        "SELECT sr.customer_id, sr.laser_brand, sr.laser_model, sr.laser_watts, sr.laser_age, sr.problem_summary, sr.problem_details
+        "SELECT sr.customer_id, sr.laser_brand, sr.laser_model, sr.laser_watts, sr.laser_age, sr.problem_summary, sr.problem_details, DATE(sr.created_at) AS last_service_date
          FROM service_requests sr
          INNER JOIN (
              SELECT customer_id, MAX(id) AS latest_id
@@ -285,6 +285,7 @@ if ($isCustomerSearchRequest) {
                 : (string) ($row['machine_age'] ?? ''),
             'problem_summary' => (string) ($latestBooking['problem_summary'] ?? ''),
             'problem_details' => (string) ($latestBooking['problem_details'] ?? ''),
+            'last_service_date' => (string) ($latestBooking['last_service_date'] ?? ''),
         ];
     }
 
@@ -1030,6 +1031,7 @@ function setSelectedCustomer(customer) {
     document.getElementById('defaultMachineModel').value = customer.machine_model || '';
     document.getElementById('defaultMachineWatts').value = customer.machine_watts || '';
     document.getElementById('defaultMachineAge').value = customer.machine_age || '';
+    document.getElementById('lastServicedDate').value = customer.last_service_date || '';
     document.getElementById('defaultProblemSummary').value = customer.problem_summary || '';
     document.getElementById('defaultProblemDetails').value = customer.problem_details || '';
 }
