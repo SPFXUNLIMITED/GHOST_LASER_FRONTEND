@@ -508,7 +508,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':active' => $active,
                     ':notes' => $notes !== '' ? $notes : null,
                 ]);
-                $_SESSION['recurring_flash_success'] = 'Recurring profile created.';
+                $_SESSION['recurring_flash_success'] = 'Maintenance profile created.';
             } else {
                 if ($profileId <= 0) {
                     throw new RuntimeException('Invalid recurring profile.');
@@ -557,7 +557,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':notes' => $notes !== '' ? $notes : null,
                     ':id' => $profileId,
                 ]);
-                $_SESSION['recurring_flash_success'] = 'Recurring profile updated.';
+                $_SESSION['recurring_flash_success'] = 'Maintenance profile updated.';
             }
         } elseif ($action === 'delete_profile') {
             $profileId = (int) ($_POST['profile_id'] ?? 0);
@@ -566,7 +566,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $stmt = $pdo->prepare("DELETE FROM recurring_service_customers WHERE id = :id");
             $stmt->execute([':id' => $profileId]);
-            $_SESSION['recurring_flash_success'] = 'Recurring profile deleted.';
+            $_SESSION['recurring_flash_success'] = 'Maintenance profile deleted.';
         } elseif ($action === 'add_to_schedule') {
             $profileId = (int) ($_POST['profile_id'] ?? 0);
             if ($profileId <= 0) {
@@ -773,8 +773,8 @@ $profiles = $listStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $services = $pdo->query("SELECT id, service_name FROM services ORDER BY service_name ASC")->fetchAll(PDO::FETCH_ASSOC);
 
-$pageTitle = 'Recurring Services | Ghost Laser';
-$pageDescription = 'Manage recurring service profiles and queue due jobs.';
+$pageTitle = 'Maintenance Schedule | Ghost Laser';
+$pageDescription = 'Manage maintenance schedule profiles and queue due jobs.';
 $headerRight = '<a href="dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Dashboard</a>';
 $extraHead = <<<'HTML'
 <style>
@@ -821,12 +821,12 @@ require_once __DIR__ . '/templates/header.php';
         <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8">
             <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 class="text-3xl font-bold tracking-tight">Recurring Service Schedule</h1>
-                    <p class="mt-2 text-sm text-zinc-400">Manage customer-linked recurring profiles and send due work into the scheduling queue.</p>
+                    <h1 class="text-3xl font-bold tracking-tight">Maintenance Schedule</h1>
+                    <p class="mt-2 text-sm text-zinc-400">Manage customer-linked maintenance profiles and send due work into the scheduling queue.</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <a href="technician/schedule.php" class="inline-flex items-center rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700">Scheduling Queue</a>
-                    <button type="button" onclick="openCreateModal()" class="inline-flex items-center rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 btn-glow hover:bg-cyan-400">Add Recurring Profile</button>
+                    <button type="button" onclick="openCreateModal()" class="inline-flex items-center rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 btn-glow hover:bg-cyan-400">Add Maintenance Profile</button>
                 </div>
             </div>
 
@@ -867,14 +867,13 @@ require_once __DIR__ . '/templates/header.php';
                                 <th class="px-4 py-3 text-left text-xs uppercase tracking-wider text-zinc-500">Frequency</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase tracking-wider text-zinc-500">Last Serviced</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase tracking-wider text-zinc-500">Next Due</th>
-                                <th class="px-4 py-3 text-left text-xs uppercase tracking-wider text-zinc-500">Priority</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase tracking-wider text-zinc-500">Queue</th>
                                 <th class="px-4 py-3 text-left text-xs uppercase tracking-wider text-zinc-500">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-800/90 bg-zinc-950/70">
                         <?php if ($profiles === []): ?>
-                            <tr><td colspan="7" class="px-4 py-8 text-center text-zinc-400">No recurring profiles found for this view.</td></tr>
+                            <tr><td colspan="6" class="px-4 py-8 text-center text-zinc-400">No maintenance profiles found for this view.</td></tr>
                         <?php else: ?>
                             <?php foreach ($profiles as $profile): ?>
                                 <?php
@@ -894,7 +893,6 @@ require_once __DIR__ . '/templates/header.php';
                                         <div class="text-zinc-200"><?= htmlspecialchars((string) $profile['next_due_date'], ENT_QUOTES, 'UTF-8') ?></div>
                                         <span class="mt-1 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold <?= htmlspecialchars($dueBadge['class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($dueBadge['label'], ENT_QUOTES, 'UTF-8') ?></span>
                                     </td>
-                                    <td class="px-4 py-3 text-zinc-300"><?= htmlspecialchars(ucfirst((string) $profile['priority_default']), ENT_QUOTES, 'UTF-8') ?></td>
                                     <td class="px-4 py-3 text-zinc-300"><?= (int) $profile['active_queue_jobs'] ?></td>
                                     <td class="px-4 py-3">
                                         <div class="flex flex-wrap gap-2">
@@ -931,7 +929,7 @@ require_once __DIR__ . '/templates/header.php';
 <div id="profileModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
     <div class="modal-box">
         <div class="modal-header">
-            <h2 id="profileModalTitle" class="text-lg font-semibold text-white">Recurring Profile</h2>
+            <h2 id="profileModalTitle" class="text-lg font-semibold text-white">Maintenance Profile</h2>
             <button type="button" onclick="closeProfileModal()" class="text-zinc-400 hover:text-white">&times;</button>
         </div>
         <form method="POST" id="profileForm">
@@ -1061,7 +1059,7 @@ function resetProfileForm() {
 
 function openCreateModal() {
     resetProfileForm();
-    document.getElementById('profileModalTitle').textContent = 'Add Recurring Profile';
+    document.getElementById('profileModalTitle').textContent = 'Add Maintenance Profile';
     document.getElementById('profileActive').checked = true;
     document.getElementById('profileModal').classList.add('open');
 }
@@ -1099,7 +1097,7 @@ function setSelectedCustomer(customer) {
 
 function openEditModal(profile) {
     resetProfileForm();
-    document.getElementById('profileModalTitle').textContent = 'Edit Recurring Profile';
+    document.getElementById('profileModalTitle').textContent = 'Edit Maintenance Profile';
     document.getElementById('formAction').value = 'update_profile';
     document.getElementById('profileId').value = profile.id || 0;
     customerIdEl.value = profile.customer_id || '';
