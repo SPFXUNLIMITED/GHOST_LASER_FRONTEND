@@ -136,78 +136,106 @@ function recGetDueBadge(?string $nextDueDate, bool $active): array
     return ['label' => 'Upcoming', 'class' => 'bg-cyan-500/20 text-cyan-300'];
 }
 
+function recGetCustomerSearchSelectColumns(PDO $pdo): array
+{
+    $baseColumns = ['id', 'first_name', 'last_name', 'company', 'email', 'phone', 'address', 'city', 'state', 'zip'];
+    $optionalColumns = ['machine_brand', 'machine_model', 'machine_watts', 'machine_age'];
+
+    try {
+        $availableColumns = $pdo->query('SHOW COLUMNS FROM customers')->fetchAll(PDO::FETCH_COLUMN);
+        if (!is_array($availableColumns) || $availableColumns === []) {
+            return $baseColumns;
+        }
+
+        $availableLookup = array_fill_keys($availableColumns, true);
+        foreach ($optionalColumns as $column) {
+            if (isset($availableLookup[$column])) {
+                $baseColumns[] = $column;
+            }
+        }
+    } catch (Throwable $e) {
+        // Fall back to the guaranteed customer fields if schema inspection is unavailable.
+    }
+
+    return $baseColumns;
+}
+
 recEnsureSchema($pdo);
 
 if (empty($_SESSION['recurring_csrf'])) {
     $_SESSION['recurring_csrf'] = bin2hex(random_bytes(32));
 }
 $csrf = (string) $_SESSION['recurring_csrf'];
+$customerSearchCsrfToken = $csrf;
 
-if (
-    $_SERVER['REQUEST_METHOD'] === 'GET'
-    && (($_GET['action'] ?? '') === 'customer_search')
-) {
+$isCustomerSearchRequest = (
+    (isset($_GET['action']) && $_GET['action'] === 'customer_search')
+    || (isset($_GET['customer_search']) && (string) $_GET['customer_search'] === '1')
+);
+if ($isCustomerSearchRequest) {
     header('Content-Type: application/json');
+
     $csrfHeader = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
-    if ($csrfHeader === '' || !hash_equals($csrf, $csrfHeader)) {
+    if ($csrfHeader === '' || !hash_equals($customerSearchCsrfToken, $csrfHeader)) {
         http_response_code(403);
         echo json_encode(['results' => [], 'error' => 'Invalid CSRF token.']);
         exit;
     }
 
     $q = trim((string) ($_GET['q'] ?? ''));
-    if (mb_strlen($q) < 2) {
+    if ($q === '' || strlen($q) < 2) {
         echo json_encode(['results' => []]);
         exit;
     }
 
-    $like = '%' . $q . '%';
-    $stmt = $pdo->prepare("
-        SELECT
-            id,
-            first_name,
-            last_name,
-            company,
-            email,
-            phone,
-            address,
-            city,
-            state,
-            zip,
-            machine_brand,
-            machine_model,
-            machine_watts,
-            machine_age
-        FROM customers
-        WHERE first_name LIKE :q
-           OR last_name LIKE :q
-           OR company LIKE :q
-           OR email LIKE :q
-           OR phone LIKE :q
-        ORDER BY last_name ASC, first_name ASC
-        LIMIT 10
-    ");
-    $stmt->execute([':q' => $like]);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $rows = [];
+    try {
+        $like = '%' . $q . '%';
+        $searchColumns = recGetCustomerSearchSelectColumns($pdo);
+        $stmt = $pdo->prepare(
+            'SELECT ' . implode(', ', $searchColumns) . '
+             FROM customers
+             WHERE first_name LIKE :first_name_q
+                OR last_name LIKE :last_name_q
+                OR company LIKE :company_q
+                OR email LIKE :email_q
+                OR phone LIKE :phone_q
+             ORDER BY last_name, first_name
+             LIMIT 8'
+        );
+        $stmt->execute([
+            ':first_name_q' => $like,
+            ':last_name_q' => $like,
+            ':company_q' => $like,
+            ':email_q' => $like,
+            ':phone_q' => $like,
+        ]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['results' => [], 'error' => 'Customer search failed.']);
+        exit;
+    }
 
-    $results = array_map(static function ($row): array {
-        return [
+    $results = [];
+    foreach ($rows as $row) {
+        $customerName = trim((string) (($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')));
+        $results[] = [
             'id' => (int) $row['id'],
-            'first_name' => (string) ($row['first_name'] ?? ''),
-            'last_name' => (string) ($row['last_name'] ?? ''),
-            'company' => (string) ($row['company'] ?? ''),
-            'email' => (string) ($row['email'] ?? ''),
+            'customer_name' => $customerName,
+            'company_name' => (string) ($row['company'] ?? ''),
             'phone' => (string) ($row['phone'] ?? ''),
+            'email' => (string) ($row['email'] ?? ''),
             'address' => (string) ($row['address'] ?? ''),
             'city' => (string) ($row['city'] ?? ''),
-            'state' => (string) ($row['state'] ?? ''),
+            'state' => strtoupper((string) ($row['state'] ?? '')),
             'zip' => (string) ($row['zip'] ?? ''),
             'machine_brand' => (string) ($row['machine_brand'] ?? ''),
             'machine_model' => (string) ($row['machine_model'] ?? ''),
             'machine_watts' => (string) ($row['machine_watts'] ?? ''),
             'machine_age' => (string) ($row['machine_age'] ?? ''),
         ];
-    }, $rows);
+    }
 
     echo json_encode(['results' => $results]);
     exit;
@@ -647,10 +675,30 @@ $extraHead = <<<'HTML'
     .modal-footer { padding: 1rem 1.25rem; border-top: 1px solid rgb(63,63,70); display: flex; justify-content: flex-end; gap: .65rem; }
     .field { width: 100%; border: 1px solid rgb(63,63,70); background: rgb(9,9,11); color: #fff; border-radius: .5rem; padding: .55rem .75rem; font-size: .875rem; }
     .label { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: rgb(161,161,170); margin-bottom: .35rem; display: block; font-weight: 600; }
-    .customer-results { border: 1px solid rgb(63,63,70); border-radius: .5rem; overflow: hidden; margin-top: .5rem; }
-    .customer-item { width: 100%; text-align: left; background: rgb(24,24,27); color: rgb(228,228,231); padding: .55rem .65rem; border-bottom: 1px solid rgb(39,39,42); font-size: .82rem; }
-    .customer-item:hover { background: rgb(39,39,42); }
-    .customer-item:last-child { border-bottom: 0; }
+    #customerSuggestions {
+        position: absolute;
+        z-index: 50;
+        left: 0; right: 0;
+        top: calc(100% + 4px);
+        background: #18181b;
+        border: 1px solid rgb(63,63,70);
+        border-radius: 0.5rem;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+        max-height: 280px;
+        overflow-y: auto;
+    }
+    #customerSuggestions li {
+        padding: 0.65rem 1rem;
+        font-size: 0.8rem;
+        color: #d4d4d8;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(63,63,70,0.5);
+        transition: background 0.1s;
+    }
+    #customerSuggestions li:last-child { border-bottom: none; }
+    #customerSuggestions li:hover, #customerSuggestions li.active { background: rgba(6,182,212,0.12); color: #22d3ee; }
+    #customerSuggestions li .result-name { font-weight: 600; color: #f4f4f5; }
+    #customerSuggestions li .result-meta { color: #71717a; margin-top: 1px; }
 </style>
 HTML;
 require_once __DIR__ . '/templates/header.php';
@@ -783,9 +831,11 @@ require_once __DIR__ . '/templates/header.php';
                 <div>
                     <label class="label">Customer</label>
                     <input type="hidden" name="customer_id" id="customerId">
-                    <input type="text" id="customerSearch" class="field" placeholder="Search customer by name, company, email or phone">
+                    <div class="relative" id="cust-search-wrap">
+                        <input type="text" id="customerSearch" class="field" autocomplete="off" placeholder="Search customer by name, company, email or phone">
+                        <ul id="customerSuggestions" class="hidden" role="listbox" aria-label="Customer search results"></ul>
+                    </div>
                     <div id="customerSelected" class="mt-2 text-xs text-cyan-300"></div>
-                    <div id="customerResults" class="customer-results hidden"></div>
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
@@ -887,12 +937,15 @@ require_once __DIR__ . '/templates/header.php';
 </div>
 
 <script>
-const csrfToken = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+const customerSearchCsrfToken = <?= json_encode($customerSearchCsrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 const customerSearchInput = document.getElementById('customerSearch');
-const customerResultsEl = document.getElementById('customerResults');
+const customerResultsEl = document.getElementById('customerSuggestions');
 const customerIdEl = document.getElementById('customerId');
 const customerSelectedEl = document.getElementById('customerSelected');
 const serviceCheckboxes = Array.from(document.querySelectorAll('.service-cb'));
+let currentResults = [];
+let activeIndex = -1;
+let debounceTimer = null;
 
 function closeProfileModal() {
     document.getElementById('profileModal').classList.remove('open');
@@ -917,9 +970,9 @@ function openCreateModal() {
 
 function setSelectedCustomer(customer) {
     customerIdEl.value = String(customer.id || '');
-    const fullName = [customer.first_name || '', customer.last_name || ''].join(' ').trim();
+    const fullName = String(customer.customer_name || '').trim();
     customerSelectedEl.textContent = `Selected: ${fullName || 'Customer #' + customer.id} · ${customer.email || ''}`;
-    customerSearchInput.value = fullName || (customer.company || '');
+    customerSearchInput.value = fullName || (customer.company_name || '');
     customerResultsEl.classList.add('hidden');
     customerResultsEl.innerHTML = '';
     if (!document.getElementById('defaultMachineBrand').value) document.getElementById('defaultMachineBrand').value = customer.machine_brand || '';
@@ -965,49 +1018,78 @@ function openEditModal(profile) {
     document.getElementById('profileModal').classList.add('open');
 }
 
-let searchTimer = null;
+const renderResults = (results) => {
+    customerResultsEl.innerHTML = '';
+    activeIndex = -1;
+    if (results.length === 0) {
+        customerResultsEl.classList.add('hidden');
+        return;
+    }
+    results.forEach((customer, idx) => {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'option');
+        li.dataset.idx = idx;
+        const companyMeta = customer.company_name ? `${escHtml(customer.company_name)} &nbsp;&middot;&nbsp; ` : '';
+        li.innerHTML = `<div class="result-name">${escHtml(customer.customer_name || '')}</div>`
+            + `<div class="result-meta">${companyMeta}${customer.phone ? escHtml(customer.phone) + ' &nbsp;&middot;&nbsp; ' : ''}${escHtml(customer.email)}</div>`;
+        li.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            setSelectedCustomer(customer);
+        });
+        customerResultsEl.appendChild(li);
+    });
+    customerResultsEl.classList.remove('hidden');
+};
+
+const escHtml = (str) => {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+};
+
 customerSearchInput.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
     const q = customerSearchInput.value.trim();
-    if (searchTimer) clearTimeout(searchTimer);
     if (q.length < 2) {
         customerResultsEl.classList.add('hidden');
         customerResultsEl.innerHTML = '';
         return;
     }
-    searchTimer = setTimeout(async () => {
+    debounceTimer = setTimeout(async () => {
         try {
-            const url = new URL(window.location.origin + '/recurring-services.php');
-            url.searchParams.set('action', 'customer_search');
-            url.searchParams.set('q', q);
-            const response = await fetch(url.toString(), {
-                headers: { 'X-CSRF-Token': csrfToken }
+            const res = await fetch(`recurring-services.php?customer_search=1&q=${encodeURIComponent(q)}`, {
+                headers: {
+                    'X-CSRF-Token': customerSearchCsrfToken
+                }
             });
-            const json = await response.json();
-            const rows = Array.isArray(json.results) ? json.results : [];
-            if (rows.length === 0) {
-                customerResultsEl.innerHTML = '<div class="px-3 py-2 text-xs text-zinc-400 bg-zinc-900">No customers found.</div>';
-                customerResultsEl.classList.remove('hidden');
-                return;
-            }
-            customerResultsEl.innerHTML = rows.map((row) => {
-                const fullName = `${row.first_name || ''} ${row.last_name || ''}`.trim();
-                const company = row.company ? ` · ${row.company}` : '';
-                return `<button type="button" class="customer-item" data-row='${JSON.stringify(row).replace(/'/g, '&#39;')}'>${fullName || 'Customer #' + row.id}${company}<div class="text-[11px] text-zinc-500">${row.email || ''} ${row.phone || ''}</div></button>`;
-            }).join('');
-            customerResultsEl.classList.remove('hidden');
-            customerResultsEl.querySelectorAll('.customer-item').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const payload = btn.getAttribute('data-row') || '{}';
-                    try {
-                        setSelectedCustomer(JSON.parse(payload));
-                    } catch (_) {}
-                });
-            });
-        } catch (_) {
-            customerResultsEl.innerHTML = '<div class="px-3 py-2 text-xs text-red-300 bg-zinc-900">Customer search failed.</div>';
-            customerResultsEl.classList.remove('hidden');
-        }
-    }, 220);
+            const data = await res.json();
+            currentResults = data.results || [];
+            renderResults(currentResults);
+        } catch (_) { /* silent */ }
+    }, 180);
+});
+
+customerSearchInput.addEventListener('keydown', (e) => {
+    const items = customerResultsEl.querySelectorAll('li');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = Math.min(activeIndex + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = Math.max(activeIndex - 1, 0);
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+    } else if (e.key === 'Enter' && activeIndex >= 0) {
+        e.preventDefault();
+        setSelectedCustomer(currentResults[activeIndex]);
+    } else if (e.key === 'Escape') {
+        customerResultsEl.classList.add('hidden');
+    }
+});
+
+document.addEventListener('click', (e) => {
+    if (!document.getElementById('cust-search-wrap')?.contains(e.target)) {
+        customerResultsEl.classList.add('hidden');
+    }
 });
 
 document.addEventListener('keydown', (event) => {
