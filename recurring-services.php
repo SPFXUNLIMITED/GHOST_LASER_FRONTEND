@@ -56,12 +56,6 @@ function recEnsureSchema(PDO $pdo): void
         $pdo->exec("ALTER TABLE service_requests ADD COLUMN recurring_profile_id INT UNSIGNED NULL AFTER preferred_date_end");
     }
 
-    // Ensure customer machine-info columns exist so the live search can select and return them.
-    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_brand VARCHAR(100) DEFAULT NULL");
-    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_model VARCHAR(100) DEFAULT NULL");
-    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_watts VARCHAR(50) DEFAULT NULL");
-    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_age VARCHAR(50) DEFAULT NULL");
-
     $idxExistsStmt = $pdo->query("
         SELECT COUNT(*)
         FROM information_schema.STATISTICS
@@ -296,6 +290,69 @@ if ($isCustomerSearchRequest) {
     }
 
     echo json_encode(['results' => $results]);
+    exit;
+}
+
+if (
+    isset($_GET['action']) && $_GET['action'] === 'customer_data'
+    && isset($_GET['id'])
+) {
+    header('Content-Type: application/json');
+
+    $csrfHeader = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if ($csrfHeader === '' || !hash_equals($customerSearchCsrfToken, $csrfHeader)) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Invalid CSRF token.']);
+        exit;
+    }
+
+    $customerId = (int) ($_GET['id'] ?? 0);
+    if ($customerId <= 0) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid customer id.']);
+        exit;
+    }
+
+    try {
+        $selectColumns = recGetCustomerSearchSelectColumns($pdo);
+        $custStmt = $pdo->prepare('SELECT ' . implode(', ', $selectColumns) . ' FROM customers WHERE id = :id LIMIT 1');
+        $custStmt->execute([':id' => $customerId]);
+        $custRow = $custStmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Customer lookup failed.']);
+        exit;
+    }
+
+    if (!$custRow) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Customer not found.']);
+        exit;
+    }
+
+    $latestBooking = [];
+    try {
+        $history = recGetLatestBookingHistoryByCustomerIds($pdo, [$customerId]);
+        $latestBooking = $history[$customerId] ?? [];
+    } catch (Throwable $e) {
+        $latestBooking = [];
+    }
+
+    echo json_encode([
+        'machine_brand' => trim((string) ($latestBooking['laser_brand'] ?? '')) !== ''
+            ? (string) $latestBooking['laser_brand']
+            : (string) ($custRow['machine_brand'] ?? ''),
+        'machine_model' => trim((string) ($latestBooking['laser_model'] ?? '')) !== ''
+            ? (string) $latestBooking['laser_model']
+            : (string) ($custRow['machine_model'] ?? ''),
+        'machine_watts' => trim((string) ($latestBooking['laser_watts'] ?? '')) !== ''
+            ? (string) $latestBooking['laser_watts']
+            : (string) ($custRow['machine_watts'] ?? ''),
+        'machine_age' => trim((string) ($latestBooking['laser_age'] ?? '')) !== ''
+            ? (string) $latestBooking['laser_age']
+            : (string) ($custRow['machine_age'] ?? ''),
+        'last_service_date' => (string) ($latestBooking['last_service_date'] ?? ''),
+    ]);
     exit;
 }
 
@@ -1033,13 +1090,28 @@ function setSelectedCustomer(customer) {
     customerSearchInput.value = fullName || (customer.company_name || '');
     customerResultsEl.classList.add('hidden');
     customerResultsEl.innerHTML = '';
-    document.getElementById('defaultMachineBrand').value = customer.machine_brand || '';
-    document.getElementById('defaultMachineModel').value = customer.machine_model || '';
-    document.getElementById('defaultMachineWatts').value = customer.machine_watts || '';
-    document.getElementById('defaultMachineAge').value = customer.machine_age || '';
-    document.getElementById('lastServicedDate').value = customer.last_service_date || '';
     document.getElementById('defaultProblemSummary').value = customer.problem_summary || '';
     document.getElementById('defaultProblemDetails').value = customer.problem_details || '';
+
+    // Fetch machine data directly from the customers table for this customer.
+    fetch(`recurring-services.php?action=customer_data&id=${encodeURIComponent(customer.id)}`, {
+        headers: { 'X-CSRF-Token': customerSearchCsrfToken }
+    })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(data => {
+        document.getElementById('defaultMachineBrand').value = data.machine_brand || '';
+        document.getElementById('defaultMachineModel').value = data.machine_model || '';
+        document.getElementById('defaultMachineWatts').value = data.machine_watts || '';
+        document.getElementById('defaultMachineAge').value = data.machine_age || '';
+        document.getElementById('lastServicedDate').value = data.last_service_date || '';
+    })
+    .catch(() => {
+        document.getElementById('defaultMachineBrand').value = '';
+        document.getElementById('defaultMachineModel').value = '';
+        document.getElementById('defaultMachineWatts').value = '';
+        document.getElementById('defaultMachineAge').value = '';
+        document.getElementById('lastServicedDate').value = '';
+    });
 }
 
 function openEditModal(profile) {
