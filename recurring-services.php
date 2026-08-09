@@ -136,6 +136,30 @@ function recGetDueBadge(?string $nextDueDate, bool $active): array
     return ['label' => 'Upcoming', 'class' => 'bg-cyan-500/20 text-cyan-300'];
 }
 
+function recGetCustomerSearchSelectColumns(PDO $pdo): array
+{
+    $baseColumns = ['id', 'first_name', 'last_name', 'company', 'email', 'phone', 'address', 'city', 'state', 'zip'];
+    $optionalColumns = ['machine_brand', 'machine_model', 'machine_watts', 'machine_age'];
+
+    try {
+        $availableColumns = $pdo->query('SHOW COLUMNS FROM customers')->fetchAll(PDO::FETCH_COLUMN);
+        if (!is_array($availableColumns) || $availableColumns === []) {
+            return $baseColumns;
+        }
+
+        $availableLookup = array_fill_keys($availableColumns, true);
+        foreach ($optionalColumns as $column) {
+            if (isset($availableLookup[$column])) {
+                $baseColumns[] = $column;
+            }
+        }
+    } catch (Throwable $e) {
+        // Fall back to the guaranteed customer fields if schema inspection is unavailable.
+    }
+
+    return $baseColumns;
+}
+
 recEnsureSchema($pdo);
 
 if (empty($_SESSION['recurring_csrf'])) {
@@ -161,34 +185,34 @@ if (
         exit;
     }
 
-    $like = '%' . $q . '%';
-    $stmt = $pdo->prepare("
-        SELECT
-            id,
-            first_name,
-            last_name,
-            company,
-            email,
-            phone,
-            address,
-            city,
-            state,
-            zip,
-            machine_brand,
-            machine_model,
-            machine_watts,
-            machine_age
-        FROM customers
-        WHERE first_name LIKE :q
-           OR last_name LIKE :q
-           OR company LIKE :q
-           OR email LIKE :q
-           OR phone LIKE :q
-        ORDER BY last_name ASC, first_name ASC
-        LIMIT 10
-    ");
-    $stmt->execute([':q' => $like]);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $rows = [];
+    try {
+        $like = '%' . $q . '%';
+        $searchColumns = recGetCustomerSearchSelectColumns($pdo);
+        $stmt = $pdo->prepare(
+            'SELECT ' . implode(', ', $searchColumns) . '
+             FROM customers
+             WHERE first_name LIKE :first_name_q
+                OR last_name LIKE :last_name_q
+                OR company LIKE :company_q
+                OR email LIKE :email_q
+                OR phone LIKE :phone_q
+             ORDER BY last_name ASC, first_name ASC
+             LIMIT 10'
+        );
+        $stmt->execute([
+            ':first_name_q' => $like,
+            ':last_name_q' => $like,
+            ':company_q' => $like,
+            ':email_q' => $like,
+            ':phone_q' => $like,
+        ]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['results' => [], 'error' => 'Customer search failed.']);
+        exit;
+    }
 
     $results = array_map(static function ($row): array {
         return [
