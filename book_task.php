@@ -113,6 +113,12 @@ $extraHead = <<<'HTML'
 </style>
 HTML;
 
+$headerRight = <<<'HTML'
+                <div class="flex items-center gap-3">
+                    <a href="dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Dashboard</a>
+                </div>
+HTML;
+
 require_once __DIR__ . '/templates/header.php';
 ?>
 
@@ -135,6 +141,12 @@ require_once __DIR__ . '/templates/header.php';
     <div class="max-w-3xl mx-auto px-6">
         <div id="task-success" class="hidden mb-6 rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200"></div>
         <div id="task-error" class="hidden mb-6 rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200"></div>
+
+        <div class="mb-6 flex justify-end">
+            <a href="admin/scheduling-dashboard.php" class="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition-colors">
+                Go to Scheduler &rarr;
+            </a>
+        </div>
 
         <form id="task-booking-form" class="space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 glow-box" novalidate>
             <input type="hidden" id="latitude" name="latitude" value="">
