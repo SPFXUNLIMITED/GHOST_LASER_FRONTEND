@@ -370,7 +370,7 @@ if (!empty($_SESSION['recurring_flash_success'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postCsrf = trim((string) ($_POST['csrf'] ?? ''));
     $action = trim((string) ($_POST['action'] ?? ''));
-    $scope = trim((string) ($_POST['scope'] ?? 'due'));
+    $scope = trim((string) ($_POST['scope'] ?? 'all'));
     $q = trim((string) ($_POST['q'] ?? ''));
     $redirectQs = http_build_query(array_filter([
         'scope' => $scope,
@@ -705,7 +705,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-$scope = trim((string) ($_GET['scope'] ?? 'due'));
+$scope = trim((string) ($_GET['scope'] ?? 'all'));
 $search = trim((string) ($_GET['q'] ?? ''));
 $upcomingDays = 14;
 
@@ -742,9 +742,7 @@ switch ($scope) {
         break;
     case 'due':
     default:
-        $scope = 'due';
-        $where[] = "r.active = 1";
-        $where[] = "r.next_due_date <= CURDATE()";
+        $scope = 'all';
         break;
 }
 
