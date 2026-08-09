@@ -56,6 +56,12 @@ function recEnsureSchema(PDO $pdo): void
         $pdo->exec("ALTER TABLE service_requests ADD COLUMN recurring_profile_id INT UNSIGNED NULL AFTER preferred_date_end");
     }
 
+    // Ensure customer machine-info columns exist so the live search can select and return them.
+    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_brand VARCHAR(100) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_model VARCHAR(100) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_watts VARCHAR(50) DEFAULT NULL");
+    $pdo->exec("ALTER TABLE customers ADD COLUMN IF NOT EXISTS machine_age VARCHAR(50) DEFAULT NULL");
+
     $idxExistsStmt = $pdo->query("
         SELECT COUNT(*)
         FROM information_schema.STATISTICS
