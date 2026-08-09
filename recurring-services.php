@@ -775,7 +775,7 @@ $services = $pdo->query("SELECT id, service_name FROM services ORDER BY service_
 
 $pageTitle = 'Maintenance Schedule | Ghost Laser';
 $pageDescription = 'Manage maintenance schedule profiles and queue due jobs.';
-$headerRight = '<a href="dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Dashboard</a>';
+$headerRight = '<div class="flex items-center gap-3"><a href="maintenance-notifications.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Notification Buttons</a><a href="dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Dashboard</a></div>';
 $extraHead = <<<'HTML'
 <style>
     .btn-glow { box-shadow: 0 0 20px rgba(6,182,212,0.4); }
@@ -904,6 +904,15 @@ require_once __DIR__ . '/templates/header.php';
                                                 <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                                                 <button type="submit" class="rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-cyan-400">Add to Schedule</button>
                                             </form>
+                                            <button
+                                               type="button"
+                                               onclick="openNotifyModal(<?= htmlspecialchars(json_encode([
+                                                   'customer_name'    => $displayName,
+                                                   'last_service_date'=> (string) ($profile['last_serviced_date'] ?? ''),
+                                                   'next_service_date'=> (string) ($profile['next_due_date'] ?? ''),
+                                               ]), ENT_QUOTES, 'UTF-8') ?>)"
+                                               class="rounded-md border border-violet-700/60 bg-violet-950/30 px-3 py-1.5 text-xs text-violet-300 hover:bg-violet-950/60"
+                                            >Notify</button>
                                             <button type="button" onclick="openEditModal(<?= $rowJson ?>)" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700">Edit</button>
                                             <form method="POST" onsubmit="return confirm('Delete this recurring profile?');">
                                                 <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
@@ -1029,6 +1038,43 @@ require_once __DIR__ . '/templates/header.php';
                 <button type="submit" class="rounded-md bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-400">Save Profile</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Notify Modal -->
+<div id="notifyModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="notifyModalTitle">
+    <div class="modal-box" style="width:min(640px,96vw)">
+        <div class="modal-header">
+            <h2 id="notifyModalTitle" class="text-lg font-semibold text-white">Notify Customer</h2>
+            <button type="button" onclick="closeNotifyModal()" class="text-zinc-400 hover:text-white text-xl leading-none">&times;</button>
+        </div>
+        <div class="modal-body space-y-4">
+            <p class="text-sm text-zinc-400">Select a notification template. The message will be pre-filled with this customer's details.</p>
+            <div id="notifyBtnList" class="flex flex-wrap gap-2">
+                <span class="text-xs text-zinc-500 italic">Loading templates…</span>
+            </div>
+            <div id="notifyPreviewWrap" class="hidden space-y-3">
+                <div class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Message Preview</div>
+                <div id="notifyPreview" class="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-sm leading-7 text-zinc-200 whitespace-pre-line min-h-[80px]"></div>
+                <p class="text-xs text-zinc-500">
+                    Review the message above, then copy it or send via your preferred channel.
+                </p>
+                <div class="flex justify-end gap-2">
+                    <button
+                        type="button"
+                        id="notifyCopyBtn"
+                        onclick="copyNotifyMessage()"
+                        class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 hover:border-cyan-500/50 hover:text-cyan-400 transition-colors"
+                    >Copy Message</button>
+                </div>
+            </div>
+            <p class="text-xs text-zinc-500">
+                <a href="maintenance-notifications.php" class="text-cyan-400 hover:underline">Manage notification buttons &rarr;</a>
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" onclick="closeNotifyModal()" class="rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-700">Close</button>
+        </div>
     </div>
 </div>
 
@@ -1205,10 +1251,87 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeProfileModal();
+    if (event.key === 'Escape') { closeProfileModal(); closeNotifyModal(); }
 });
 document.getElementById('profileModal').addEventListener('mousedown', (event) => {
     if (event.target.id === 'profileModal') closeProfileModal();
 });
+document.getElementById('notifyModal').addEventListener('mousedown', (event) => {
+    if (event.target.id === 'notifyModal') closeNotifyModal();
+});
+
+// ── Notify Modal ────────────────────────────────────────────────────────────
+
+let notifyContext = {};           // {customer_name, last_service_date, next_service_date}
+let notifyTemplates = null;       // cached from API
+const adminName = <?= json_encode(trim((string) ($_SESSION['admin_username'] ?? 'Admin')), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+async function loadNotifyTemplates() {
+    if (notifyTemplates !== null) return notifyTemplates;
+    try {
+        const res  = await fetch('api/get-notifications.php');
+        const data = await res.json();
+        notifyTemplates = data.notifications || [];
+    } catch (_) {
+        notifyTemplates = [];
+    }
+    return notifyTemplates;
+}
+
+function applyMergeTags(body, ctx) {
+    return body
+        .replace(/\{customer_name\}/gi,    escHtml(ctx.customer_name    || ''))
+        .replace(/\{last_service_date\}/gi, escHtml(ctx.last_service_date || ''))
+        .replace(/\{next_service_date\}/gi, escHtml(ctx.next_service_date || ''))
+        .replace(/\{admin_name\}/gi,        escHtml(adminName));
+}
+
+async function openNotifyModal(ctx) {
+    notifyContext = ctx;
+    document.getElementById('notifyPreviewWrap').classList.add('hidden');
+    document.getElementById('notifyPreview').textContent = '';
+
+    const listEl = document.getElementById('notifyBtnList');
+    listEl.innerHTML = '<span class="text-xs text-zinc-500 italic">Loading…</span>';
+    document.getElementById('notifyModal').classList.add('open');
+
+    const templates = await loadNotifyTemplates();
+    listEl.innerHTML = '';
+
+    if (templates.length === 0) {
+        listEl.innerHTML = `<span class="text-xs text-zinc-500 italic">No notification buttons found. <a href="maintenance-notifications.php" class="text-cyan-400 hover:underline">Add some &rarr;</a></span>`;
+        return;
+    }
+
+    templates.forEach(tpl => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = tpl.title;
+        btn.className = 'rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors';
+        btn.addEventListener('click', () => {
+            const rendered = applyMergeTags(tpl.body, notifyContext);
+            document.getElementById('notifyPreview').textContent = rendered;
+            document.getElementById('notifyPreviewWrap').classList.remove('hidden');
+            // Highlight active button
+            listEl.querySelectorAll('button').forEach(b => b.classList.remove('border-cyan-500/60','text-cyan-300'));
+            btn.classList.add('border-cyan-500/60','text-cyan-300');
+        });
+        listEl.appendChild(btn);
+    });
+}
+
+function closeNotifyModal() {
+    document.getElementById('notifyModal').classList.remove('open');
+}
+
+function copyNotifyMessage() {
+    const text = document.getElementById('notifyPreview').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('notifyCopyBtn');
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+    }).catch(() => {});
+}
 </script>
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
