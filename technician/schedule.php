@@ -1121,14 +1121,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             (:scheduled_cluster_id, :service_request_id, :time_window_start, :time_window_end)
                     ");
 
-                    // Calculate time windows from shop location + business start
-                    // time — both read from scheduling settings, nothing hard-coded.
+                    // Calculate time windows from shop location + business hours.
+                    // Respect per-run start/end overrides when they were submitted.
+                    $assignmentSettings = $schedulingSettings;
+                    $overrideStart = trim((string) ($_POST['cluster_override_start_time'] ?? ''));
+                    $overrideEnd   = trim((string) ($_POST['cluster_override_end_time'] ?? ''));
+                    if (preg_match('/^\d{2}:\d{2}$/', $overrideStart)) {
+                        $assignmentSettings['business_start_time'] = $overrideStart;
+                    }
+                    if (preg_match('/^\d{2}:\d{2}$/', $overrideEnd)) {
+                        $assignmentSettings['business_end_time'] = $overrideEnd;
+                    }
+
                     // Job duration is the sum of duration_minutes for each selected service.
                     $durationError = resolveJobDurationsFromServices($pdo, $validJobs);
                     if ($durationError !== null) {
                         $clusterAssignError = $durationError;
                     } else {
-                    $clusterTimeWindows = calculateClusterTimeWindows($validJobs, $schedulingSettings);
+                    $clusterTimeWindows = calculateClusterTimeWindows($validJobs, $assignmentSettings);
 
                     $pdo->beginTransaction();
                     $insertClusterStmt->execute([
@@ -1930,6 +1940,8 @@ require_once __DIR__ . '/../templates/header.php';
                                 <form method="POST" class="mt-4 flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 sm:flex-row sm:items-end">
                                     <input type="hidden" name="assign_cluster" value="1">
                                     <input type="hidden" name="run_clustering" value="1">
+                                    <input type="hidden" name="cluster_override_start_time" value="<?= htmlspecialchars((string) ($clusteringSettings['business_start_time'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="cluster_override_end_time" value="<?= htmlspecialchars((string) ($clusteringSettings['business_end_time'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="month" value="<?= htmlspecialchars($calendarMonthParam, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="cluster_label" value="<?= htmlspecialchars($cluster['cluster_label'], ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="cluster_centroid_latitude" value="<?= htmlspecialchars((string) $cluster['centroid_latitude'], ENT_QUOTES, 'UTF-8') ?>">
@@ -2147,7 +2159,7 @@ require_once __DIR__ . '/../templates/header.php';
                     <input
                         type="time"
                         id="cluster-time-modal-start"
-                        value="<?= htmlspecialchars($schedulingSettings['business_start_time'], ENT_QUOTES, 'UTF-8') ?>"
+                        value="<?= htmlspecialchars($clusteringSettings['business_start_time'], ENT_QUOTES, 'UTF-8') ?>"
                         class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
                         required
                     >
@@ -2157,7 +2169,7 @@ require_once __DIR__ . '/../templates/header.php';
                     <input
                         type="time"
                         id="cluster-time-modal-end"
-                        value="<?= htmlspecialchars($schedulingSettings['business_end_time'], ENT_QUOTES, 'UTF-8') ?>"
+                        value="<?= htmlspecialchars($clusteringSettings['business_end_time'], ENT_QUOTES, 'UTF-8') ?>"
                         class="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-cyan-400 focus:outline-none"
                         required
                     >
