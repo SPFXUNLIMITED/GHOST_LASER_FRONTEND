@@ -59,6 +59,26 @@ function getNotificationTagDefinitions(): array
             'columns' => ['company_website'],
             'description' => 'Your company website URL (editable in Custom Tags section).',
         ],
+        '{customer_name}' => [
+            'table' => 'customers',
+            'columns' => ['first_name', 'last_name'],
+            'description' => 'Customer full name (maintenance context).',
+        ],
+        '{last_service_date}' => [
+            'table' => 'recurring_service_customers',
+            'columns' => ['last_serviced_date'],
+            'description' => 'Date the customer was last serviced.',
+        ],
+        '{next_service_date}' => [
+            'table' => 'recurring_service_customers',
+            'columns' => ['next_due_date'],
+            'description' => 'Date the customer\'s next service is due.',
+        ],
+        '{admin_name}' => [
+            'table' => 'session',
+            'columns' => ['admin_username'],
+            'description' => 'Name of the logged-in admin sending the notification.',
+        ],
     ];
 }
 
@@ -204,6 +224,28 @@ function loadNotificationTagValues(PDO $pdo): array
     } catch (Throwable $e) {
         // service_route_stops may not exist in every environment yet.
     }
+
+    // {customer_name} – alias of {client_name} for maintenance context
+    $tagValues['{customer_name}'] = $tagValues['{client_name}'];
+
+    // {last_service_date} and {next_service_date} from recurring_service_customers
+    try {
+        $recurringStmt = $pdo->query("
+            SELECT last_serviced_date, next_due_date
+            FROM recurring_service_customers
+            ORDER BY id DESC
+            LIMIT 1
+        ");
+        $recurringRow = $recurringStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $tagValues['{last_service_date}'] = trim((string) ($recurringRow['last_serviced_date'] ?? ''));
+        $tagValues['{next_service_date}'] = trim((string) ($recurringRow['next_due_date'] ?? ''));
+    } catch (Throwable $e) {
+        $tagValues['{last_service_date}'] = '';
+        $tagValues['{next_service_date}'] = '';
+    }
+
+    // {admin_name} from session
+    $tagValues['{admin_name}'] = trim((string) ($_SESSION['admin_username'] ?? ''));
 
     return $tagValues;
 }

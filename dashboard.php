@@ -137,6 +137,12 @@ require_once __DIR__ . '/templates/header.php';
                         >
                             Notifications
                         </a>
+                        <a
+                            href="maintenance-notifications.php"
+                            class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/60 hover:border-cyan-500/40 hover:bg-zinc-800 text-zinc-200 font-medium text-sm px-4 py-2.5 transition-all"
+                        >
+                            Maintenance Notifications
+                        </a>
                     </div>
                 </div>
 
