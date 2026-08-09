@@ -179,7 +179,7 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                     <div>
                         <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-zinc-400" for="duration_minutes">Duration (minutes) *</label>
-                        <input class="input-base" type="number" id="duration_minutes" name="duration_minutes" min="1" step="1" required placeholder="e.g. 60">
+                        <input class="input-base" type="number" id="duration_minutes" name="duration_minutes" min="1" step="5" value="15" required placeholder="e.g. 60">
                     </div>
                     <div>
                         <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-zinc-400" for="priority">Priority</label>
