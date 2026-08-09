@@ -972,22 +972,7 @@ require_once __DIR__ . '/templates/header.php';
                         <label class="label">Next Due Date</label>
                         <input type="date" name="next_due_date" id="nextDueDate" class="field">
                     </div>
-                    <div>
-                        <label class="label">Priority Default</label>
-                        <select name="priority_default" id="priorityDefault" class="field">
-                            <option value="standard">Standard</option>
-                            <option value="vip">VIP</option>
-                            <option value="emergency">Emergency</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="label">Service Speed</label>
-                        <select name="default_service_speed" id="defaultServiceSpeed" class="field">
-                            <option value="standard">Standard</option>
-                            <option value="rush">VIP</option>
-                            <option value="emergency">Emergency</option>
-                        </select>
-                    </div>
+
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-2">
@@ -1125,8 +1110,6 @@ function openEditModal(profile) {
     document.getElementById('frequencyUnit').value = profile.frequency_unit || 'months';
     document.getElementById('lastServicedDate').value = profile.last_serviced_date || '';
     document.getElementById('nextDueDate').value = profile.next_due_date || '';
-    document.getElementById('priorityDefault').value = profile.priority_default || 'standard';
-    document.getElementById('defaultServiceSpeed').value = profile.default_service_speed || 'standard';
     document.getElementById('defaultMachineBrand').value = profile.default_machine_brand || '';
     document.getElementById('defaultMachineModel').value = profile.default_machine_model || '';
     document.getElementById('defaultMachineWatts').value = profile.default_machine_watts || '';
