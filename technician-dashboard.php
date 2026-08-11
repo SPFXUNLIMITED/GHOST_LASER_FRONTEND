@@ -16,6 +16,9 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/scheduling_settings.php';
+require_once __DIR__ . '/mileage_schema.php';
+
+ensureMileageVehicleSchema($pdo);
 
 // ── Date navigation ────────────────────────────────────────────────────────
 $dateParam = trim((string) ($_GET['date'] ?? ''));
@@ -84,6 +87,26 @@ $clusters = array_values($clusters);
 $schedSettings = getSchedulingSettings($pdo);
 $shopAddress   = $schedSettings['shop_address'];
 $homeAddress   = $schedSettings['home_address'];
+$activeVehicles = [];
+$defaultVehicleId = null;
+try {
+    $vehicleStmt = $pdo->query("
+        SELECT id, name, year, make, model, license_plate, is_default
+        FROM vehicles
+        WHERE is_active = 1
+        ORDER BY is_default DESC, name ASC, id ASC
+    ");
+    $activeVehicles = $vehicleStmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($activeVehicles as $vehicle) {
+        if ((int) ($vehicle['is_default'] ?? 0) === 1) {
+            $defaultVehicleId = (int) $vehicle['id'];
+            break;
+        }
+    }
+} catch (Throwable $e) {
+    $activeVehicles = [];
+}
+$hasActiveVehicles = $activeVehicles !== [];
 
 // ── Load trip states for the selected date ───────────────────────────────────
 // Keyed by service_request_id; allows the UI to restore button states after
@@ -703,6 +726,12 @@ require_once __DIR__ . '/templates/header.php';
         </a>
     </div>
 
+    <?php if (!$hasActiveVehicles): ?>
+        <div class="mb-5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            Mileage logging is disabled until an active vehicle is added in Vehicle Settings.
+        </div>
+    <?php endif; ?>
+
     <?php if (empty($clusters)): ?>
         <!-- Empty state -->
         <div class="flex flex-col items-center justify-center py-16 text-center">
@@ -856,7 +885,8 @@ require_once __DIR__ . '/templates/header.php';
                                         data-job-id="<?= (int) $job['service_request_id'] ?>"
                                         data-client="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
                                         data-address="<?= htmlspecialchars($fullAddress, ENT_QUOTES, 'UTF-8') ?>"
-                                        title="Record departure time and GPS coordinates"
+                                        title="<?= $hasActiveVehicles ? 'Record departure time and GPS coordinates' : 'Set up an active vehicle first in Vehicle Settings' ?>"
+                                        <?= $hasActiveVehicles ? '' : 'disabled' ?>
                                     >
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12l7-7m0 0l7 7m-7-7v14"/></svg>
                                         On My Way
@@ -949,7 +979,8 @@ require_once __DIR__ . '/templates/header.php';
                                 data-job-id="0"
                                 data-client="Returning Home"
                                 data-address="<?= htmlspecialchars($shopAddress, ENT_QUOTES, 'UTF-8') ?>"
-                                title="Record departure time and GPS coordinates"
+                                title="<?= $hasActiveVehicles ? 'Record departure time and GPS coordinates' : 'Set up an active vehicle first in Vehicle Settings' ?>"
+                                <?= $hasActiveVehicles ? '' : 'disabled' ?>
                             >
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12l7-7m0 0l7 7m-7-7v14"/></svg>
                                 On My Way
@@ -983,6 +1014,8 @@ require_once __DIR__ . '/templates/header.php';
 <!-- ── Trip state data (for restoring button states after logout/reload) ────── -->
 <script>
 var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+var HAS_ACTIVE_VEHICLES = <?= $hasActiveVehicles ? 'true' : 'false' ?>;
+var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleId : 'null' ?>;
 </script>
 
 <!-- ── Mileage Entry Modal ───────────────────────────────────────────────── -->
@@ -991,6 +1024,29 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         <div class="mileage-modal-header">
             <div class="mileage-modal-title">Odometer Reading</div>
             <div class="mileage-modal-sub">Enter current truck mileage before departing</div>
+        </div>
+
+        <div id="mileageVehicleWrap" class="mb-3">
+            <label for="mileageVehicleSelect" class="block text-xs uppercase tracking-wide text-zinc-400 mb-1">Vehicle</label>
+            <select id="mileageVehicleSelect" class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none">
+                <option value="">Select a vehicle</option>
+                <?php foreach ($activeVehicles as $vehicle): ?>
+                    <?php
+                    $vehicleLabel = trim((string) $vehicle['name']);
+                    $vehicleYmm = trim((string) trim(($vehicle['year'] ?? '') . ' ' . ($vehicle['make'] ?? '') . ' ' . ($vehicle['model'] ?? '')));
+                    $vehiclePlate = trim((string) ($vehicle['license_plate'] ?? ''));
+                    if ($vehicleYmm !== '') {
+                        $vehicleLabel .= ($vehicleLabel !== '' ? ' — ' : '') . $vehicleYmm;
+                    }
+                    if ($vehiclePlate !== '') {
+                        $vehicleLabel .= ($vehicleLabel !== '' ? ' — ' : '') . $vehiclePlate;
+                    }
+                    ?>
+                    <option value="<?= (int) $vehicle['id'] ?>" <?= $defaultVehicleId !== null && (int) $defaultVehicleId === (int) $vehicle['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($vehicleLabel !== '' ? $vehicleLabel : ('Vehicle #' . (int) $vehicle['id']), ENT_QUOTES, 'UTF-8') ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
         </div>
 
         <div class="nixie-display" id="nixieDisplay">
@@ -1197,6 +1253,17 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         document.querySelector('.mileage-modal-sub').textContent = payload.action === 'on_my_way'
             ? 'Enter current truck mileage before departing'
             : 'Enter current truck mileage after arriving';
+        var vehicleWrap = document.getElementById('mileageVehicleWrap');
+        var vehicleSelect = document.getElementById('mileageVehicleSelect');
+        var needsVehicle = payload.action === 'on_my_way';
+        if (vehicleWrap) {
+            vehicleWrap.style.display = needsVehicle ? 'block' : 'none';
+        }
+        if (vehicleSelect) {
+            if (needsVehicle && DEFAULT_VEHICLE_ID !== null && vehicleSelect.value === '') {
+                vehicleSelect.value = String(DEFAULT_VEHICLE_ID);
+            }
+        }
         var modal = document.getElementById('mileageModal');
         modal.classList.add('open');
         document.body.style.overflow = 'hidden';
@@ -1257,6 +1324,16 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
             return;
         }
         var data = _modalData;
+        if (data.payload.action === 'on_my_way') {
+            var vehicleSelect = document.getElementById('mileageVehicleSelect');
+            var selectedVehicleId = vehicleSelect ? parseInt(vehicleSelect.value, 10) : NaN;
+            if (!HAS_ACTIVE_VEHICLES || !selectedVehicleId) {
+                document.getElementById('nixieError').textContent = 'Select a vehicle before logging mileage';
+                shakeDisplay();
+                return;
+            }
+            data.payload.vehicle_id = selectedVehicleId;
+        }
         closeMileageModal();
         if (data.payload.action === 'on_my_way') {
             data.payload.start_mileage = mileage;
@@ -1275,6 +1352,10 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         var jobId   = parseInt(btn.dataset.jobId, 10);
 
         if (action === 'on_my_way') {
+            if (!HAS_ACTIVE_VEHICLES) {
+                setStatus(jobId, '✗ No active vehicles available. Add one in Vehicle Settings.', 'err');
+                return;
+            }
             var payload = {
                 action:             'on_my_way',
                 service_request_id: jobId,

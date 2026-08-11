@@ -30,47 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 require_once __DIR__ . '/../project/db.php';
-
-// ── Ensure mileage_logs table exists ─────────────────────────────────────────
-$pdo->exec("
-    CREATE TABLE IF NOT EXISTS mileage_logs (
-        id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        service_request_id INT UNSIGNED NOT NULL,
-        client_name        VARCHAR(255)  NOT NULL DEFAULT '',
-        address            VARCHAR(500)  NOT NULL DEFAULT '',
-        trip_date          DATE          NULL,
-        start_time         DATETIME      NULL COMMENT 'LA timezone',
-        end_time           DATETIME      NULL COMMENT 'LA timezone',
-        start_lat          DECIMAL(10,7) NULL,
-        start_lng          DECIMAL(10,7) NULL,
-        end_lat            DECIMAL(10,7) NULL,
-        end_lng            DECIMAL(10,7) NULL,
-        start_mileage      INT UNSIGNED  NULL COMMENT 'Odometer at departure',
-        end_mileage        INT UNSIGNED  NULL COMMENT 'Odometer at arrival',
-        total_miles        DECIMAL(8,2)  NULL,
-        status             ENUM('pending','complete') NOT NULL DEFAULT 'pending',
-        created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_service_request (service_request_id),
-        INDEX idx_trip_date (trip_date)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-");
-
-// ── Migrate: add mileage columns to existing tables ───────────────────────────
-foreach (['start_mileage INT UNSIGNED NULL COMMENT \'Odometer at departure\' AFTER end_lng',
-          'end_mileage   INT UNSIGNED NULL COMMENT \'Odometer at arrival\'   AFTER start_mileage',
-          'notes         VARCHAR(1000) NULL COMMENT \'Admin override for business purpose\' AFTER end_mileage'] as $colDef) {
-    $col = strtok($colDef, ' ');
-    $exists = $pdo->query(
-        "SELECT COUNT(*) FROM information_schema.COLUMNS
-         WHERE TABLE_SCHEMA = DATABASE()
-           AND TABLE_NAME   = 'mileage_logs'
-           AND COLUMN_NAME  = '$col'"
-    )->fetchColumn();
-    if (!$exists) {
-        $pdo->exec("ALTER TABLE mileage_logs ADD COLUMN $colDef");
-    }
-}
+require_once __DIR__ . '/../mileage_schema.php';
+ensureMileageVehicleSchema($pdo);
 
 // ── Parse body ────────────────────────────────────────────────────────────────
 $raw    = file_get_contents('php://input');
@@ -169,6 +130,24 @@ function validCoord(?string $v): ?float
     if ($v === null || $v === '') {
         return null;
     }
+
+    function parseNullableInt($value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (is_int($value)) {
+            return $value;
+        }
+        if (is_string($value) && ctype_digit($value)) {
+            return (int) $value;
+        }
+        if (is_numeric($value) && (int) $value == (float) $value) {
+            return (int) $value;
+        }
+
+        return null;
+    }
     $f = filter_var($v, FILTER_VALIDATE_FLOAT);
     return $f === false ? null : $f;
 }
@@ -183,11 +162,31 @@ if ($action === 'on_my_way') {
     $startLat         = validCoord((string) ($data['start_lat'] ?? ''));
     $startLng         = validCoord((string) ($data['start_lng'] ?? ''));
     $startMileage     = isset($data['start_mileage']) ? (int) $data['start_mileage'] : null;
+    $vehicleId        = parseNullableInt($data['vehicle_id'] ?? null);
     $notes            = trim((string) ($data['notes'] ?? ''));
 
     if ($serviceRequestId < 0) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Missing service_request_id']);
+        exit;
+    }
+    if ($vehicleId === null || $vehicleId <= 0) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'A vehicle selection is required.']);
+        exit;
+    }
+
+    $vehicleStmt = $pdo->prepare("
+        SELECT id
+        FROM vehicles
+        WHERE id = :id
+          AND is_active = 1
+        LIMIT 1
+    ");
+    $vehicleStmt->execute([':id' => $vehicleId]);
+    if (!$vehicleStmt->fetch(PDO::FETCH_ASSOC)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Selected vehicle is not active.']);
         exit;
     }
 
@@ -215,6 +214,7 @@ if ($action === 'on_my_way') {
                  start_lat      = :slat,
                  start_lng      = :slng,
                  start_mileage  = :sm,
+                 vehicle_id     = :vehicle_id,
                  notes          = :notes
              WHERE id = :id"
         );
@@ -230,6 +230,7 @@ if ($action === 'on_my_way') {
             ':slat' => $startLat,
             ':slng' => $startLng,
             ':sm'   => $startMileage,
+            ':vehicle_id' => $vehicleId,
             ':notes'=> $notesToPersist,
             ':id'   => $row['id'],
         ]);
@@ -237,9 +238,9 @@ if ($action === 'on_my_way') {
     } else {
         $stmt = $pdo->prepare(
             "INSERT INTO mileage_logs
-                (service_request_id, client_name, address, trip_date, start_time, start_lat, start_lng, start_mileage, notes, status)
+                (service_request_id, client_name, address, trip_date, start_time, start_lat, start_lng, start_mileage, notes, vehicle_id, status)
              VALUES
-                (:sri, :cn, :addr, :td, :st, :slat, :slng, :sm, :notes, 'pending')"
+                (:sri, :cn, :addr, :td, :st, :slat, :slng, :sm, :notes, :vehicle_id, 'pending')"
         );
         $stmt->execute([
             ':sri'  => $serviceRequestId,
@@ -251,6 +252,7 @@ if ($action === 'on_my_way') {
             ':slng' => $startLng,
             ':sm'   => $startMileage,
             ':notes'=> $notesToPersist,
+            ':vehicle_id' => $vehicleId,
         ]);
         $logId = (int) $pdo->lastInsertId();
     }
@@ -352,11 +354,23 @@ if ($action === 'update') {
     $address      = trim((string) ($data['address']       ?? ''));
     $notes        = trim((string) ($data['notes']         ?? ''));
     $status       = trim((string) ($data['status']        ?? 'pending'));
+    $vehicleId    = parseNullableInt($data['vehicle_id'] ?? null);
 
     if ($id <= 0) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Invalid record ID']);
         exit;
+    }
+    if ($vehicleId !== null && $vehicleId > 0) {
+        $vehicleStmt = $pdo->prepare("SELECT id FROM vehicles WHERE id = :id LIMIT 1");
+        $vehicleStmt->execute([':id' => $vehicleId]);
+        if (!$vehicleStmt->fetch(PDO::FETCH_ASSOC)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Selected vehicle does not exist.']);
+            exit;
+        }
+    } elseif ($vehicleId !== null && $vehicleId <= 0) {
+        $vehicleId = null;
     }
 
     if (!in_array($status, ['pending', 'complete'], true)) {
@@ -406,6 +420,7 @@ if ($action === 'update') {
              client_name   = :cn,
              address       = :addr,
              notes         = :notes,
+             vehicle_id    = :vehicle_id,
              status        = :status
          WHERE id = :id"
     );
@@ -419,6 +434,7 @@ if ($action === 'update') {
         ':cn'     => $clientName,
         ':addr'   => $address,
         ':notes'  => $notes !== '' ? $notes : null,
+        ':vehicle_id' => $vehicleId,
         ':status' => $status,
         ':id'     => $id,
     ]);

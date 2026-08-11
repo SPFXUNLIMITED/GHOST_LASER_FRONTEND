@@ -121,6 +121,7 @@ $headerRight     = <<<'HTML'
                 <div class="flex items-center gap-3">
                     <a href="dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Dashboard</a>
                     <a href="technician/schedule.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Scheduling</a>
+                    <a href="vehicle-settings.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Vehicle Settings</a>
                 </div>
 HTML;
 require_once __DIR__ . '/templates/header.php';
