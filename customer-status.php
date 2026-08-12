@@ -160,15 +160,21 @@ require_once __DIR__ . '/templates/header.php';
                     <ul id="customerSearchSuggestions" class="hidden" role="listbox" aria-label="Customer search results"></ul>
                 </div>
             </label>
-            <div class="flex items-center gap-3">
-                <button id="bannedOnlyFilter" type="button" class="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-red-200 transition hover:bg-red-500/20">
-                    Banned Only
+            <div class="flex flex-wrap items-center gap-2" id="statusFilterGroup">
+                <button data-filter="" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-cyan-500/60 bg-cyan-500/15 text-cyan-200 ring-2 ring-cyan-400/70">
+                    All Customers
                 </button>
-                <button id="vipOnlyFilter" type="button" class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-200 transition hover:bg-amber-500/20">
-                    VIP Only
+                <button data-filter="vip" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20">
+                    VIP
                 </button>
-                <button id="clearFilter" type="button" class="rounded-lg border border-zinc-600 bg-zinc-800/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-200 transition hover:bg-zinc-700">
-                    Clear Filter
+                <button data-filter="good" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20">
+                    Good
+                </button>
+                <button data-filter="caution" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-yellow-500/40 bg-yellow-500/10 text-yellow-200 hover:bg-yellow-500/20">
+                    Caution
+                </button>
+                <button data-filter="banned" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20">
+                    Banned
                 </button>
             </div>
         </section>
@@ -288,9 +294,7 @@ require_once __DIR__ . '/templates/header.php';
 const customerSearchCsrfToken = <?= json_encode($customerSearchCsrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 const searchInput = document.getElementById('customerSearchInput');
 const suggestionsEl = document.getElementById('customerSearchSuggestions');
-const bannedOnlyFilterEl = document.getElementById('bannedOnlyFilter');
-const vipOnlyFilterEl = document.getElementById('vipOnlyFilter');
-const clearFilterEl = document.getElementById('clearFilter');
+const filterBtns = Array.from(document.querySelectorAll('.status-filter-btn'));
 const rows = Array.from(document.querySelectorAll('[data-customer-row]'));
 let debounceTimer = null;
 let activeIndex = -1;
@@ -431,18 +435,31 @@ document.addEventListener('click', (event) => {
     }
 });
 
+const activeClasses = {
+    '':       ['border-cyan-500/60',   'bg-cyan-500/15',    'text-cyan-200',   'ring-2', 'ring-cyan-400/70'],
+    'vip':    ['border-amber-500/60',  'bg-amber-500/20',   'text-amber-200',  'ring-2', 'ring-amber-400/70'],
+    'good':   ['border-emerald-500/60','bg-emerald-500/20', 'text-emerald-200','ring-2', 'ring-emerald-400/70'],
+    'caution':['border-yellow-500/60', 'bg-yellow-500/20',  'text-yellow-200', 'ring-2', 'ring-yellow-400/70'],
+    'banned': ['border-red-500/60',    'bg-red-500/20',     'text-red-200',    'ring-2', 'ring-red-400/70'],
+};
+
 const setStatusFilter = (statusFilter) => {
     activeStatusFilter = statusFilter;
-    bannedOnlyFilterEl.classList.toggle('ring-2', statusFilter === 'banned');
-    bannedOnlyFilterEl.classList.toggle('ring-red-400/80', statusFilter === 'banned');
-    vipOnlyFilterEl.classList.toggle('ring-2', statusFilter === 'vip');
-    vipOnlyFilterEl.classList.toggle('ring-amber-300/80', statusFilter === 'vip');
+    filterBtns.forEach((btn) => {
+        const filter = btn.dataset.filter;
+        const classes = activeClasses[filter] || [];
+        if (filter === statusFilter) {
+            btn.classList.add(...classes);
+        } else {
+            btn.classList.remove(...classes);
+        }
+    });
     syncTableFilter();
 };
 
-bannedOnlyFilterEl.addEventListener('click', () => setStatusFilter(activeStatusFilter === 'banned' ? '' : 'banned'));
-vipOnlyFilterEl.addEventListener('click', () => setStatusFilter(activeStatusFilter === 'vip' ? '' : 'vip'));
-clearFilterEl.addEventListener('click', () => setStatusFilter(''));
+filterBtns.forEach((btn) => {
+    btn.addEventListener('click', () => setStatusFilter(btn.dataset.filter));
+});
 </script>
 
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
