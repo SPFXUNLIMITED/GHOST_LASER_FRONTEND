@@ -47,6 +47,41 @@ function loadGoogleMapsApiKey(): string {
     return $key;
 }
 
+function ensureCustomerStatusTable(PDO $pdo): void {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS customer_status (
+            customer_id INT UNSIGNED NOT NULL,
+            rating TINYINT UNSIGNED NOT NULL DEFAULT 5,
+            status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good',
+            notes TEXT NULL,
+            has_outstanding_balance TINYINT(1) NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            updated_by VARCHAR(255) NULL,
+            PRIMARY KEY (customer_id),
+            CONSTRAINT fk_customer_status_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    try {
+        $pdo->exec("ALTER TABLE customer_status MODIFY COLUMN status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good'");
+    } catch (Throwable $e) {
+        // Ignore compatibility errors.
+    }
+}
+
+function isCustomerBanned(PDO $pdo, int $customerId): bool {
+    if ($customerId <= 0) {
+        return false;
+    }
+    try {
+        ensureCustomerStatusTable($pdo);
+        $stmt = $pdo->prepare("SELECT status FROM customer_status WHERE customer_id = ? LIMIT 1");
+        $stmt->execute([$customerId]);
+        return strcasecmp((string) $stmt->fetchColumn(), 'Banned') === 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 // Handle "I have an account" login POST
 $loginError = '';
 $inlineLoginError = '';
@@ -102,6 +137,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
         $stmtLogin->execute([$loginEmail]);
         $customerLogin = $stmtLogin->fetch(PDO::FETCH_ASSOC);
         if ($customerLogin && !empty($customerLogin['password_hash']) && password_verify($loginPassword, $customerLogin['password_hash'])) {
+            if (isCustomerBanned($pdo, (int) ($customerLogin['id'] ?? 0))) {
+                if ($loginContext === 'step1_existing_account') {
+                    $inlineLoginError = 'This customer account is banned and cannot be booked.';
+                } else {
+                    $loginError = 'This customer account is banned and cannot be booked.';
+                }
+            } else {
             session_regenerate_id(true);
             $customerPhoneDigits = normalizeUsPhone($customerLogin['phone'] ?? '');
             $customerProfile = [
@@ -150,6 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
                 header('Location: book_a_technician.php?step=2');
             }
             exit;
+            }
         } else {
             if ($loginContext === 'step1_existing_account') {
                 $inlineLoginError = 'Invalid email or password. Please try again.';
@@ -458,6 +501,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         $smsConsentError = 'Please check this box to continue — SMS consent is required.';
         $errors[] = $smsConsentError;
     }
+    if (!$errors && !empty($_SESSION['customer_id']) && isCustomerBanned($pdo, (int) $_SESSION['customer_id'])) {
+        $errors[] = 'This customer account is banned and cannot be booked.';
+    }
 
     $password        = $_POST['password'] ?? '';
     $passwordConfirm = $_POST['confirm_password'] ?? '';
@@ -475,6 +521,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
 
         if ($existingCustomer && !empty($existingCustomer['password_hash'])) {
             if (password_verify($password, (string) $existingCustomer['password_hash'])) {
+                if (isCustomerBanned($pdo, (int) ($existingCustomer['id'] ?? 0))) {
+                    $errors[] = 'This customer account is banned and cannot be booked.';
+                } else {
                 // Correct password — silently log the customer in and proceed to speed selection.
                 session_regenerate_id(true);
                 $_SESSION['customer_id']         = (int) $existingCustomer['id'];
@@ -525,6 +574,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
                 unset($_SESSION[$pendingStepOneSessionKey]);
                 header('Location: book_a_technician.php?step=3');
                 exit;
+                }
                 }
             } else {
                 // Wrong password — show the inline login prompt.
