@@ -34,7 +34,7 @@ function ensureCustomerStatusTable(PDO $pdo): void
         CREATE TABLE IF NOT EXISTS customer_status (
             customer_id INT UNSIGNED NOT NULL,
             rating TINYINT UNSIGNED NOT NULL DEFAULT 5,
-            status ENUM('Good','Caution','Banned') NOT NULL DEFAULT 'Good',
+            status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good',
             notes TEXT NULL,
             has_outstanding_balance TINYINT(1) NOT NULL DEFAULT 0,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -43,6 +43,11 @@ function ensureCustomerStatusTable(PDO $pdo): void
             CONSTRAINT fk_customer_status_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    try {
+        $pdo->exec("ALTER TABLE customer_status MODIFY COLUMN status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good'");
+    } catch (Throwable $e) {
+        // Ignore compatibility errors.
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && (string) ($_GET['action'] ?? '') === 'customer_search') {
@@ -87,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (string) ($_GET['action'] ?? '') ===
                 OR c.company LIKE :company_q
                 OR c.email LIKE :email_q
                 OR c.phone LIKE :phone_q
-             ORDER BY (COALESCE(cs.status, \'Good\') = \'Banned\') DESC, c.last_name, c.first_name
+             ORDER BY FIELD(COALESCE(cs.status, \'Good\'), \'VIP\', \'Good\', \'Caution\', \'Banned\'), c.last_name, c.first_name
              LIMIT 8'
         );
         $stmt->execute([

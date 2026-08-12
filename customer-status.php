@@ -19,7 +19,7 @@ function ensureCustomerStatusTable(PDO $pdo): void
         CREATE TABLE IF NOT EXISTS customer_status (
             customer_id INT UNSIGNED NOT NULL,
             rating TINYINT UNSIGNED NOT NULL DEFAULT 5,
-            status ENUM('Good','Caution','Banned') NOT NULL DEFAULT 'Good',
+            status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good',
             notes TEXT NULL,
             has_outstanding_balance TINYINT(1) NOT NULL DEFAULT 0,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -28,6 +28,11 @@ function ensureCustomerStatusTable(PDO $pdo): void
             CONSTRAINT fk_customer_status_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    try {
+        $pdo->exec("ALTER TABLE customer_status MODIFY COLUMN status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good'");
+    } catch (Throwable $e) {
+        // Ignore compatibility errors.
+    }
 }
 
 ensureCustomerStatusTable($pdo);
@@ -46,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $status = trim((string) ($_POST['status'] ?? 'Good'));
     $notes = trim((string) ($_POST['notes'] ?? ''));
     $hasOutstandingBalance = isset($_POST['has_outstanding_balance']) ? 1 : 0;
-    $allowedStatuses = ['Good', 'Caution', 'Banned'];
+    $allowedStatuses = ['VIP', 'Good', 'Caution', 'Banned'];
 
     if ($customerId <= 0) {
         $errorMessage = 'Please select a customer.';
@@ -95,7 +100,7 @@ $customersStmt = $pdo->query("
         cs.updated_by
     FROM customers c
     LEFT JOIN customer_status cs ON cs.customer_id = c.id
-    ORDER BY (COALESCE(cs.status, 'Good') = 'Banned') DESC, c.last_name ASC, c.first_name ASC
+    ORDER BY FIELD(COALESCE(cs.status, 'Good'), 'VIP', 'Good', 'Caution', 'Banned'), c.last_name ASC, c.first_name ASC
 ");
 $customers = $customersStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -176,11 +181,16 @@ require_once __DIR__ . '/templates/header.php';
                     <ul id="customerSearchSuggestions" class="hidden" role="listbox" aria-label="Customer search results"></ul>
                 </div>
             </label>
-            <div class="flex items-center gap-4">
-                <label class="inline-flex items-center gap-2 text-sm text-zinc-300">
-                    <input id="bannedOnlyFilter" type="checkbox" class="rounded border-zinc-600 bg-zinc-900 text-red-500 focus:ring-red-500">
+            <div class="flex items-center gap-3">
+                <button id="bannedOnlyFilter" type="button" class="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-red-200 transition hover:bg-red-500/20">
                     Banned Only
-                </label>
+                </button>
+                <button id="vipOnlyFilter" type="button" class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-200 transition hover:bg-amber-500/20">
+                    VIP Only
+                </button>
+                <button id="clearFilter" type="button" class="rounded-lg border border-zinc-600 bg-zinc-800/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-200 transition hover:bg-zinc-700">
+                    Clear Filter
+                </button>
             </div>
         </section>
 
@@ -203,10 +213,15 @@ require_once __DIR__ . '/templates/header.php';
                         $displayName = $fullName !== '' ? $fullName : ('Customer #' . (int) $customer['id']);
                         $status = (string) ($customer['customer_status'] ?? 'Good');
                         $isBanned = strcasecmp($status, 'Banned') === 0;
-                        $rowClass = $isBanned ? 'bg-red-950/40 border-red-500/20 hover:bg-red-900/40' : 'hover:bg-zinc-800/50';
-                        $statusClass = $isBanned
-                            ? 'border-red-500/30 bg-red-500/20 text-red-200'
-                            : ($status === 'Caution' ? 'border-amber-500/30 bg-amber-500/20 text-amber-200' : 'border-emerald-500/30 bg-emerald-500/20 text-emerald-200');
+                        $isVip = strcasecmp($status, 'VIP') === 0;
+                        $rowClass = $isBanned
+                            ? 'bg-red-950/40 border-red-500/20 hover:bg-red-900/40'
+                            : ($isVip ? 'bg-purple-950/40 border-purple-500/20 hover:bg-purple-900/40' : 'hover:bg-zinc-800/50');
+                        $statusClass = $isVip
+                            ? 'border-amber-400/40 bg-gradient-to-r from-amber-500/30 to-purple-500/30 text-amber-100'
+                            : ($isBanned
+                                ? 'border-red-500/30 bg-red-500/20 text-red-200'
+                                : ($status === 'Caution' ? 'border-amber-500/30 bg-amber-500/20 text-amber-200' : 'border-emerald-500/30 bg-emerald-500/20 text-emerald-200'));
                         ?>
                         <tr
                             class="border-b border-zinc-800/70 cursor-pointer transition-colors <?= h($rowClass) ?>"
@@ -227,7 +242,7 @@ require_once __DIR__ . '/templates/header.php';
                             <td class="py-3 px-3 text-zinc-100"><?= str_repeat('★', max(1, min(5, (int) ($customer['rating'] ?? 5)))) ?></td>
                             <td class="py-3 px-3">
                                 <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold <?= h($statusClass) ?>">
-                                    <?= h($status) ?>
+                                    <?= $isVip ? '★ ' : '' ?><?= h($status) ?>
                                 </span>
                             </td>
                             <td class="py-3 px-3 text-zinc-300 max-w-[260px] truncate"><?= h((string) ($customer['notes'] ?? '')) ?></td>
@@ -260,6 +275,7 @@ require_once __DIR__ . '/templates/header.php';
                     <div>
                         <label class="text-sm font-medium text-zinc-200" for="status">Status</label>
                         <select id="status" name="status" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none">
+                            <option value="VIP">VIP</option>
                             <option value="Good">Good</option>
                             <option value="Caution">Caution</option>
                             <option value="Banned">Banned</option>
@@ -285,10 +301,13 @@ const customerSearchCsrfToken = <?= json_encode($customerSearchCsrfToken, JSON_H
 const searchInput = document.getElementById('customerSearchInput');
 const suggestionsEl = document.getElementById('customerSearchSuggestions');
 const bannedOnlyFilterEl = document.getElementById('bannedOnlyFilter');
+const vipOnlyFilterEl = document.getElementById('vipOnlyFilter');
+const clearFilterEl = document.getElementById('clearFilter');
 const rows = Array.from(document.querySelectorAll('[data-customer-row]'));
 let debounceTimer = null;
 let activeIndex = -1;
 let currentResults = [];
+let activeStatusFilter = '';
 
 const escHtml = (str) => String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -323,13 +342,12 @@ rows.forEach((row) => {
 
 const syncTableFilter = () => {
     const query = searchInput.value.trim().toLowerCase();
-    const bannedOnly = bannedOnlyFilterEl.checked;
     rows.forEach((row) => {
         const textBlob = `${row.dataset.name || ''} ${row.dataset.email || ''} ${row.dataset.phone || ''}`.toLowerCase();
         const status = String(row.dataset.status || '').toLowerCase();
         const queryMatches = query === '' || textBlob.includes(query);
-        const bannedMatches = !bannedOnly || status === 'banned';
-        row.classList.toggle('hidden', !(queryMatches && bannedMatches));
+        const statusMatches = activeStatusFilter === '' || status === activeStatusFilter;
+        row.classList.toggle('hidden', !(queryMatches && statusMatches));
     });
 };
 
@@ -345,11 +363,16 @@ const renderSuggestions = (results) => {
         li.setAttribute('role', 'option');
         li.dataset.idx = String(idx);
         const isBanned = String(customer.status || '').toLowerCase() === 'banned';
-        const statusMeta = isBanned ? '<span class="text-red-300 font-semibold">BANNED</span> &nbsp;&middot;&nbsp; ' : '';
+        const isVip = String(customer.status || '').toLowerCase() === 'vip';
+        const statusMeta = isBanned
+            ? '<span class="text-red-300 font-semibold">BANNED</span> &nbsp;&middot;&nbsp; '
+            : (isVip ? '<span class="text-amber-200 font-semibold">★ VIP</span> &nbsp;&middot;&nbsp; ' : '');
         li.innerHTML = `<div class="result-name">${escHtml(customer.customer_name || '')}</div>`
             + `<div class="result-meta">${statusMeta}${customer.phone ? escHtml(customer.phone) + ' &nbsp;&middot;&nbsp; ' : ''}${escHtml(customer.email)}</div>`;
         if (isBanned) {
             li.classList.add('!bg-red-950/40', '!text-red-200');
+        } else if (isVip) {
+            li.classList.add('!bg-purple-950/40', '!text-amber-100');
         }
         li.addEventListener('mousedown', (event) => {
             event.preventDefault();
@@ -418,7 +441,18 @@ document.addEventListener('click', (event) => {
     }
 });
 
-bannedOnlyFilterEl.addEventListener('change', syncTableFilter);
+const setStatusFilter = (statusFilter) => {
+    activeStatusFilter = statusFilter;
+    bannedOnlyFilterEl.classList.toggle('ring-2', statusFilter === 'banned');
+    bannedOnlyFilterEl.classList.toggle('ring-red-400/80', statusFilter === 'banned');
+    vipOnlyFilterEl.classList.toggle('ring-2', statusFilter === 'vip');
+    vipOnlyFilterEl.classList.toggle('ring-amber-300/80', statusFilter === 'vip');
+    syncTableFilter();
+};
+
+bannedOnlyFilterEl.addEventListener('click', () => setStatusFilter(activeStatusFilter === 'banned' ? '' : 'banned'));
+vipOnlyFilterEl.addEventListener('click', () => setStatusFilter(activeStatusFilter === 'vip' ? '' : 'vip'));
+clearFilterEl.addEventListener('click', () => setStatusFilter(''));
 </script>
 
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
