@@ -29,22 +29,5 @@ function ensure_customer_status_table(PDO $pdo): void {
     }
 }
 
-/**
- * Returns true only if the customer has a record in customer_status with status = 'Banned'.
- * Returns false if there is no record OR if the status is anything else (VIP, Good, Caution).
- */
-function is_customer_banned(PDO $pdo, ?int $customer_id): bool {
-    if ($customer_id === null || $customer_id <= 0) {
-        return false;
-    }
-    try {
-        ensure_customer_status_table($pdo);
-        $stmt = $pdo->prepare("SELECT status FROM customer_status WHERE customer_id = ? LIMIT 1");
-        $stmt->execute([$customer_id]);
-        return strcasecmp((string) $stmt->fetchColumn(), 'Banned') === 0;
-    } catch (Throwable $e) {
-        return false;
-    }
-}
 
 ?>

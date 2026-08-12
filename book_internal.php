@@ -275,9 +275,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
     }
     if (!$errors) {
         $selectedCustomerId = (int) ($_POST['customer_id'] ?? 0);
-        if ($selectedCustomerId > 0 && is_customer_banned($pdo, $selectedCustomerId)) {
-            $errors[] = 'This customer is banned and cannot be booked.';
-        }
     }
 
     if (!$errors) {
@@ -854,11 +851,6 @@ require_once __DIR__ . '/templates/header.php';
         };
 
         const fillCustomer = (customer) => {
-            if (String(customer.status || '').toLowerCase() === 'banned') {
-                selectedLabel.textContent = 'This customer is banned and cannot be selected.';
-                selectedBanner.classList.remove('hidden');
-                return;
-            }
             const fullName = (customer.customer_name || `${customer.first_name || ''} ${customer.last_name || ''}`).trim();
             let firstName = customer.first_name || '';
             let lastName = customer.last_name || '';
@@ -915,7 +907,6 @@ require_once __DIR__ . '/templates/header.php';
                 }
                 li.addEventListener('mousedown', (e) => {
                     e.preventDefault();
-                    if (isBanned) return;
                     fillCustomer(customer);
                 });
                 resultsList.appendChild(li);
