@@ -7,35 +7,14 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/project/db.php';
+require_once __DIR__ . '/functions.php';
 
 function h($value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-function ensureCustomerStatusTable(PDO $pdo): void
-{
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS customer_status (
-            customer_id INT UNSIGNED NOT NULL,
-            rating TINYINT UNSIGNED NOT NULL DEFAULT 5,
-            status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good',
-            notes TEXT NULL,
-            has_outstanding_balance TINYINT(1) NOT NULL DEFAULT 0,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            updated_by VARCHAR(255) NULL,
-            PRIMARY KEY (customer_id),
-            CONSTRAINT fk_customer_status_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    ");
-    try {
-        $pdo->exec("ALTER TABLE customer_status MODIFY COLUMN status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good'");
-    } catch (Throwable $e) {
-        // Ignore compatibility errors.
-    }
-}
-
-ensureCustomerStatusTable($pdo);
+ensure_customer_status_table($pdo);
 
 if (empty($_SESSION['customer_status_csrf'])) {
     $_SESSION['customer_status_csrf'] = bin2hex(random_bytes(32));
@@ -50,7 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rating = (int) ($_POST['rating'] ?? 5);
     $status = trim((string) ($_POST['status'] ?? 'Good'));
     $notes = trim((string) ($_POST['notes'] ?? ''));
-    $hasOutstandingBalance = isset($_POST['has_outstanding_balance']) ? 1 : 0;
     $allowedStatuses = ['VIP', 'Good', 'Caution', 'Banned'];
 
     if ($customerId <= 0) {
@@ -60,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!in_array($status, $allowedStatuses, true)) {
         $errorMessage = 'Please choose a valid status.';
     } else {
+        $hasOutstandingBalance = customer_has_outstanding_balance($pdo, $customerId) ? 1 : 0;
         $adminIdentity = trim((string) ($_SESSION['admin_username'] ?? 'Admin #' . (int) $_SESSION['admin_id']));
         $stmt = $pdo->prepare("
             INSERT INTO customer_status (customer_id, rating, status, notes, has_outstanding_balance, updated_by)
@@ -95,7 +74,13 @@ $customersStmt = $pdo->query("
         COALESCE(cs.rating, 5) AS rating,
         COALESCE(cs.status, 'Good') AS customer_status,
         COALESCE(cs.notes, '') AS notes,
-        COALESCE(cs.has_outstanding_balance, 0) AS has_outstanding_balance,
+        COALESCE((
+            SELECT 1 FROM quotes q
+            WHERE q.customer_id = c.id
+              AND q.payment_status = 'unpaid'
+              AND ((q.converted_invoice_no IS NOT NULL AND q.converted_invoice_no <> '') OR q.status = 'converted')
+            LIMIT 1
+        ), 0) AS has_outstanding_balance,
         cs.updated_at,
         cs.updated_by
     FROM customers c
@@ -288,10 +273,10 @@ require_once __DIR__ . '/templates/header.php';
                         <label class="text-sm font-medium text-zinc-200" for="notes">Notes</label>
                         <textarea id="notes" name="notes" rows="5" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" placeholder="Issue history, behavior notes, payment concerns..."></textarea>
                     </div>
-                    <label class="inline-flex items-center gap-2 text-sm text-zinc-200">
-                        <input id="has_outstanding_balance" type="checkbox" name="has_outstanding_balance" class="rounded border-zinc-600 bg-zinc-900 text-red-500 focus:ring-red-500">
-                        Has Outstanding Balance
-                    </label>
+                    <div>
+                        <span class="text-sm font-medium text-zinc-200">Outstanding Balance</span>
+                        <div id="outstandingBalanceDisplay" class="mt-2 text-sm text-zinc-400 italic">Select a customer to see balance status.</div>
+                    </div>
                     <button type="submit" class="w-full rounded-lg bg-cyan-500 px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400">Save Status</button>
                 </form>
             </div>
@@ -321,7 +306,14 @@ const bindCustomer = (customer) => {
     document.getElementById('rating').value = String(customer.rating || 5);
     document.getElementById('status').value = String(customer.status || 'Good');
     document.getElementById('notes').value = String(customer.notes || '');
-    document.getElementById('has_outstanding_balance').checked = Boolean(Number(customer.outstanding ?? customer.has_outstanding_balance ?? 0));
+
+    const hasBalance = Boolean(Number(customer.outstanding ?? customer.has_outstanding_balance ?? 0));
+    const balanceEl = document.getElementById('outstandingBalanceDisplay');
+    if (hasBalance) {
+        balanceEl.innerHTML = '<span class="inline-flex rounded-full border border-red-500/30 bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-200">Yes — has unpaid invoices</span>';
+    } else {
+        balanceEl.innerHTML = '<span class="inline-flex rounded-full border border-zinc-600 px-2.5 py-1 text-xs font-semibold text-zinc-300">No unpaid invoices</span>';
+    }
 
     const fullName = String(customer.name || customer.customer_name || '').trim();
     const email = String(customer.email || '').trim();

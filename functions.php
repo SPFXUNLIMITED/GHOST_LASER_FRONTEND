@@ -46,4 +46,27 @@ function is_customer_banned(PDO $pdo, ?int $customer_id): bool {
         return false;
     }
 }
+
+/**
+ * Returns true if the customer has any unpaid invoices in the quotes table.
+ * Invoices are converted quotes: those with a converted_invoice_no or status = 'converted'.
+ */
+function customer_has_outstanding_balance(PDO $pdo, ?int $customer_id): bool {
+    if ($customer_id === null || $customer_id <= 0) {
+        return false;
+    }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT 1 FROM quotes
+            WHERE customer_id = ?
+              AND payment_status = 'unpaid'
+              AND ((converted_invoice_no IS NOT NULL AND converted_invoice_no <> '') OR status = 'converted')
+            LIMIT 1
+        ");
+        $stmt->execute([$customer_id]);
+        return $stmt->fetchColumn() !== false;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
 ?>
