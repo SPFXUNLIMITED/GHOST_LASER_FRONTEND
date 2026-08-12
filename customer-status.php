@@ -78,7 +78,7 @@ $customersStmt = $pdo->query("
         cs.updated_at,
         cs.updated_by
     FROM customers c
-    LEFT JOIN customer_status cs ON cs.customer_id = c.id
+    INNER JOIN customer_status cs ON cs.customer_id = c.id
     ORDER BY FIELD(COALESCE(cs.status, 'Good'), 'VIP', 'Good', 'Caution', 'Banned'), c.last_name ASC, c.first_name ASC
 ");
 $customers = $customersStmt->fetchAll(PDO::FETCH_ASSOC);
