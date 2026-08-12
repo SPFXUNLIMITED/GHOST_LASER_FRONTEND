@@ -1,0 +1,424 @@
+<?php
+session_start();
+
+if (empty($_SESSION['admin_id'])) {
+    header('Location: admin-login.php');
+    exit;
+}
+
+require_once __DIR__ . '/project/db.php';
+
+function h($value): string
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function ensureCustomerStatusTable(PDO $pdo): void
+{
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS customer_status (
+            customer_id INT UNSIGNED NOT NULL,
+            rating TINYINT UNSIGNED NOT NULL DEFAULT 5,
+            status ENUM('Good','Caution','Banned') NOT NULL DEFAULT 'Good',
+            notes TEXT NULL,
+            has_outstanding_balance TINYINT(1) NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            updated_by VARCHAR(255) NULL,
+            PRIMARY KEY (customer_id),
+            CONSTRAINT fk_customer_status_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+}
+
+ensureCustomerStatusTable($pdo);
+
+if (empty($_SESSION['customer_status_csrf'])) {
+    $_SESSION['customer_status_csrf'] = bin2hex(random_bytes(32));
+}
+$customerSearchCsrfToken = (string) $_SESSION['customer_status_csrf'];
+
+$successMessage = null;
+$errorMessage = null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $customerId = (int) ($_POST['customer_id'] ?? 0);
+    $rating = (int) ($_POST['rating'] ?? 5);
+    $status = trim((string) ($_POST['status'] ?? 'Good'));
+    $notes = trim((string) ($_POST['notes'] ?? ''));
+    $hasOutstandingBalance = isset($_POST['has_outstanding_balance']) ? 1 : 0;
+    $allowedStatuses = ['Good', 'Caution', 'Banned'];
+
+    if ($customerId <= 0) {
+        $errorMessage = 'Please select a customer.';
+    } elseif ($rating < 1 || $rating > 5) {
+        $errorMessage = 'Rating must be between 1 and 5.';
+    } elseif (!in_array($status, $allowedStatuses, true)) {
+        $errorMessage = 'Please choose a valid status.';
+    } else {
+        $adminIdentity = trim((string) ($_SESSION['admin_username'] ?? 'Admin #' . (int) $_SESSION['admin_id']));
+        $stmt = $pdo->prepare("
+            INSERT INTO customer_status (customer_id, rating, status, notes, has_outstanding_balance, updated_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                rating = VALUES(rating),
+                status = VALUES(status),
+                notes = VALUES(notes),
+                has_outstanding_balance = VALUES(has_outstanding_balance),
+                updated_by = VALUES(updated_by),
+                updated_at = CURRENT_TIMESTAMP
+        ");
+        $stmt->execute([
+            $customerId,
+            $rating,
+            $status,
+            $notes !== '' ? $notes : null,
+            $hasOutstandingBalance,
+            $adminIdentity,
+        ]);
+        $successMessage = 'Customer status updated.';
+    }
+}
+
+$customersStmt = $pdo->query("
+    SELECT
+        c.id,
+        c.first_name,
+        c.last_name,
+        c.company,
+        c.email,
+        c.phone,
+        COALESCE(cs.rating, 5) AS rating,
+        COALESCE(cs.status, 'Good') AS customer_status,
+        COALESCE(cs.notes, '') AS notes,
+        COALESCE(cs.has_outstanding_balance, 0) AS has_outstanding_balance,
+        cs.updated_at,
+        cs.updated_by
+    FROM customers c
+    LEFT JOIN customer_status cs ON cs.customer_id = c.id
+    ORDER BY (COALESCE(cs.status, 'Good') = 'Banned') DESC, c.last_name ASC, c.first_name ASC
+");
+$customers = $customersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$pageTitle = 'Customer Status | Ghost Laser';
+$pageDescription = 'Customer blacklist and rating management.';
+$extraHead = <<<'HTML'
+<style>
+    .card-glow { box-shadow: 0 0 0 1px rgba(6,182,212,0.15), 0 0 60px rgba(6,182,212,0.06); }
+    #customerSearchSuggestions {
+        position: absolute;
+        z-index: 50;
+        left: 0;
+        right: 0;
+        top: calc(100% + 4px);
+        background: #18181b;
+        border: 1px solid rgb(63,63,70);
+        border-radius: 0.5rem;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+        max-height: 280px;
+        overflow-y: auto;
+    }
+    #customerSearchSuggestions li {
+        padding: 0.65rem 1rem;
+        font-size: 0.8rem;
+        color: #d4d4d8;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(63,63,70,0.5);
+    }
+    #customerSearchSuggestions li:last-child { border-bottom: none; }
+    #customerSearchSuggestions li:hover, #customerSearchSuggestions li.active { background: rgba(6,182,212,0.12); color: #22d3ee; }
+    #customerSearchSuggestions li .result-name { font-weight: 600; color: #f4f4f5; }
+    #customerSearchSuggestions li .result-meta { color: #71717a; margin-top: 1px; }
+</style>
+HTML;
+$headerRight = <<<'HTML'
+                <div class="flex items-center gap-3">
+                    <a href="dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Back to Dashboard</a>
+                    <a href="book_internal.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Internal Booking</a>
+                </div>
+HTML;
+require_once __DIR__ . '/templates/header.php';
+?>
+
+<main class="min-h-screen hero-grid pt-24 pb-16 px-4">
+    <div class="max-w-7xl mx-auto space-y-6">
+        <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 md:p-8 card-glow">
+            <div class="flex flex-col gap-3">
+                <div class="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-cyan-400 w-fit">
+                    Customer Controls
+                </div>
+                <h1 class="text-3xl font-bold tracking-tight">Customer Blacklist / Rating System</h1>
+                <p class="text-zinc-400">Search, review, and update customer health status before booking.</p>
+            </div>
+        </section>
+
+        <?php if ($successMessage !== null): ?>
+            <div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                <?= h($successMessage) ?>
+            </div>
+        <?php endif; ?>
+        <?php if ($errorMessage !== null): ?>
+            <div class="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                <?= h($errorMessage) ?>
+            </div>
+        <?php endif; ?>
+
+        <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 card-glow space-y-4">
+            <label class="block">
+                <span class="text-sm font-medium text-zinc-200">Live Customer Search</span>
+                <div class="relative mt-2" id="live-search-wrap">
+                    <input
+                        id="customerSearchInput"
+                        type="text"
+                        class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none"
+                        placeholder="Search by name, email, or phone..."
+                        autocomplete="off"
+                    >
+                    <ul id="customerSearchSuggestions" class="hidden" role="listbox" aria-label="Customer search results"></ul>
+                </div>
+            </label>
+            <div class="flex items-center gap-4">
+                <label class="inline-flex items-center gap-2 text-sm text-zinc-300">
+                    <input id="bannedOnlyFilter" type="checkbox" class="rounded border-zinc-600 bg-zinc-900 text-red-500 focus:ring-red-500">
+                    Banned Only
+                </label>
+            </div>
+        </section>
+
+        <section class="grid gap-6 xl:grid-cols-[1.45fr_1fr]">
+            <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 md:p-5 card-glow overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead>
+                    <tr class="text-left text-zinc-400 border-b border-zinc-800">
+                        <th class="py-3 px-3">Customer</th>
+                        <th class="py-3 px-3">Rating</th>
+                        <th class="py-3 px-3">Status</th>
+                        <th class="py-3 px-3">Notes</th>
+                        <th class="py-3 px-3">Outstanding Balance</th>
+                    </tr>
+                    </thead>
+                    <tbody id="customerStatusTableBody">
+                    <?php foreach ($customers as $customer): ?>
+                        <?php
+                        $fullName = trim((string) (($customer['first_name'] ?? '') . ' ' . ($customer['last_name'] ?? '')));
+                        $displayName = $fullName !== '' ? $fullName : ('Customer #' . (int) $customer['id']);
+                        $status = (string) ($customer['customer_status'] ?? 'Good');
+                        $isBanned = strcasecmp($status, 'Banned') === 0;
+                        $rowClass = $isBanned ? 'bg-red-950/40 border-red-500/20 hover:bg-red-900/40' : 'hover:bg-zinc-800/50';
+                        $statusClass = $isBanned
+                            ? 'border-red-500/30 bg-red-500/20 text-red-200'
+                            : ($status === 'Caution' ? 'border-amber-500/30 bg-amber-500/20 text-amber-200' : 'border-emerald-500/30 bg-emerald-500/20 text-emerald-200');
+                        ?>
+                        <tr
+                            class="border-b border-zinc-800/70 cursor-pointer transition-colors <?= h($rowClass) ?>"
+                            data-customer-row
+                            data-id="<?= (int) $customer['id'] ?>"
+                            data-name="<?= h($displayName) ?>"
+                            data-email="<?= h((string) ($customer['email'] ?? '')) ?>"
+                            data-phone="<?= h((string) ($customer['phone'] ?? '')) ?>"
+                            data-rating="<?= (int) ($customer['rating'] ?? 5) ?>"
+                            data-status="<?= h($status) ?>"
+                            data-notes="<?= h((string) ($customer['notes'] ?? '')) ?>"
+                            data-outstanding="<?= (int) ($customer['has_outstanding_balance'] ?? 0) ?>"
+                        >
+                            <td class="py-3 px-3">
+                                <div class="font-medium text-white"><?= h($displayName) ?></div>
+                                <div class="text-xs text-zinc-400"><?= h((string) ($customer['email'] ?? '')) ?><?= $customer['phone'] ? ' · ' . h((string) $customer['phone']) : '' ?></div>
+                            </td>
+                            <td class="py-3 px-3 text-zinc-100"><?= str_repeat('★', max(1, min(5, (int) ($customer['rating'] ?? 5)))) ?></td>
+                            <td class="py-3 px-3">
+                                <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold <?= h($statusClass) ?>">
+                                    <?= h($status) ?>
+                                </span>
+                            </td>
+                            <td class="py-3 px-3 text-zinc-300 max-w-[260px] truncate"><?= h((string) ($customer['notes'] ?? '')) ?></td>
+                            <td class="py-3 px-3">
+                                <?php if ((int) ($customer['has_outstanding_balance'] ?? 0) === 1): ?>
+                                    <span class="inline-flex rounded-full border border-red-500/30 bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-200">Yes</span>
+                                <?php else: ?>
+                                    <span class="inline-flex rounded-full border border-zinc-600 px-2.5 py-1 text-xs font-semibold text-zinc-300">No</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 card-glow">
+                <h2 class="text-xl font-semibold text-white">Update Customer Status</h2>
+                <p id="selectedCustomerLabel" class="mt-2 text-sm text-zinc-400">Select a customer from the table or live search.</p>
+                <form method="post" class="mt-5 space-y-4">
+                    <input type="hidden" id="customer_id" name="customer_id" value="">
+                    <div>
+                        <label class="text-sm font-medium text-zinc-200" for="rating">Star Rating</label>
+                        <select id="rating" name="rating" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none">
+                            <?php for ($i = 5; $i >= 1; $i--): ?>
+                                <option value="<?= $i ?>"><?= $i ?> Star<?= $i === 1 ? '' : 's' ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-zinc-200" for="status">Status</label>
+                        <select id="status" name="status" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none">
+                            <option value="Good">Good</option>
+                            <option value="Caution">Caution</option>
+                            <option value="Banned">Banned</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-zinc-200" for="notes">Notes</label>
+                        <textarea id="notes" name="notes" rows="5" class="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white focus:border-cyan-400 focus:outline-none" placeholder="Issue history, behavior notes, payment concerns..."></textarea>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-sm text-zinc-200">
+                        <input id="has_outstanding_balance" type="checkbox" name="has_outstanding_balance" class="rounded border-zinc-600 bg-zinc-900 text-red-500 focus:ring-red-500">
+                        Has Outstanding Balance
+                    </label>
+                    <button type="submit" class="w-full rounded-lg bg-cyan-500 px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-400">Save Status</button>
+                </form>
+            </div>
+        </section>
+    </div>
+</main>
+
+<script>
+const customerSearchCsrfToken = <?= json_encode($customerSearchCsrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+const searchInput = document.getElementById('customerSearchInput');
+const suggestionsEl = document.getElementById('customerSearchSuggestions');
+const bannedOnlyFilterEl = document.getElementById('bannedOnlyFilter');
+const rows = Array.from(document.querySelectorAll('[data-customer-row]'));
+let debounceTimer = null;
+let activeIndex = -1;
+let currentResults = [];
+
+const escHtml = (str) => String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+const bindCustomer = (customer) => {
+    const customerId = String(customer.id || customer.customerId || '');
+    if (!customerId) return;
+    document.getElementById('customer_id').value = customerId;
+    document.getElementById('rating').value = String(customer.rating || 5);
+    document.getElementById('status').value = String(customer.status || 'Good');
+    document.getElementById('notes').value = String(customer.notes || '');
+    document.getElementById('has_outstanding_balance').checked = Boolean(Number(customer.outstanding ?? customer.has_outstanding_balance ?? 0));
+
+    const fullName = String(customer.name || customer.customer_name || '').trim();
+    const email = String(customer.email || '').trim();
+    document.getElementById('selectedCustomerLabel').textContent = `Editing: ${fullName || 'Customer #' + customerId}${email ? ' · ' + email : ''}`;
+};
+
+rows.forEach((row) => {
+    row.addEventListener('click', () => {
+        bindCustomer({
+            customerId: row.dataset.id,
+            name: row.dataset.name,
+            email: row.dataset.email,
+            rating: row.dataset.rating,
+            status: row.dataset.status,
+            notes: row.dataset.notes,
+            outstanding: row.dataset.outstanding
+        });
+        row.scrollIntoView({ block: 'nearest' });
+    });
+});
+
+const syncTableFilter = () => {
+    const query = searchInput.value.trim().toLowerCase();
+    const bannedOnly = bannedOnlyFilterEl.checked;
+    rows.forEach((row) => {
+        const textBlob = `${row.dataset.name || ''} ${row.dataset.email || ''} ${row.dataset.phone || ''}`.toLowerCase();
+        const status = String(row.dataset.status || '').toLowerCase();
+        const queryMatches = query === '' || textBlob.includes(query);
+        const bannedMatches = !bannedOnly || status === 'banned';
+        row.classList.toggle('hidden', !(queryMatches && bannedMatches));
+    });
+};
+
+const renderSuggestions = (results) => {
+    suggestionsEl.innerHTML = '';
+    activeIndex = -1;
+    if (!results.length) {
+        suggestionsEl.classList.add('hidden');
+        return;
+    }
+    results.forEach((customer, idx) => {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'option');
+        li.dataset.idx = String(idx);
+        const isBanned = String(customer.status || '').toLowerCase() === 'banned';
+        const statusMeta = isBanned ? '<span class="text-red-300 font-semibold">BANNED</span> &nbsp;&middot;&nbsp; ' : '';
+        li.innerHTML = `<div class="result-name">${escHtml(customer.customer_name || '')}</div>`
+            + `<div class="result-meta">${statusMeta}${customer.phone ? escHtml(customer.phone) + ' &nbsp;&middot;&nbsp; ' : ''}${escHtml(customer.email)}</div>`;
+        if (isBanned) {
+            li.classList.add('!bg-red-950/40', '!text-red-200');
+        }
+        li.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+            searchInput.value = customer.customer_name || '';
+            suggestionsEl.classList.add('hidden');
+            bindCustomer(customer);
+            syncTableFilter();
+            const row = document.querySelector(`[data-customer-row][data-id="${CSS.escape(String(customer.id || ''))}"]`);
+            if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        suggestionsEl.appendChild(li);
+    });
+    suggestionsEl.classList.remove('hidden');
+};
+
+searchInput.addEventListener('input', () => {
+    syncTableFilter();
+    clearTimeout(debounceTimer);
+    const q = searchInput.value.trim();
+    if (q.length < 2) {
+        suggestionsEl.classList.add('hidden');
+        suggestionsEl.innerHTML = '';
+        return;
+    }
+    debounceTimer = setTimeout(async () => {
+        try {
+            const response = await fetch(`customer-login-ajax.php?action=customer_search&q=${encodeURIComponent(q)}`, {
+                headers: { 'X-CSRF-Token': customerSearchCsrfToken }
+            });
+            const data = await response.json();
+            currentResults = data.results || [];
+            renderSuggestions(currentResults);
+        } catch (_) {
+            suggestionsEl.classList.add('hidden');
+        }
+    }, 180);
+});
+
+searchInput.addEventListener('keydown', (event) => {
+    const items = suggestionsEl.querySelectorAll('li');
+    if (!items.length) return;
+    if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        activeIndex = Math.min(activeIndex + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+    } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        activeIndex = Math.max(activeIndex - 1, 0);
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+    } else if (event.key === 'Enter' && activeIndex >= 0) {
+        event.preventDefault();
+        const selected = currentResults[activeIndex];
+        if (!selected) return;
+        searchInput.value = selected.customer_name || '';
+        suggestionsEl.classList.add('hidden');
+        bindCustomer(selected);
+        syncTableFilter();
+    } else if (event.key === 'Escape') {
+        suggestionsEl.classList.add('hidden');
+    }
+});
+
+document.addEventListener('click', (event) => {
+    if (!document.getElementById('live-search-wrap')?.contains(event.target)) {
+        suggestionsEl.classList.add('hidden');
+    }
+});
+
+bannedOnlyFilterEl.addEventListener('change', syncTableFilter);
+</script>
+
+<?php require_once __DIR__ . '/templates/footer.php'; ?>
