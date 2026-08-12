@@ -63,26 +63,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$customersStmt = $pdo->query("
-    SELECT
-        c.id,
-        c.first_name,
-        c.last_name,
-        c.company,
-        c.email,
-        c.phone,
-        COALESCE(cs.rating, 5) AS rating,
-        COALESCE(cs.status, 'Good') AS customer_status,
-        COALESCE(cs.notes, '') AS notes,
-        COALESCE(cs.has_outstanding_balance, 0) AS has_outstanding_balance,
-        cs.updated_at,
-        cs.updated_by
-    FROM customers c
-    LEFT JOIN customer_status cs ON cs.customer_id = c.id
-    ORDER BY FIELD(COALESCE(cs.status, 'Good'), 'VIP', 'Good', 'Caution', 'Banned'), c.last_name ASC, c.first_name ASC
-");
-$customers = $customersStmt->fetchAll(PDO::FETCH_ASSOC);
-
 $pageTitle = 'Customer Status | Ghost Laser';
 $pageDescription = 'Customer blacklist and rating management.';
 $extraHead = <<<'HTML'
@@ -161,10 +141,10 @@ require_once __DIR__ . '/templates/header.php';
                 </div>
             </label>
             <div class="flex flex-wrap items-center gap-2" id="statusFilterGroup">
-                <button data-filter="" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-cyan-500/60 bg-cyan-500/15 text-cyan-200 ring-2 ring-cyan-400/70">
+                <button data-filter="" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-cyan-500/40 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20">
                     All Customers
                 </button>
-                <button data-filter="vip" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20">
+                <button data-filter="vip" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-amber-500/60 bg-amber-500/20 text-amber-200 ring-2 ring-amber-400/70">
                     VIP
                 </button>
                 <button data-filter="good" type="button" class="status-filter-btn rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20">
@@ -194,56 +174,7 @@ require_once __DIR__ . '/templates/header.php';
                         </th>
                     </tr>
                     </thead>
-                    <tbody id="customerStatusTableBody">
-                    <?php foreach ($customers as $customer): ?>
-                        <?php
-                        $fullName = trim((string) (($customer['first_name'] ?? '') . ' ' . ($customer['last_name'] ?? '')));
-                        $displayName = $fullName !== '' ? $fullName : ('Customer #' . (int) $customer['id']);
-                        $status = (string) ($customer['customer_status'] ?? 'Good');
-                        $isBanned = strcasecmp($status, 'Banned') === 0;
-                        $isVip = strcasecmp($status, 'VIP') === 0;
-                        $rowClass = $isBanned
-                            ? 'bg-red-950/40 border-red-500/20 hover:bg-red-900/40'
-                            : ($isVip ? 'bg-purple-950/40 border-purple-500/20 hover:bg-purple-900/40' : 'hover:bg-zinc-800/50');
-                        $statusClass = $isVip
-                            ? 'border-amber-400/40 bg-gradient-to-r from-amber-500/30 to-purple-500/30 text-amber-100'
-                            : ($isBanned
-                                ? 'border-red-500/30 bg-red-500/20 text-red-200'
-                                : ($status === 'Caution' ? 'border-amber-500/30 bg-amber-500/20 text-amber-200' : 'border-emerald-500/30 bg-emerald-500/20 text-emerald-200'));
-                        ?>
-                        <tr
-                            class="border-b border-zinc-800/70 cursor-pointer transition-colors <?= h($rowClass) ?>"
-                            data-customer-row
-                            data-id="<?= (int) $customer['id'] ?>"
-                            data-name="<?= h($displayName) ?>"
-                            data-email="<?= h((string) ($customer['email'] ?? '')) ?>"
-                            data-phone="<?= h((string) ($customer['phone'] ?? '')) ?>"
-                            data-rating="<?= (int) ($customer['rating'] ?? 5) ?>"
-                            data-status="<?= h($status) ?>"
-                            data-notes="<?= h((string) ($customer['notes'] ?? '')) ?>"
-                            data-outstanding="<?= (int) ($customer['has_outstanding_balance'] ?? 0) ?>"
-                        >
-                            <td class="py-3 px-3">
-                                <div class="font-medium text-white"><?= h($displayName) ?></div>
-                                <div class="text-xs text-zinc-400"><?= h((string) ($customer['email'] ?? '')) ?><?= $customer['phone'] ? ' · ' . h((string) $customer['phone']) : '' ?></div>
-                            </td>
-                            <td class="py-3 px-3 text-zinc-100"><?= str_repeat('★', max(1, min(5, (int) ($customer['rating'] ?? 5)))) ?></td>
-                            <td class="py-3 px-3">
-                                <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold <?= h($statusClass) ?>">
-                                    <?= $isVip ? '★ ' : '' ?><?= h($status) ?>
-                                </span>
-                            </td>
-                            <td class="py-3 px-3 text-zinc-300 max-w-[260px] truncate"><?= h((string) ($customer['notes'] ?? '')) ?></td>
-                            <td class="py-3 px-3">
-                                <?php if ((int) ($customer['has_outstanding_balance'] ?? 0) === 1): ?>
-                                    <span class="inline-flex rounded-full border border-red-500/30 bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-200">Yes</span>
-                                <?php else: ?>
-                                    <span class="inline-flex rounded-full border border-zinc-600 px-2.5 py-1 text-xs font-semibold text-zinc-300">No</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
+                    <tbody id="customerStatusTableBody"></tbody>
                 </table>
             </div>
 
@@ -294,12 +225,13 @@ require_once __DIR__ . '/templates/header.php';
 const customerSearchCsrfToken = <?= json_encode($customerSearchCsrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 const searchInput = document.getElementById('customerSearchInput');
 const suggestionsEl = document.getElementById('customerSearchSuggestions');
+const tableBody = document.getElementById('customerStatusTableBody');
 const filterBtns = Array.from(document.querySelectorAll('.status-filter-btn'));
-const rows = Array.from(document.querySelectorAll('[data-customer-row]'));
+let rows = [];
 let debounceTimer = null;
 let activeIndex = -1;
 let currentResults = [];
-let activeStatusFilter = '';
+let activeStatusFilter = 'vip';
 
 const escHtml = (str) => String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -319,20 +251,125 @@ const bindCustomer = (customer) => {
     document.getElementById('selectedCustomerLabel').textContent = `Editing: ${fullName || 'Customer #' + customerId}${email ? ' · ' + email : ''}`;
 };
 
-rows.forEach((row) => {
-    row.addEventListener('click', () => {
+const getRowClasses = (status) => {
+    const normalizedStatus = String(status || 'Good').trim().toLowerCase();
+    if (normalizedStatus === 'banned') {
+        return {
+            rowClass: 'bg-red-950/40 border-red-500/20 hover:bg-red-900/40',
+            statusClass: 'border-red-500/30 bg-red-500/20 text-red-200',
+            displayStatus: 'Banned'
+        };
+    }
+    if (normalizedStatus === 'vip') {
+        return {
+            rowClass: 'bg-purple-950/40 border-purple-500/20 hover:bg-purple-900/40',
+            statusClass: 'border-amber-400/40 bg-gradient-to-r from-amber-500/30 to-purple-500/30 text-amber-100',
+            displayStatus: 'VIP'
+        };
+    }
+    if (normalizedStatus === 'caution') {
+        return {
+            rowClass: 'hover:bg-zinc-800/50',
+            statusClass: 'border-amber-500/30 bg-amber-500/20 text-amber-200',
+            displayStatus: 'Caution'
+        };
+    }
+    return {
+        rowClass: 'hover:bg-zinc-800/50',
+        statusClass: 'border-emerald-500/30 bg-emerald-500/20 text-emerald-200',
+        displayStatus: 'Good'
+    };
+};
+
+const buildTableRow = (customer) => {
+    const customerId = Number(customer.id || customer.customerId || 0);
+    const statusValue = String(customer.status || 'Good');
+    const normalizedStatus = statusValue.toLowerCase();
+    const rowMeta = getRowClasses(statusValue);
+    const fullName = String(customer.customer_name || customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`).trim();
+    const displayName = fullName || `Customer #${customerId}`;
+    const email = String(customer.email || '').trim();
+    const phone = String(customer.phone || '').trim();
+    const rating = Math.max(1, Math.min(5, Number(customer.rating || 5)));
+    const notes = String(customer.notes || '').trim();
+    const hasOutstandingBalance = Number(customer.has_outstanding_balance || customer.outstanding || 0) === 1;
+
+    const tr = document.createElement('tr');
+    tr.className = `border-b border-zinc-800/70 cursor-pointer transition-colors ${rowMeta.rowClass}`;
+    tr.dataset.customerRow = '1';
+    tr.dataset.id = String(customerId);
+    tr.dataset.name = displayName;
+    tr.dataset.email = email;
+    tr.dataset.phone = phone;
+    tr.dataset.rating = String(rating);
+    tr.dataset.status = rowMeta.displayStatus;
+    tr.dataset.notes = notes;
+    tr.dataset.outstanding = hasOutstandingBalance ? '1' : '0';
+    tr.innerHTML = `
+        <td class="py-3 px-3">
+            <div class="font-medium text-white">${escHtml(displayName)}</div>
+            <div class="text-xs text-zinc-400">${escHtml(email)}${phone ? ' · ' + escHtml(phone) : ''}</div>
+        </td>
+        <td class="py-3 px-3 text-zinc-100">${'★'.repeat(rating)}</td>
+        <td class="py-3 px-3">
+            <span class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${rowMeta.statusClass}">
+                ${normalizedStatus === 'vip' ? '★ ' : ''}${escHtml(rowMeta.displayStatus)}
+            </span>
+        </td>
+        <td class="py-3 px-3 text-zinc-300 max-w-[260px] truncate">${escHtml(notes)}</td>
+        <td class="py-3 px-3">
+            ${hasOutstandingBalance
+                ? '<span class="inline-flex rounded-full border border-red-500/30 bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-200">Yes</span>'
+                : '<span class="inline-flex rounded-full border border-zinc-600 px-2.5 py-1 text-xs font-semibold text-zinc-300">No</span>'}
+        </td>
+    `;
+    tr.addEventListener('click', () => {
         bindCustomer({
-            customerId: row.dataset.id,
-            name: row.dataset.name,
-            email: row.dataset.email,
-            rating: row.dataset.rating,
-            status: row.dataset.status,
-            notes: row.dataset.notes,
-            outstanding: row.dataset.outstanding
+            customerId: tr.dataset.id,
+            name: tr.dataset.name,
+            email: tr.dataset.email,
+            rating: tr.dataset.rating,
+            status: tr.dataset.status,
+            notes: tr.dataset.notes,
+            outstanding: tr.dataset.outstanding
         });
-        row.scrollIntoView({ block: 'nearest' });
+        tr.scrollIntoView({ block: 'nearest' });
     });
-});
+    return tr;
+};
+
+const renderTableRows = (customers) => {
+    tableBody.innerHTML = '';
+    const rowsToRender = Array.isArray(customers) ? customers : [];
+    if (!rowsToRender.length) {
+        tableBody.innerHTML = '<tr><td colspan="5" class="px-3 py-6 text-center text-sm text-zinc-500">No customers found.</td></tr>';
+        rows = [];
+        return;
+    }
+    const fragment = document.createDocumentFragment();
+    rowsToRender.forEach((customer) => fragment.appendChild(buildTableRow(customer)));
+    tableBody.appendChild(fragment);
+    rows = Array.from(document.querySelectorAll('[data-customer-row]'));
+    syncTableFilter();
+};
+
+const fetchCustomersByStatus = async (statusFilter) => {
+    const response = await fetch(`customer-login-ajax.php?action=customer_status_list&status=${encodeURIComponent(statusFilter)}`, {
+        headers: { 'X-CSRF-Token': customerSearchCsrfToken }
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Customer list failed.');
+    return Array.isArray(data.results) ? data.results : [];
+};
+
+const fetchCustomersBySearch = async (query) => {
+    const response = await fetch(`customer-login-ajax.php?action=customer_search&q=${encodeURIComponent(query)}`, {
+        headers: { 'X-CSRF-Token': customerSearchCsrfToken }
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Customer search failed.');
+    return Array.isArray(data.results) ? data.results : [];
+};
 
 const syncTableFilter = () => {
     const query = searchInput.value.trim().toLowerCase();
@@ -389,18 +426,21 @@ searchInput.addEventListener('input', () => {
     if (q.length < 2) {
         suggestionsEl.classList.add('hidden');
         suggestionsEl.innerHTML = '';
+        currentResults = [];
+        if (q.length === 0) {
+            loadStatusCustomers();
+        }
         return;
     }
     debounceTimer = setTimeout(async () => {
         try {
-            const response = await fetch(`customer-login-ajax.php?action=customer_search&q=${encodeURIComponent(q)}`, {
-                headers: { 'X-CSRF-Token': customerSearchCsrfToken }
-            });
-            const data = await response.json();
-            currentResults = data.results || [];
+            currentResults = await fetchCustomersBySearch(q);
+            renderTableRows(currentResults);
             renderSuggestions(currentResults);
         } catch (_) {
             suggestionsEl.classList.add('hidden');
+            suggestionsEl.innerHTML = '';
+            renderTableRows([]);
         }
     }, 180);
 });
@@ -443,7 +483,16 @@ const activeClasses = {
     'banned': ['border-red-500/60',    'bg-red-500/20',     'text-red-200',    'ring-2', 'ring-red-400/70'],
 };
 
-const setStatusFilter = (statusFilter) => {
+const loadStatusCustomers = async () => {
+    try {
+        const customers = await fetchCustomersByStatus(activeStatusFilter);
+        renderTableRows(customers);
+    } catch (_) {
+        renderTableRows([]);
+    }
+};
+
+const setStatusFilter = async (statusFilter) => {
     activeStatusFilter = statusFilter;
     filterBtns.forEach((btn) => {
         const filter = btn.dataset.filter;
@@ -454,12 +503,24 @@ const setStatusFilter = (statusFilter) => {
             btn.classList.remove(...classes);
         }
     });
-    syncTableFilter();
+    if (searchInput.value.trim().length < 2) {
+        await loadStatusCustomers();
+    } else {
+        syncTableFilter();
+    }
 };
 
 filterBtns.forEach((btn) => {
-    btn.addEventListener('click', () => setStatusFilter(btn.dataset.filter));
+    btn.addEventListener('click', async () => {
+        searchInput.value = '';
+        currentResults = [];
+        suggestionsEl.classList.add('hidden');
+        suggestionsEl.innerHTML = '';
+        await setStatusFilter(btn.dataset.filter);
+    });
 });
+
+setStatusFilter('vip');
 </script>
 
 <?php require_once __DIR__ . '/templates/footer.php'; ?>

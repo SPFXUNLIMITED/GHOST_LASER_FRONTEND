@@ -50,7 +50,38 @@ function ensureCustomerStatusTable(PDO $pdo): void
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && (string) ($_GET['action'] ?? '') === 'customer_search') {
+function mapCustomerStatusResults(array $rows): array
+{
+    $results = [];
+    foreach ($rows as $row) {
+        $customerName = trim((string) (($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')));
+        $results[] = [
+            'id'            => (int) ($row['id'] ?? 0),
+            'customer_name' => $customerName,
+            'first_name'    => (string) ($row['first_name'] ?? ''),
+            'last_name'     => (string) ($row['last_name'] ?? ''),
+            'company_name'  => (string) ($row['company'] ?? ''),
+            'phone'         => (string) ($row['phone'] ?? ''),
+            'email'         => (string) ($row['email'] ?? ''),
+            'address'       => (string) ($row['address'] ?? ''),
+            'city'          => (string) ($row['city'] ?? ''),
+            'state'         => strtoupper((string) ($row['state'] ?? '')),
+            'zip'           => (string) ($row['zip'] ?? ''),
+            'machine_brand' => (string) ($row['machine_brand'] ?? ''),
+            'machine_model' => (string) ($row['machine_model'] ?? ''),
+            'machine_watts' => (string) ($row['machine_watts'] ?? ''),
+            'machine_age'   => (string) ($row['machine_age'] ?? ''),
+            'rating'        => (int) ($row['customer_rating'] ?? 5),
+            'status'        => (string) ($row['customer_status'] ?? 'Good'),
+            'notes'         => (string) ($row['customer_status_notes'] ?? ''),
+            'has_outstanding_balance' => (int) ($row['customer_has_outstanding_balance'] ?? 0) === 1,
+        ];
+    }
+
+    return $results;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && in_array((string) ($_GET['action'] ?? ''), ['customer_search', 'customer_status_list'], true)) {
     if (empty($_SESSION['admin_id'])) {
         http_response_code(403);
         echo json_encode(['results' => [], 'error' => 'Admin authentication required.']);
@@ -66,6 +97,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (string) ($_GET['action'] ?? '') ===
     if ($csrfHeader === '' || $allowedTokens === [] || !in_array($csrfHeader, $allowedTokens, true)) {
         http_response_code(403);
         echo json_encode(['results' => [], 'error' => 'Invalid CSRF token.']);
+        exit;
+    }
+
+    $action = (string) ($_GET['action'] ?? '');
+
+    if ($action === 'customer_status_list') {
+        $statusFilter = strtolower(trim((string) ($_GET['status'] ?? '')));
+        $statusMap = [
+            'vip' => 'VIP',
+            'good' => 'Good',
+            'caution' => 'Caution',
+            'banned' => 'Banned',
+        ];
+
+        if ($statusFilter !== '' && !isset($statusMap[$statusFilter])) {
+            http_response_code(400);
+            echo json_encode(['results' => [], 'error' => 'Invalid status filter.']);
+            exit;
+        }
+
+        try {
+            ensureCustomerStatusTable($pdo);
+            $sql = '
+                SELECT
+                    c.id,
+                    c.first_name,
+                    c.last_name,
+                    c.company,
+                    c.email,
+                    c.phone,
+                    c.address,
+                    c.city,
+                    c.state,
+                    c.zip,
+                    COALESCE(cs.rating, 5) AS customer_rating,
+                    COALESCE(cs.status, \'Good\') AS customer_status,
+                    COALESCE(cs.notes, \'\') AS customer_status_notes,
+                    COALESCE(cs.has_outstanding_balance, 0) AS customer_has_outstanding_balance
+                FROM customers c
+                LEFT JOIN customer_status cs ON cs.customer_id = c.id
+            ';
+            $params = [];
+            if ($statusFilter !== '') {
+                $sql .= ' WHERE COALESCE(cs.status, \'Good\') = :status';
+                $params[':status'] = $statusMap[$statusFilter];
+            }
+            $sql .= ' ORDER BY FIELD(COALESCE(cs.status, \'Good\'), \'VIP\', \'Good\', \'Caution\', \'Banned\'), c.last_name, c.first_name';
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['results' => [], 'error' => 'Customer list failed.']);
+            exit;
+        }
+
+        echo json_encode(['results' => mapCustomerStatusResults($rows)]);
         exit;
     }
 
@@ -109,33 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (string) ($_GET['action'] ?? '') ===
         exit;
     }
 
-    $results = [];
-    foreach ($rows as $row) {
-        $customerName = trim((string) (($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')));
-        $results[] = [
-            'id'            => (int) ($row['id'] ?? 0),
-            'customer_name' => $customerName,
-            'first_name'    => (string) ($row['first_name'] ?? ''),
-            'last_name'     => (string) ($row['last_name'] ?? ''),
-            'company_name'  => (string) ($row['company'] ?? ''),
-            'phone'         => (string) ($row['phone'] ?? ''),
-            'email'         => (string) ($row['email'] ?? ''),
-            'address'       => (string) ($row['address'] ?? ''),
-            'city'          => (string) ($row['city'] ?? ''),
-            'state'         => strtoupper((string) ($row['state'] ?? '')),
-            'zip'           => (string) ($row['zip'] ?? ''),
-            'machine_brand' => (string) ($row['machine_brand'] ?? ''),
-            'machine_model' => (string) ($row['machine_model'] ?? ''),
-            'machine_watts' => (string) ($row['machine_watts'] ?? ''),
-            'machine_age'   => (string) ($row['machine_age'] ?? ''),
-            'rating'        => (int) ($row['customer_rating'] ?? 5),
-            'status'        => (string) ($row['customer_status'] ?? 'Good'),
-            'notes'         => (string) ($row['customer_status_notes'] ?? ''),
-            'has_outstanding_balance' => (int) ($row['customer_has_outstanding_balance'] ?? 0) === 1,
-        ];
-    }
-
-    echo json_encode(['results' => $results]);
+    echo json_encode(['results' => mapCustomerStatusResults($rows)]);
     exit;
 }
 
