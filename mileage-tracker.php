@@ -8,6 +8,9 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/mileage_schema.php';
+
+ensureMileageVehicleSchema($pdo);
 
 // ── Helpers (defined early so CSV export can use them) ────────────────────────
 function fmtDateTime(?string $dt): string
@@ -50,6 +53,26 @@ function fmtMiles($mileage): string
 {
     if ($mileage === null || $mileage === '') return '—';
     return number_format((float) $mileage, 2) . ' mi';
+}
+
+function fmtVehicle(array $row): string
+{
+    $name = trim((string) ($row['vehicle_name'] ?? ''));
+    $ym   = trim((string) trim(($row['vehicle_year'] ?? '') . ' ' . ($row['vehicle_make'] ?? '') . ' ' . ($row['vehicle_model'] ?? '')));
+    $plate = trim((string) ($row['vehicle_license_plate'] ?? ''));
+
+    $parts = [];
+    if ($name !== '') {
+        $parts[] = $name;
+    }
+    if ($ym !== '') {
+        $parts[] = $ym;
+    }
+    if ($plate !== '') {
+        $parts[] = 'Plate: ' . $plate;
+    }
+
+    return $parts !== [] ? implode(' • ', $parts) : '—';
 }
 
 /**
@@ -131,44 +154,17 @@ if ($filterStatus === 'complete') {
 }
 
 $whereClause = implode(' AND ', $where);
+$vehicles = [];
 
-// Ensure table exists before querying
+// Ensure dependent schema exists before querying
 try {
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS mileage_logs (
-            id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            service_request_id INT UNSIGNED NOT NULL,
-            client_name        VARCHAR(255)  NOT NULL DEFAULT '',
-            address            VARCHAR(500)  NOT NULL DEFAULT '',
-            trip_date          DATE          NULL,
-            start_time         DATETIME      NULL COMMENT 'LA timezone',
-            end_time           DATETIME      NULL COMMENT 'LA timezone',
-            start_lat          DECIMAL(10,7) NULL,
-            start_lng          DECIMAL(10,7) NULL,
-            end_lat            DECIMAL(10,7) NULL,
-            end_lng            DECIMAL(10,7) NULL,
-            start_mileage      INT UNSIGNED  NULL COMMENT 'Odometer at departure',
-            end_mileage        INT UNSIGNED  NULL COMMENT 'Odometer at arrival',
-            total_miles        DECIMAL(8,2)  NULL,
-            notes              VARCHAR(1000) NULL COMMENT 'Admin override for business purpose',
-            status             ENUM('pending','complete') NOT NULL DEFAULT 'pending',
-            created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_service_request (service_request_id),
-            INDEX idx_trip_date (trip_date)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    ");
+    ensureMileageVehicleSchema($pdo);
 
-    // Migrate: add notes column for admin-editable business purpose override
-    $notesColCheck = $pdo->query(
-        "SELECT COUNT(*) FROM information_schema.COLUMNS
-         WHERE TABLE_SCHEMA = DATABASE()
-           AND TABLE_NAME   = 'mileage_logs'
-           AND COLUMN_NAME  = 'notes'"
-    );
-    if ((int) $notesColCheck->fetchColumn() === 0) {
-        $pdo->exec("ALTER TABLE mileage_logs ADD COLUMN notes VARCHAR(1000) NULL COMMENT 'Admin override for business purpose' AFTER total_miles");
-    }
+    $vehicles = $pdo->query("
+        SELECT id, name, year, make, model, license_plate, is_active
+        FROM vehicles
+        ORDER BY is_active DESC, name ASC, id ASC
+    ")->fetchAll(PDO::FETCH_ASSOC);
 
     // Ensure the services JSON column exists on service_requests so that
     // purpose data can be stored and displayed for IRS documentation.
@@ -189,11 +185,17 @@ try {
 
     $stmt = $pdo->prepare(
         "SELECT ml.*,
-                sr.laser_brand,
-                sr.laser_model,
-                sr.problem_summary,
-                sr.services
+               v.name AS vehicle_name,
+               v.year AS vehicle_year,
+               v.make AS vehicle_make,
+               v.model AS vehicle_model,
+               v.license_plate AS vehicle_license_plate,
+               sr.laser_brand,
+               sr.laser_model,
+               sr.problem_summary,
+               sr.services
          FROM mileage_logs ml
+         LEFT JOIN vehicles v ON v.id = ml.vehicle_id
          LEFT JOIN service_requests sr ON sr.id = ml.service_request_id
          WHERE {$whereClause}
          ORDER BY ml.trip_date DESC, ml.start_time DESC"
@@ -258,6 +260,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     fputcsv($out, [
         'Date',
         'Client Name',
+        'Vehicle',
         'Address',
         'Purpose',
         'Start Time (LA)',
@@ -273,6 +276,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         fputcsv($out, [
             fmtDate($row['trip_date']),
             $row['client_name'],
+            fmtVehicle($row),
             $row['address'],
             $row['purpose'] ?? buildPurpose($row),
             fmtDateTime($row['start_time']),
@@ -782,6 +786,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     <tr>
                         <th>Date</th>
                         <th>Client Name</th>
+                        <th>Vehicle</th>
                         <th>Address</th>
                         <th>Purpose</th>
                         <th>Time</th>
@@ -800,6 +805,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                             </td>
                             <td class="text-zinc-200">
                                 <?= htmlspecialchars($row['client_name'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
+                            </td>
+                            <td class="max-w-xs text-zinc-300" style="min-width:200px;">
+                                <?= htmlspecialchars(fmtVehicle($row), ENT_QUOTES, 'UTF-8') ?>
                             </td>
                             <td class="max-w-xs text-zinc-300" style="min-width:160px;">
                                 <?= htmlspecialchars($row['address'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
@@ -901,6 +909,29 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                             <select id="edit-status" class="edit-form-input" name="status">
                                 <option value="pending">Pending</option>
                                 <option value="complete">Complete</option>
+                            </select>
+                        </div>
+                        <div class="edit-form-group">
+                            <label class="edit-form-label" for="edit-vehicle-id">Vehicle</label>
+                            <select id="edit-vehicle-id" class="edit-form-input" name="vehicle_id">
+                                <option value="">Unassigned</option>
+                                <?php foreach ($vehicles as $vehicle): ?>
+                                    <?php
+                                    $vehicleLabel = trim((string) $vehicle['name']);
+                                    $vehicleYmm = trim((string) trim(($vehicle['year'] ?? '') . ' ' . ($vehicle['make'] ?? '') . ' ' . ($vehicle['model'] ?? '')));
+                                    $vehiclePlate = trim((string) ($vehicle['license_plate'] ?? ''));
+                                    if ($vehicleYmm !== '') {
+                                        $vehicleLabel .= ($vehicleLabel !== '' ? ' — ' : '') . $vehicleYmm;
+                                    }
+                                    if ($vehiclePlate !== '') {
+                                        $vehicleLabel .= ($vehicleLabel !== '' ? ' — ' : '') . $vehiclePlate;
+                                    }
+                                    if ((int) $vehicle['is_active'] !== 1) {
+                                        $vehicleLabel .= ' (Inactive)';
+                                    }
+                                    ?>
+                                    <option value="<?= (int) $vehicle['id'] ?>"><?= htmlspecialchars($vehicleLabel !== '' ? $vehicleLabel : ('Vehicle #' . (int) $vehicle['id']), ENT_QUOTES, 'UTF-8') ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="edit-form-group">
@@ -1076,6 +1107,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 document.getElementById('edit-address').value      = record.address ?? '';
                 document.getElementById('edit-notes').value        = record.notes ?? '';
                 document.getElementById('edit-status').value       = record.status ?? 'pending';
+                document.getElementById('edit-vehicle-id').value   = record.vehicle_id ?? '';
 
                 editModalSubtitle.textContent = `Record #${record.id ?? '—'} • Job #${record.service_request_id ?? '—'}`;
                 editError.style.display = 'none';
@@ -1111,6 +1143,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 const val = (id) => document.getElementById(id).value.trim();
                 const toApiDatetime = (v) => v ? v.replace('T', ' ') + ':00' : null;
                 const toInt = (v) => v !== '' ? parseInt(v, 10) : null;
+                const toNullableInt = (v) => v !== '' ? parseInt(v, 10) : null;
 
                 const payload = {
                     action:         'update',
@@ -1123,6 +1156,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     client_name:    val('edit-client-name'),
                     address:        val('edit-address'),
                     notes:          val('edit-notes'),
+                    vehicle_id:     toNullableInt(val('edit-vehicle-id')),
                     status:         val('edit-status'),
                 };
 
