@@ -9,6 +9,7 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/travel-helper.php';
+require_once __DIR__ . '/functions.php';
 
 // Load Google Maps API key for client-side geocoding proxy
 function loadGoogleMapsApiKey(): string {
@@ -271,6 +272,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
     if (!$errors && $normalizedPhone === null) {
         $phoneError = 'Please enter a valid 10-digit US phone number.';
         $errors[] = $phoneError;
+    }
+    if (!$errors) {
+        $selectedCustomerId = (int) ($_POST['customer_id'] ?? 0);
+        if ($selectedCustomerId > 0 && is_customer_banned($pdo, $selectedCustomerId)) {
+            $errors[] = 'This customer is banned and cannot be booked.';
+        }
     }
 
     if (!$errors) {
@@ -847,6 +854,11 @@ require_once __DIR__ . '/templates/header.php';
         };
 
         const fillCustomer = (customer) => {
+            if (String(customer.status || '').toLowerCase() === 'banned') {
+                selectedLabel.textContent = 'This customer is banned and cannot be selected.';
+                selectedBanner.classList.remove('hidden');
+                return;
+            }
             const fullName = (customer.customer_name || `${customer.first_name || ''} ${customer.last_name || ''}`).trim();
             let firstName = customer.first_name || '';
             let lastName = customer.last_name || '';
@@ -894,10 +906,16 @@ require_once __DIR__ . '/templates/header.php';
                 li.setAttribute('role', 'option');
                 li.dataset.idx = idx;
                 const companyMeta = customer.company_name ? `${escHtml(customer.company_name)} &nbsp;&middot;&nbsp; ` : '';
+                const isBanned = String(customer.status || '').toLowerCase() === 'banned';
+                const statusMeta = isBanned ? '<span class="text-red-300 font-semibold">BANNED</span> &nbsp;&middot;&nbsp; ' : '';
                 li.innerHTML = `<div class="result-name">${escHtml(customer.customer_name || ((customer.first_name || '') + ' ' + (customer.last_name || '')))}</div>`
-                    + `<div class="result-meta">${companyMeta}${customer.phone ? escHtml(customer.phone) + ' &nbsp;&middot;&nbsp; ' : ''}${escHtml(customer.email)}</div>`;
+                    + `<div class="result-meta">${statusMeta}${companyMeta}${customer.phone ? escHtml(customer.phone) + ' &nbsp;&middot;&nbsp; ' : ''}${escHtml(customer.email)}</div>`;
+                if (isBanned) {
+                    li.classList.add('!bg-red-950/40', '!text-red-200');
+                }
                 li.addEventListener('mousedown', (e) => {
                     e.preventDefault();
+                    if (isBanned) return;
                     fillCustomer(customer);
                 });
                 resultsList.appendChild(li);
@@ -919,7 +937,7 @@ require_once __DIR__ . '/templates/header.php';
             }
             debounceTimer = setTimeout(async () => {
                 try {
-                    const res = await fetch(`book_internal.php?customer_search=1&q=${encodeURIComponent(q)}`, {
+                    const res = await fetch(`customer-login-ajax.php?action=customer_search&q=${encodeURIComponent(q)}`, {
                         headers: {
                             'X-CSRF-Token': customerSearchCsrfToken
                         }

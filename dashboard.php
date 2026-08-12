@@ -200,6 +200,12 @@ require_once __DIR__ . '/templates/header.php';
                         >
                             Maintenance Schedule
                         </a>
+                        <a
+                            href="customer-status.php"
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-fuchsia-700/60 bg-fuchsia-950/30 hover:border-fuchsia-500/60 hover:bg-fuchsia-950/50 text-fuchsia-300 font-medium text-sm px-4 py-2.5 transition-all"
+                        >
+                            Customer Status
+                        </a>
 
                         <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 pt-3">Tracking &amp; Compliance</p>
                         <a

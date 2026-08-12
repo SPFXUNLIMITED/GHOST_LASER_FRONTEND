@@ -30,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // ── Load DB ───────────────────────────────────────────────────────────────────
 require __DIR__ . '/../project/db.php';
+require_once __DIR__ . '/../functions.php';
 try {
     $pdo->exec("ALTER TABLE service_requests MODIFY COLUMN request_status ENUM('abandoned','new','queued','completed','cancelled','deleted') NOT NULL DEFAULT 'new'");
 } catch (\Throwable $ex) {
@@ -623,6 +624,14 @@ try {
             $zip,
             $country
         );
+        if (is_customer_banned($pdo, $customer_id)) {
+            http_response_code(403);
+            echo json_encode([
+                'success' => false,
+                'errors' => ['This customer account is banned and cannot be booked.'],
+            ]);
+            exit;
+        }
         $task_contact_value = null;
     }
 
