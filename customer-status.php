@@ -112,6 +112,16 @@ $extraHead = <<<'HTML'
     #customerSearchSuggestions li:hover, #customerSearchSuggestions li.active { background: rgba(6,182,212,0.12); color: #22d3ee; }
     #customerSearchSuggestions li .result-name { font-weight: 600; color: #f4f4f5; }
     #customerSearchSuggestions li .result-meta { color: #71717a; margin-top: 1px; }
+    .customer-status-notes-column {
+        width: 25%;
+        max-width: 300px;
+    }
+    .customer-status-notes-cell {
+        max-width: 300px;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
 </style>
 HTML;
 $headerRight = <<<'HTML'
@@ -187,7 +197,7 @@ require_once __DIR__ . '/templates/header.php';
                         <th class="py-3 px-3">Customer</th>
                         <th class="py-3 px-3">Rating</th>
                         <th class="py-3 px-3">Status</th>
-                        <th class="py-3 px-3">Notes</th>
+                        <th class="py-3 px-3 customer-status-notes-column">Notes</th>
                         <th class="py-3 px-3">
                             Outstanding Balance
                             <span title="Flags customers who have unpaid invoices" class="ml-1 cursor-help text-zinc-500 hover:text-zinc-300">&#9432;</span>
@@ -233,7 +243,9 @@ require_once __DIR__ . '/templates/header.php';
                                     <?= $isVip ? '★ ' : '' ?><?= h($status) ?>
                                 </span>
                             </td>
-                            <td class="py-3 px-3 text-zinc-300 max-w-[260px] truncate"><?= h((string) ($customer['notes'] ?? '')) ?></td>
+                            <td class="py-3 px-3 text-zinc-300 align-top customer-status-notes-column">
+                                <div class="customer-status-notes-cell"><?= h((string) ($customer['notes'] ?? '')) ?></div>
+                            </td>
                             <td class="py-3 px-3">
                                 <?php if ((int) ($customer['has_outstanding_balance'] ?? 0) === 1): ?>
                                     <span class="inline-flex rounded-full border border-red-500/30 bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-200">Yes</span>
