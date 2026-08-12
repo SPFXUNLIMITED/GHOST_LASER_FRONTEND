@@ -103,13 +103,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
         $stmtLogin->execute([$loginEmail]);
         $customerLogin = $stmtLogin->fetch(PDO::FETCH_ASSOC);
         if ($customerLogin && !empty($customerLogin['password_hash']) && password_verify($loginPassword, $customerLogin['password_hash'])) {
-            if (is_customer_banned($pdo, (int) ($customerLogin['id'] ?? 0))) {
-                if ($loginContext === 'step1_existing_account') {
-                    $inlineLoginError = 'This customer account is banned and cannot be booked.';
-                } else {
-                    $loginError = 'This customer account is banned and cannot be booked.';
-                }
-            } else {
             session_regenerate_id(true);
             $customerPhoneDigits = normalizeUsPhone($customerLogin['phone'] ?? '');
             $customerProfile = [
@@ -158,7 +151,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
                 header('Location: book_a_technician.php?step=2');
             }
             exit;
-            }
         } else {
             if ($loginContext === 'step1_existing_account') {
                 $inlineLoginError = 'Invalid email or password. Please try again.';
@@ -467,9 +459,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         $smsConsentError = 'Please check this box to continue — SMS consent is required.';
         $errors[] = $smsConsentError;
     }
-    if (!$errors && !empty($_SESSION['customer_id']) && is_customer_banned($pdo, (int) $_SESSION['customer_id'])) {
-        $errors[] = 'This customer account is banned and cannot be booked.';
-    }
 
     $password        = $_POST['password'] ?? '';
     $passwordConfirm = $_POST['confirm_password'] ?? '';
@@ -487,9 +476,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
 
         if ($existingCustomer && !empty($existingCustomer['password_hash'])) {
             if (password_verify($password, (string) $existingCustomer['password_hash'])) {
-                if (is_customer_banned($pdo, (int) ($existingCustomer['id'] ?? 0))) {
-                    $errors[] = 'This customer account is banned and cannot be booked.';
-                } else {
                 // Correct password — silently log the customer in and proceed to speed selection.
                 session_regenerate_id(true);
                 $_SESSION['customer_id']         = (int) $existingCustomer['id'];
@@ -540,7 +526,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
                 unset($_SESSION[$pendingStepOneSessionKey]);
                 header('Location: book_a_technician.php?step=3');
                 exit;
-                }
                 }
             } else {
                 // Wrong password — show the inline login prompt.
