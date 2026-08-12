@@ -3,6 +3,7 @@ session_start();
 
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/travel-helper.php';
+require_once __DIR__ . '/functions.php';
 
 // Ensure password_hash column exists
 try {
@@ -45,41 +46,6 @@ function loadGoogleMapsApiKey(): string {
     }
     $key = '';
     return $key;
-}
-
-function ensureCustomerStatusTable(PDO $pdo): void {
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS customer_status (
-            customer_id INT UNSIGNED NOT NULL,
-            rating TINYINT UNSIGNED NOT NULL DEFAULT 5,
-            status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good',
-            notes TEXT NULL,
-            has_outstanding_balance TINYINT(1) NOT NULL DEFAULT 0,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            updated_by VARCHAR(255) NULL,
-            PRIMARY KEY (customer_id),
-            CONSTRAINT fk_customer_status_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    ");
-    try {
-        $pdo->exec("ALTER TABLE customer_status MODIFY COLUMN status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good'");
-    } catch (Throwable $e) {
-        // Ignore compatibility errors.
-    }
-}
-
-function isCustomerBanned(PDO $pdo, int $customerId): bool {
-    if ($customerId <= 0) {
-        return false;
-    }
-    try {
-        ensureCustomerStatusTable($pdo);
-        $stmt = $pdo->prepare("SELECT status FROM customer_status WHERE customer_id = ? LIMIT 1");
-        $stmt->execute([$customerId]);
-        return strcasecmp((string) $stmt->fetchColumn(), 'Banned') === 0;
-    } catch (Throwable $e) {
-        return false;
-    }
 }
 
 // Handle "I have an account" login POST
@@ -137,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_step'] ?? '') === 'lo
         $stmtLogin->execute([$loginEmail]);
         $customerLogin = $stmtLogin->fetch(PDO::FETCH_ASSOC);
         if ($customerLogin && !empty($customerLogin['password_hash']) && password_verify($loginPassword, $customerLogin['password_hash'])) {
-            if (isCustomerBanned($pdo, (int) ($customerLogin['id'] ?? 0))) {
+            if (is_customer_banned($pdo, (int) ($customerLogin['id'] ?? 0))) {
                 if ($loginContext === 'step1_existing_account') {
                     $inlineLoginError = 'This customer account is banned and cannot be booked.';
                 } else {
@@ -501,7 +467,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
         $smsConsentError = 'Please check this box to continue — SMS consent is required.';
         $errors[] = $smsConsentError;
     }
-    if (!$errors && !empty($_SESSION['customer_id']) && isCustomerBanned($pdo, (int) $_SESSION['customer_id'])) {
+    if (!$errors && !empty($_SESSION['customer_id']) && is_customer_banned($pdo, (int) $_SESSION['customer_id'])) {
         $errors[] = 'This customer account is banned and cannot be booked.';
     }
 
@@ -521,7 +487,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
 
         if ($existingCustomer && !empty($existingCustomer['password_hash'])) {
             if (password_verify($password, (string) $existingCustomer['password_hash'])) {
-                if (isCustomerBanned($pdo, (int) ($existingCustomer['id'] ?? 0))) {
+                if (is_customer_banned($pdo, (int) ($existingCustomer['id'] ?? 0))) {
                     $errors[] = 'This customer account is banned and cannot be booked.';
                 } else {
                 // Correct password — silently log the customer in and proceed to speed selection.

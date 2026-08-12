@@ -9,6 +9,7 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/travel-helper.php';
+require_once __DIR__ . '/functions.php';
 
 // Load Google Maps API key for client-side geocoding proxy
 function loadGoogleMapsApiKey(): string {
@@ -177,41 +178,6 @@ function getCustomerSearchSelectColumns(PDO $pdo): array {
             return $baseColumns;
         }
 
-        function ensureCustomerStatusTable(PDO $pdo): void {
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS customer_status (
-                    customer_id INT UNSIGNED NOT NULL,
-                    rating TINYINT UNSIGNED NOT NULL DEFAULT 5,
-                    status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good',
-                    notes TEXT NULL,
-                    has_outstanding_balance TINYINT(1) NOT NULL DEFAULT 0,
-                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    updated_by VARCHAR(255) NULL,
-                    PRIMARY KEY (customer_id),
-                    CONSTRAINT fk_customer_status_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            ");
-            try {
-                $pdo->exec("ALTER TABLE customer_status MODIFY COLUMN status ENUM('VIP','Good','Caution','Banned') NOT NULL DEFAULT 'Good'");
-            } catch (Throwable $e) {
-                // Ignore compatibility errors.
-            }
-        }
-
-        function isCustomerBanned(PDO $pdo, int $customerId): bool {
-            if ($customerId <= 0) {
-                return false;
-            }
-            try {
-                ensureCustomerStatusTable($pdo);
-                $stmt = $pdo->prepare("SELECT status FROM customer_status WHERE customer_id = ? LIMIT 1");
-                $stmt->execute([$customerId]);
-                return strcasecmp((string) $stmt->fetchColumn(), 'Banned') === 0;
-            } catch (Throwable $e) {
-                return false;
-            }
-        }
-
         $availableLookup = array_fill_keys($availableColumns, true);
         foreach ($optionalColumns as $column) {
             if (isset($availableLookup[$column])) {
@@ -309,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['form_step'] ?? '') === '1
     }
     if (!$errors) {
         $selectedCustomerId = (int) ($_POST['customer_id'] ?? 0);
-        if ($selectedCustomerId > 0 && isCustomerBanned($pdo, $selectedCustomerId)) {
+        if ($selectedCustomerId > 0 && is_customer_banned($pdo, $selectedCustomerId)) {
             $errors[] = 'This customer is banned and cannot be booked.';
         }
     }

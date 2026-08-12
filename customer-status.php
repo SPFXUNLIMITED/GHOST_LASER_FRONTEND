@@ -203,7 +203,10 @@ require_once __DIR__ . '/templates/header.php';
                         <th class="py-3 px-3">Rating</th>
                         <th class="py-3 px-3">Status</th>
                         <th class="py-3 px-3">Notes</th>
-                        <th class="py-3 px-3">Outstanding Balance</th>
+                        <th class="py-3 px-3">
+                            Outstanding Balance
+                            <span title="Flags customers who have unpaid invoices" class="ml-1 cursor-help text-zinc-500 hover:text-zinc-300">&#9432;</span>
+                        </th>
                     </tr>
                     </thead>
                     <tbody id="customerStatusTableBody">
