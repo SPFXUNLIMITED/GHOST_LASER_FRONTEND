@@ -37,7 +37,7 @@ if ($rawText === '') {
     exit;
 }
 
-require_once dirname(__DIR__) . '/project/prospect_tools.php';
+require_once dirname(__DIR__) . '/prospect/prospect_tools.php';
 
 $parsed = prospectParseRawText($rawText);
 

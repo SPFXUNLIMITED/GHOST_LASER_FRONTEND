@@ -8,7 +8,7 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/prospects_schema.php';
-require_once __DIR__ . '/project/prospect_tools.php';
+require_once __DIR__ . '/prospect/prospect_tools.php';
 
 prospectsEnsureSchema($pdo);
 
