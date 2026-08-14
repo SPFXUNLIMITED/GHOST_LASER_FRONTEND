@@ -257,7 +257,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     try {
-        if ($action === 'add_category_keyword') {
+        if ($action === 'add_category') {
+            $categoryName = prospectSanitizeField((string) ($_POST['category_name'] ?? ''));
+            $requestedSlug = prospectCategorySlugify((string) ($_POST['category_slug'] ?? ''));
+            $categorySlug = $requestedSlug !== '' ? $requestedSlug : prospectCategorySlugify($categoryName);
+            if ($categoryName === '') {
+                throw new RuntimeException('Category name is required.');
+            }
+            if ($categorySlug === '') {
+                throw new RuntimeException('Category slug is invalid.');
+            }
+
+            $stmt = $pdo->prepare("
+                INSERT INTO prospect_categories (name, slug)
+                VALUES (:name, :slug)
+            ");
+
+            try {
+                $stmt->execute([
+                    ':name' => $categoryName,
+                    ':slug' => $categorySlug,
+                ]);
+            } catch (PDOException $e) {
+                if ((string) $e->getCode() === '23000') {
+                    throw new RuntimeException('Category already exists. Try a different name.');
+                }
+                throw $e;
+            }
+
+            $_SESSION['prospects_flash_success'] = 'Category created.';
+            $redirectQs = http_build_query(array_filter([
+                'category' => $categorySlug,
+                'status' => $queryStatus,
+                'q' => $querySearch,
+            ], static fn($value) => $value !== ''));
+        } elseif ($action === 'add_category_keyword') {
             if ($activeCategory === null) {
                 throw new RuntimeException('Select a category before managing keywords.');
             }
@@ -751,25 +785,37 @@ require_once __DIR__ . '/templates/header.php';
         </section>
 
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="prospects.php" class="rounded-full border px-3 py-1 text-xs font-semibold <?= !$isCategoryFocused ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">All Prospects</a>
-                <?php foreach ($categoryRows as $category): ?>
-                    <?php
-                        $categoryId = (int) ($category['id'] ?? 0);
-                        $categoryName = trim((string) ($category['name'] ?? ''));
-                        $categorySlug = prospectCategorySlugify((string) ($category['slug'] ?? ''));
-                        if ($categorySlug === '') {
-                            $categorySlug = prospectCategorySlugify($categoryName);
-                        }
-                        if ($categoryId <= 0 || $categoryName === '' || $categorySlug === '') {
-                            continue;
-                        }
-                        $isActiveCategoryLink = $isCategoryFocused && (int) $activeCategory['id'] === $categoryId;
-                    ?>
-                    <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="rounded-full border px-3 py-1 text-xs font-semibold <?= $isActiveCategoryLink ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">
-                        <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>
-                    </a>
-                <?php endforeach; ?>
+            <div class="space-y-4">
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="prospects.php" class="rounded-full border px-3 py-1 text-xs font-semibold <?= !$isCategoryFocused ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">All Prospects</a>
+                    <?php foreach ($categoryRows as $category): ?>
+                        <?php
+                            $categoryId = (int) ($category['id'] ?? 0);
+                            $categoryName = trim((string) ($category['name'] ?? ''));
+                            $categorySlug = prospectCategorySlugify((string) ($category['slug'] ?? ''));
+                            if ($categorySlug === '') {
+                                $categorySlug = prospectCategorySlugify($categoryName);
+                            }
+                            if ($categoryId <= 0 || $categoryName === '' || $categorySlug === '') {
+                                continue;
+                            }
+                            $isActiveCategoryLink = $isCategoryFocused && (int) $activeCategory['id'] === $categoryId;
+                        ?>
+                        <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="rounded-full border px-3 py-1 text-xs font-semibold <?= $isActiveCategoryLink ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">
+                            <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+
+                <form method="POST" action="prospects.php" class="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="action" value="add_category">
+                    <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="text" name="category_name" class="field" maxlength="255" placeholder="New category name" required>
+                    <input type="text" name="category_slug" class="field" maxlength="255" placeholder="Optional slug (auto-generated if blank)">
+                    <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Create Category</button>
+                </form>
             </div>
         </section>
 
@@ -835,6 +881,10 @@ require_once __DIR__ . '/templates/header.php';
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </div>
+            </section>
+        <?php else: ?>
+            <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
+                <p class="text-sm text-zinc-400">Create or open a category to manage its keywords (including bulk add).</p>
             </section>
         <?php endif; ?>
 
