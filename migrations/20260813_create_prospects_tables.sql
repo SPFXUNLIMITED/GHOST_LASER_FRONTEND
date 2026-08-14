@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS prospects (
         'archived'
     ) NOT NULL DEFAULT 'new',
     notes TEXT NULL,
+    raw_source LONGTEXT NULL,
     raw_text_dump LONGTEXT NULL,
     parse_preview_json LONGTEXT NULL,
     parse_confidence DECIMAL(5,2) NULL,
