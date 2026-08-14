@@ -23,6 +23,13 @@ function prospectAllowedStatuses(): array
     return array_keys(prospectStatuses());
 }
 
+function prospectCategorySlugify(string $value): string
+{
+    $value = strtolower(trim($value));
+    $value = preg_replace('/[^a-z0-9]+/', '-', $value) ?? '';
+    return trim($value, '-');
+}
+
 function prospectCleanDateTimeInput(string $value): ?string
 {
     $value = trim($value);
@@ -143,6 +150,45 @@ function prospectGetCustomerColumns(PDO $pdo): array
     }
 }
 
+$categoryRows = $pdo->query("
+    SELECT id, name, slug
+    FROM prospect_categories
+    ORDER BY name ASC, id ASC
+")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+$categoriesById = [];
+$categoriesBySlug = [];
+foreach ($categoryRows as $categoryRow) {
+    $categoryId = (int) ($categoryRow['id'] ?? 0);
+    $categoryName = trim((string) ($categoryRow['name'] ?? ''));
+    if ($categoryId <= 0 || $categoryName === '') {
+        continue;
+    }
+    $categorySlug = prospectCategorySlugify((string) ($categoryRow['slug'] ?? ''));
+    if ($categorySlug === '') {
+        $categorySlug = prospectCategorySlugify($categoryName);
+    }
+    $normalizedCategory = [
+        'id' => $categoryId,
+        'name' => $categoryName,
+        'slug' => $categorySlug,
+    ];
+    $categoriesById[$categoryId] = $normalizedCategory;
+    if ($categorySlug !== '') {
+        $categoriesBySlug[$categorySlug] = $normalizedCategory;
+    }
+}
+
+$rawCategoryParam = trim((string) ($_GET['category'] ?? ''));
+$activeCategory = null;
+if ($rawCategoryParam !== '') {
+    if (ctype_digit($rawCategoryParam)) {
+        $activeCategory = $categoriesById[(int) $rawCategoryParam] ?? null;
+    } else {
+        $activeCategory = $categoriesBySlug[prospectCategorySlugify($rawCategoryParam)] ?? null;
+    }
+}
+
 $flashSuccess = '';
 $flashError = '';
 if (!empty($_SESSION['prospects_flash_success'])) {
@@ -153,13 +199,18 @@ if (!empty($_SESSION['prospects_flash_error'])) {
     $flashError = (string) $_SESSION['prospects_flash_error'];
     unset($_SESSION['prospects_flash_error']);
 }
+if ($rawCategoryParam !== '' && $activeCategory === null && $flashError === '') {
+    $flashError = 'Category not found.';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postCsrf = trim((string) ($_POST['csrf'] ?? ''));
     $action = trim((string) ($_POST['action'] ?? ''));
     $queryStatus = trim((string) ($_POST['status_filter'] ?? 'all'));
     $querySearch = trim((string) ($_POST['q'] ?? ''));
+    $queryCategory = trim((string) ($_POST['category'] ?? ''));
     $redirectQs = http_build_query(array_filter([
+        'category' => $queryCategory,
         'status' => $queryStatus,
         'q' => $querySearch,
     ], static fn($value) => $value !== ''));
@@ -250,11 +301,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INSERT INTO prospects (
                         company, contact_name, phone, email, website, status, notes,
                         raw_source, parse_preview_json, parse_confidence, parse_provider, parse_errors,
-                        created_by, updated_by
+                        created_by, updated_by, category_id
                     ) VALUES (
                         :company, :contact_name, :phone, :email, :website, :status, :notes,
                         :raw_source, :parse_preview_json, :parse_confidence, :parse_provider, :parse_errors,
-                        :created_by, :updated_by
+                        :created_by, :updated_by, :category_id
                     )
                 ");
                 $stmt->execute([
@@ -272,6 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':parse_errors' => $parseErrors !== '' ? $parseErrors : null,
                     ':created_by' => $adminId > 0 ? $adminId : null,
                     ':updated_by' => $adminId > 0 ? $adminId : null,
+                    ':category_id' => $activeCategory !== null ? (int) $activeCategory['id'] : null,
                 ]);
                 $_SESSION['prospects_flash_success'] = 'Prospect created.';
             }
@@ -484,6 +536,10 @@ $search = trim((string) ($_GET['q'] ?? ''));
 
 $where = ['is_archived = 0'];
 $params = [];
+if ($activeCategory !== null) {
+    $where[] = 'category_id = :category_id';
+    $params[':category_id'] = (int) $activeCategory['id'];
+}
 if ($statusFilter !== '' && $statusFilter !== 'all' && in_array($statusFilter, prospectAllowedStatuses(), true)) {
     $where[] = 'status = :status';
     $params[':status'] = $statusFilter;
@@ -542,8 +598,13 @@ foreach ($prospects as $prospect) {
         'parse_errors' => (string) ($prospect['parse_errors'] ?? ''),
     ];
 }
-$pageTitle = 'Prospects | Ghost Laser';
-$pageDescription = 'Cold calling prospect pipeline management.';
+$isCategoryFocused = $activeCategory !== null;
+$currentCategoryName = $isCategoryFocused ? (string) $activeCategory['name'] : 'All Prospects';
+$currentCategorySlug = $isCategoryFocused ? (string) $activeCategory['slug'] : '';
+$pageTitle = $currentCategoryName . ' Prospects | Ghost Laser';
+$pageDescription = $isCategoryFocused
+    ? ('Cold calling prospect pipeline focused on ' . $currentCategoryName . '.')
+    : 'Cold calling prospect pipeline management.';
 $headerRight = '<div class="flex items-center gap-3"><a href="prospect_notifications.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Prospect Templates</a><a href="dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Dashboard</a></div>';
 $extraHead = <<<'HTML'
 <style>
@@ -563,13 +624,42 @@ require_once __DIR__ . '/templates/header.php';
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <h1 class="text-3xl font-bold tracking-tight">Prospects</h1>
-                    <p class="mt-2 text-zinc-400">Separate lead pipeline for cold calling sign companies.</p>
+                    <h1 class="text-3xl font-bold tracking-tight">
+                        <?= htmlspecialchars($currentCategoryName, ENT_QUOTES, 'UTF-8') ?>
+                    </h1>
+                    <p class="mt-2 text-zinc-400">
+                        <?= $isCategoryFocused
+                            ? ('Dedicated prospect view for ' . htmlspecialchars($currentCategoryName, ENT_QUOTES, 'UTF-8') . '.')
+                            : 'All prospects across every category.' ?>
+                    </p>
                 </div>
                 <div class="flex items-center gap-3">
                     <a href="prospect_notifications.php" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:border-cyan-500/50 hover:text-cyan-300">Prospect Templates</a>
-                    <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 btn-glow">Add Prospect</button>
+                    <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 btn-glow">Add New Prospect</button>
                 </div>
+            </div>
+        </section>
+
+        <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="prospects.php" class="rounded-full border px-3 py-1 text-xs font-semibold <?= !$isCategoryFocused ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">All Prospects</a>
+                <?php foreach ($categoryRows as $category): ?>
+                    <?php
+                        $categoryId = (int) ($category['id'] ?? 0);
+                        $categoryName = trim((string) ($category['name'] ?? ''));
+                        $categorySlug = prospectCategorySlugify((string) ($category['slug'] ?? ''));
+                        if ($categorySlug === '') {
+                            $categorySlug = prospectCategorySlugify($categoryName);
+                        }
+                        if ($categoryId <= 0 || $categoryName === '' || $categorySlug === '') {
+                            continue;
+                        }
+                        $isActiveCategoryLink = $isCategoryFocused && (int) $activeCategory['id'] === $categoryId;
+                    ?>
+                    <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="rounded-full border px-3 py-1 text-xs font-semibold <?= $isActiveCategoryLink ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">
+                        <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>
+                    </a>
+                <?php endforeach; ?>
             </div>
         </section>
 
@@ -582,6 +672,9 @@ require_once __DIR__ . '/templates/header.php';
 
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
             <form method="GET" action="prospects.php" class="grid gap-3 md:grid-cols-[220px_1fr_auto]">
+                <?php if ($isCategoryFocused): ?>
+                    <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
+                <?php endif; ?>
                 <select name="status" class="field">
                     <option value="all"<?= $statusFilter === 'all' ? ' selected' : '' ?>>All statuses</option>
                     <?php foreach ($statusMap as $statusKey => $statusLabel): ?>
@@ -643,6 +736,7 @@ require_once __DIR__ . '/templates/header.php';
                                                 <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                                                 <input type="hidden" name="action" value="convert_to_customer">
                                                 <input type="hidden" name="prospect_id" value="<?= $pid ?>">
+                                                <input type="hidden" name="category" value="<?= htmlspecialchars($isCategoryFocused ? $currentCategorySlug : '', ENT_QUOTES, 'UTF-8') ?>">
                                                 <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                                                 <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                                                 <button type="submit" class="rounded-md border border-emerald-700/60 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-500/60">Convert to Customer</button>
@@ -653,6 +747,7 @@ require_once __DIR__ . '/templates/header.php';
                                             <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                                             <input type="hidden" name="action" value="archive_prospect">
                                             <input type="hidden" name="prospect_id" value="<?= $pid ?>">
+                                            <input type="hidden" name="category" value="<?= htmlspecialchars($isCategoryFocused ? $currentCategorySlug : '', ENT_QUOTES, 'UTF-8') ?>">
                                             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                                             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                                             <button type="submit" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 hover:text-red-400">Archive</button>
@@ -705,6 +800,7 @@ require_once __DIR__ . '/templates/header.php';
                 <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="action" value="log_interaction">
                 <input type="hidden" name="prospect_id" id="details_prospect_id" value="0">
+                <input type="hidden" name="category" value="<?= htmlspecialchars($isCategoryFocused ? $currentCategorySlug : '', ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                 <select name="interaction_type" class="field">
@@ -770,6 +866,7 @@ require_once __DIR__ . '/templates/header.php';
             <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="action" value="save_prospect">
             <input type="hidden" name="prospect_id" id="form_prospect_id" value="0">
+            <input type="hidden" name="category" value="<?= htmlspecialchars($isCategoryFocused ? $currentCategorySlug : '', ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="parse_provider" id="form_parse_provider" value="">
