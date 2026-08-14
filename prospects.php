@@ -843,33 +843,17 @@ require_once __DIR__ . '/templates/header.php';
                     <?php endforeach; ?>
                 </div>
 
-                <form method="POST" action="prospects.php" class="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="action" value="add_category">
-                    <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="text" name="category_name" class="field" maxlength="255" placeholder="New category name" required>
-                    <input type="text" name="category_slug" class="field" maxlength="255" placeholder="Optional slug (auto-generated if blank)">
-                    <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Create Category</button>
-                </form>
+                <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+                    <div>
+                        <p class="text-sm font-semibold text-white">Category Management</p>
+                        <p class="mt-1 text-sm text-zinc-400">Use the modal actions below to add one category or import several at once.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="openCategoryModal()" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Create Category</button>
+                        <button type="button" onclick="openBulkCategoriesModal()" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-200 hover:border-cyan-500/40 hover:text-cyan-200">Bulk Add Categories</button>
+                    </div>
+                </div>
             </div>
-        </section>
-
-        <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-3">
-            <h2 class="text-base font-semibold text-white">Bulk Add Categories</h2>
-            <form method="POST" action="prospects.php" class="space-y-3">
-                <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="action" value="bulk_add_categories">
-                <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
-                <div>
-                    <label class="label">Category Names (one per line)</label>
-                    <textarea name="bulk_category_names" rows="6" class="field" maxlength="20000" placeholder="Paste one category name per line"></textarea>
-                </div>
-                <div class="flex justify-end">
-                    <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Add All Categories</button>
-                </div>
-            </form>
         </section>
 
         <?php if ($flashSuccess !== ''): ?>
@@ -881,35 +865,16 @@ require_once __DIR__ . '/templates/header.php';
 
         <?php if ($isCategoryFocused): ?>
             <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4">
-                <div>
-                    <h2 class="text-lg font-semibold text-white">Search Keywords for this Category</h2>
-                    <p class="mt-1 text-sm text-zinc-400">Add reusable Google search terms for <?= htmlspecialchars($currentCategoryName, ENT_QUOTES, 'UTF-8') ?>.</p>
-                </div>
-
-                <form method="POST" action="prospects.php" class="grid gap-3 md:grid-cols-[1fr_auto]">
-                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="action" value="add_category_keyword">
-                    <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="text" name="keyword" class="field" maxlength="255" placeholder="e.g. channel letters" required>
-                    <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Add</button>
-                </form>
-
-                <form method="POST" action="prospects.php" class="space-y-3">
-                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="action" value="bulk_add_category_keywords">
-                    <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <label class="label">Bulk Add Keywords</label>
-                        <textarea name="bulk_keywords" rows="6" class="field" maxlength="20000" placeholder="Paste one keyword per line"></textarea>
+                        <h2 class="text-lg font-semibold text-white">Search Keywords for this Category</h2>
+                        <p class="mt-1 text-sm text-zinc-400">Add reusable Google search terms for <?= htmlspecialchars($currentCategoryName, ENT_QUOTES, 'UTF-8') ?>.</p>
                     </div>
-                    <div class="flex justify-end">
-                        <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Add All Keywords</button>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="openKeywordModal()" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Add Keyword</button>
+                        <button type="button" onclick="openBulkKeywordsModal()" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Bulk Add Keywords</button>
                     </div>
-                </form>
+                </div>
 
                 <div class="flex flex-wrap gap-2">
                     <?php if ($categoryKeywords === []): ?>
@@ -1127,6 +1092,108 @@ require_once __DIR__ . '/templates/header.php';
     </div>
 </div>
 
+<div id="categoryModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="categoryModalTitle">
+    <div class="modal-box" style="width:min(560px,96vw);">
+        <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <h2 id="categoryModalTitle" class="text-lg font-semibold text-white">Create Category</h2>
+            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeCategoryModal()">Close</button>
+        </div>
+        <form method="POST" action="prospects.php" class="p-5 space-y-4">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="action" value="add_category">
+            <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <div class="grid gap-4 md:grid-cols-2">
+                <div>
+                    <label class="label">Category Name</label>
+                    <input type="text" name="category_name" class="field" maxlength="255" placeholder="New category name" required>
+                </div>
+                <div>
+                    <label class="label">Slug</label>
+                    <input type="text" name="category_slug" class="field" maxlength="255" placeholder="Optional slug">
+                </div>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button type="button" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300" onclick="closeCategoryModal()">Cancel</button>
+                <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Create Category</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="bulkCategoriesModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="bulkCategoriesModalTitle">
+    <div class="modal-box" style="width:min(640px,96vw);">
+        <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <h2 id="bulkCategoriesModalTitle" class="text-lg font-semibold text-white">Bulk Add Categories</h2>
+            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeBulkCategoriesModal()">Close</button>
+        </div>
+        <form method="POST" action="prospects.php" class="p-5 space-y-4">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="action" value="bulk_add_categories">
+            <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <div>
+                <label class="label">Category Names (one per line)</label>
+                <textarea name="bulk_category_names" rows="8" class="field" maxlength="20000" placeholder="Paste one category name per line"></textarea>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button type="button" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300" onclick="closeBulkCategoriesModal()">Cancel</button>
+                <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Add All Categories</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<?php if ($isCategoryFocused): ?>
+<div id="keywordModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="keywordModalTitle">
+    <div class="modal-box" style="width:min(560px,96vw);">
+        <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <h2 id="keywordModalTitle" class="text-lg font-semibold text-white">Add Keyword</h2>
+            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeKeywordModal()">Close</button>
+        </div>
+        <form method="POST" action="prospects.php" class="p-5 space-y-4">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="action" value="add_category_keyword">
+            <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <div>
+                <label class="label">Keyword</label>
+                <input type="text" name="keyword" class="field" maxlength="255" placeholder="e.g. channel letters" required>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button type="button" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300" onclick="closeKeywordModal()">Cancel</button>
+                <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Add Keyword</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="bulkKeywordsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="bulkKeywordsModalTitle">
+    <div class="modal-box" style="width:min(640px,96vw);">
+        <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <h2 id="bulkKeywordsModalTitle" class="text-lg font-semibold text-white">Bulk Add Keywords</h2>
+            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeBulkKeywordsModal()">Close</button>
+        </div>
+        <form method="POST" action="prospects.php" class="p-5 space-y-4">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="action" value="bulk_add_category_keywords">
+            <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <div>
+                <label class="label">Keywords</label>
+                <textarea name="bulk_keywords" rows="8" class="field" maxlength="20000" placeholder="Paste one keyword per line"></textarea>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button type="button" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300" onclick="closeBulkKeywordsModal()">Cancel</button>
+                <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Add All Keywords</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <div id="prospectModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="prospectModalTitle">
     <div class="modal-box">
         <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
@@ -1223,6 +1290,50 @@ const prospectInteractions = <?= json_encode($interactionsByProspect, JSON_UNESC
 const statusLabels = <?= json_encode($statusMap, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const laNowDateTimeLocal = <?= json_encode($laNowDateTimeLocal, JSON_UNESCAPED_UNICODE) ?>;
 let latestParseResult = null;
+
+function openCategoryModal() {
+    document.getElementById('categoryModal').classList.add('open');
+}
+
+function closeCategoryModal() {
+    document.getElementById('categoryModal').classList.remove('open');
+}
+
+function openBulkCategoriesModal() {
+    document.getElementById('bulkCategoriesModal').classList.add('open');
+}
+
+function closeBulkCategoriesModal() {
+    document.getElementById('bulkCategoriesModal').classList.remove('open');
+}
+
+function openKeywordModal() {
+    const keywordModal = document.getElementById('keywordModal');
+    if (keywordModal) {
+        keywordModal.classList.add('open');
+    }
+}
+
+function closeKeywordModal() {
+    const keywordModal = document.getElementById('keywordModal');
+    if (keywordModal) {
+        keywordModal.classList.remove('open');
+    }
+}
+
+function openBulkKeywordsModal() {
+    const bulkKeywordsModal = document.getElementById('bulkKeywordsModal');
+    if (bulkKeywordsModal) {
+        bulkKeywordsModal.classList.add('open');
+    }
+}
+
+function closeBulkKeywordsModal() {
+    const bulkKeywordsModal = document.getElementById('bulkKeywordsModal');
+    if (bulkKeywordsModal) {
+        bulkKeywordsModal.classList.remove('open');
+    }
+}
 
 function openCreateModal() {
     document.getElementById('prospectModalTitle').textContent = 'Add Prospect';
@@ -1511,6 +1622,24 @@ async function submitSendEmail() {
 document.getElementById('prospectModal').addEventListener('click', (e) => {
     if (e.target.id === 'prospectModal') closeProspectModal();
 });
+document.getElementById('categoryModal').addEventListener('click', (e) => {
+    if (e.target.id === 'categoryModal') closeCategoryModal();
+});
+document.getElementById('bulkCategoriesModal').addEventListener('click', (e) => {
+    if (e.target.id === 'bulkCategoriesModal') closeBulkCategoriesModal();
+});
+const keywordModalEl = document.getElementById('keywordModal');
+if (keywordModalEl) {
+    keywordModalEl.addEventListener('click', (e) => {
+        if (e.target.id === 'keywordModal') closeKeywordModal();
+    });
+}
+const bulkKeywordsModalEl = document.getElementById('bulkKeywordsModal');
+if (bulkKeywordsModalEl) {
+    bulkKeywordsModalEl.addEventListener('click', (e) => {
+        if (e.target.id === 'bulkKeywordsModal') closeBulkKeywordsModal();
+    });
+}
 document.getElementById('parsePreviewModal').addEventListener('click', (e) => {
     if (e.target.id === 'parsePreviewModal') closeParsePreview();
 });
@@ -1522,6 +1651,10 @@ document.getElementById('prospectEmailModal').addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+        closeCategoryModal();
+        closeBulkCategoriesModal();
+        closeKeywordModal();
+        closeBulkKeywordsModal();
         closeDetailsModal();
         closeProspectModal();
         closeParsePreview();
