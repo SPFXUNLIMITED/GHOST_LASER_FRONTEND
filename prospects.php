@@ -821,55 +821,30 @@ require_once __DIR__ . '/templates/header.php';
         </section>
 
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
-            <div class="space-y-4">
-                <div class="flex flex-wrap items-center gap-2">
-                    <a href="prospects.php" class="rounded-full border px-3 py-1 text-xs font-semibold <?= !$isCategoryFocused ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">All Prospects</a>
-                    <?php foreach ($categoryRows as $category): ?>
-                        <?php
-                            $categoryId = (int) ($category['id'] ?? 0);
-                            $categoryName = trim((string) ($category['name'] ?? ''));
-                            $categorySlug = prospectCategorySlugify((string) ($category['slug'] ?? ''));
-                            if ($categorySlug === '') {
-                                $categorySlug = prospectCategorySlugify($categoryName);
-                            }
-                            if ($categoryId <= 0 || $categoryName === '' || $categorySlug === '') {
-                                continue;
-                            }
-                            $isActiveCategoryLink = $isCategoryFocused && (int) $activeCategory['id'] === $categoryId;
-                        ?>
-                        <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="rounded-full border px-3 py-1 text-xs font-semibold <?= $isActiveCategoryLink ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">
-                            <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>
-                        </a>
-                    <?php endforeach; ?>
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="prospects.php" class="rounded-full border px-3 py-1 text-xs font-semibold <?= !$isCategoryFocused ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">All Prospects</a>
+                <?php foreach ($categoryRows as $category): ?>
+                    <?php
+                        $categoryId = (int) ($category['id'] ?? 0);
+                        $categoryName = trim((string) ($category['name'] ?? ''));
+                        $categorySlug = prospectCategorySlugify((string) ($category['slug'] ?? ''));
+                        if ($categorySlug === '') {
+                            $categorySlug = prospectCategorySlugify($categoryName);
+                        }
+                        if ($categoryId <= 0 || $categoryName === '' || $categorySlug === '') {
+                            continue;
+                        }
+                        $isActiveCategoryLink = $isCategoryFocused && (int) $activeCategory['id'] === $categoryId;
+                    ?>
+                    <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="rounded-full border px-3 py-1 text-xs font-semibold <?= $isActiveCategoryLink ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">
+                        <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>
+                    </a>
+                <?php endforeach; ?>
+                <div class="ml-auto flex items-center gap-2">
+                    <button type="button" onclick="openNewCategoryModal()" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20">+ New Category</button>
+                    <button type="button" onclick="openBulkCategoryModal()" class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200">Bulk Add Categories</button>
                 </div>
-
-                <form method="POST" action="prospects.php" class="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="action" value="add_category">
-                    <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="text" name="category_name" class="field" maxlength="255" placeholder="New category name" required>
-                    <input type="text" name="category_slug" class="field" maxlength="255" placeholder="Optional slug (auto-generated if blank)">
-                    <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Create Category</button>
-                </form>
             </div>
-        </section>
-
-        <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-3">
-            <h2 class="text-base font-semibold text-white">Bulk Add Categories</h2>
-            <form method="POST" action="prospects.php" class="space-y-3">
-                <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="action" value="bulk_add_categories">
-                <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
-                <div>
-                    <label class="label">Category Names (one per line)</label>
-                    <textarea name="bulk_category_names" rows="6" class="field" maxlength="20000" placeholder="Paste one category name per line"></textarea>
-                </div>
-                <div class="flex justify-end">
-                    <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Add All Categories</button>
-                </div>
-            </form>
         </section>
 
         <?php if ($flashSuccess !== ''): ?>
@@ -1034,6 +1009,56 @@ require_once __DIR__ . '/templates/header.php';
         </section>
     </div>
 </main>
+
+<div id="newCategoryModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="newCategoryModalTitle">
+    <div class="modal-box" style="width:min(480px,96vw)">
+        <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <h2 id="newCategoryModalTitle" class="text-lg font-semibold text-white">New Category</h2>
+            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeNewCategoryModal()">Close</button>
+        </div>
+        <form method="POST" action="prospects.php" class="p-5 space-y-4">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="action" value="add_category">
+            <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <div>
+                <label class="label">Category Name</label>
+                <input type="text" name="category_name" class="field w-full" maxlength="255" placeholder="e.g. Sign Shops" required>
+            </div>
+            <div>
+                <label class="label">Slug <span class="text-zinc-600 normal-case">(optional — auto-generated if blank)</span></label>
+                <input type="text" name="category_slug" class="field w-full" maxlength="255" placeholder="e.g. sign-shops">
+            </div>
+            <div class="flex justify-end gap-3 pt-1">
+                <button type="button" onclick="closeNewCategoryModal()" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300">Cancel</button>
+                <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Create Category</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="bulkCategoryModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="bulkCategoryModalTitle">
+    <div class="modal-box" style="width:min(520px,96vw)">
+        <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <h2 id="bulkCategoryModalTitle" class="text-lg font-semibold text-white">Bulk Add Categories</h2>
+            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeBulkCategoryModal()">Close</button>
+        </div>
+        <form method="POST" action="prospects.php" class="p-5 space-y-4">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="action" value="bulk_add_categories">
+            <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <div>
+                <label class="label">Category Names <span class="text-zinc-600 normal-case">(one per line)</span></label>
+                <textarea name="bulk_category_names" rows="8" class="field w-full" maxlength="20000" placeholder="Paste one category name per line"></textarea>
+            </div>
+            <div class="flex justify-end gap-3 pt-1">
+                <button type="button" onclick="closeBulkCategoryModal()" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300">Cancel</button>
+                <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Add All Categories</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <div id="prospectDetailsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="prospectDetailsTitle">
     <div class="modal-box">
@@ -1223,6 +1248,19 @@ const prospectInteractions = <?= json_encode($interactionsByProspect, JSON_UNESC
 const statusLabels = <?= json_encode($statusMap, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const laNowDateTimeLocal = <?= json_encode($laNowDateTimeLocal, JSON_UNESCAPED_UNICODE) ?>;
 let latestParseResult = null;
+
+function openNewCategoryModal() {
+    document.getElementById('newCategoryModal').classList.add('open');
+}
+function closeNewCategoryModal() {
+    document.getElementById('newCategoryModal').classList.remove('open');
+}
+function openBulkCategoryModal() {
+    document.getElementById('bulkCategoryModal').classList.add('open');
+}
+function closeBulkCategoryModal() {
+    document.getElementById('bulkCategoryModal').classList.remove('open');
+}
 
 function openCreateModal() {
     document.getElementById('prospectModalTitle').textContent = 'Add Prospect';
