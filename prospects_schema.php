@@ -17,6 +17,41 @@ function prospectsColumnExists(PDO $pdo, string $table, string $column): bool
     return (int) $stmt->fetchColumn() > 0;
 }
 
+function prospectsIndexExists(PDO $pdo, string $table, string $index): bool
+{
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+          AND INDEX_NAME = :index_name
+    ");
+    $stmt->execute([
+        ':table_name' => $table,
+        ':index_name' => $index,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function prospectsForeignKeyExists(PDO $pdo, string $table, string $constraint): bool
+{
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM information_schema.TABLE_CONSTRAINTS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+          AND CONSTRAINT_NAME = :constraint_name
+          AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+    ");
+    $stmt->execute([
+        ':table_name' => $table,
+        ':constraint_name' => $constraint,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
 function prospectsEnsureSchema(PDO $pdo): void
 {
     $pdo->exec("
@@ -73,6 +108,7 @@ function prospectsEnsureSchema(PDO $pdo): void
             is_archived TINYINT(1) NOT NULL DEFAULT 0,
             created_by INT UNSIGNED NULL,
             updated_by INT UNSIGNED NULL,
+            category_id INT UNSIGNED NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_prospects_status (status),
@@ -80,7 +116,10 @@ function prospectsEnsureSchema(PDO $pdo): void
             INDEX idx_prospects_email (email),
             INDEX idx_prospects_phone (phone),
             INDEX idx_prospects_last_called_at (last_called_at),
-            INDEX idx_prospects_archived (is_archived)
+            INDEX idx_prospects_archived (is_archived),
+            INDEX idx_prospects_category_id (category_id),
+            CONSTRAINT fk_prospects_category
+                FOREIGN KEY (category_id) REFERENCES prospect_categories(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 
@@ -94,7 +133,17 @@ function prospectsEnsureSchema(PDO $pdo): void
         $pdo->exec("ALTER TABLE prospects ADD COLUMN raw_source LONGTEXT NULL AFTER notes");
     }
     if (!prospectsColumnExists($pdo, 'prospects', 'category_id')) {
-        $pdo->exec("ALTER TABLE prospects ADD COLUMN category_id INT UNSIGNED NULL AFTER updated_by, ADD INDEX idx_prospects_category_id (category_id)");
+        $pdo->exec("ALTER TABLE prospects ADD COLUMN category_id INT UNSIGNED NULL AFTER updated_by");
+    }
+    if (!prospectsIndexExists($pdo, 'prospects', 'idx_prospects_category_id')) {
+        $pdo->exec("ALTER TABLE prospects ADD INDEX idx_prospects_category_id (category_id)");
+    }
+    if (!prospectsForeignKeyExists($pdo, 'prospects', 'fk_prospects_category')) {
+        $pdo->exec("
+            ALTER TABLE prospects
+            ADD CONSTRAINT fk_prospects_category
+                FOREIGN KEY (category_id) REFERENCES prospect_categories(id) ON DELETE SET NULL
+        ");
     }
     if (prospectsColumnExists($pdo, 'prospects', 'raw_text_dump')) {
         $pdo->exec("
