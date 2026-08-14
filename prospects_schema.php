@@ -39,6 +39,7 @@ function prospectsEnsureSchema(PDO $pdo): void
                 'archived'
             ) NOT NULL DEFAULT 'new',
             notes TEXT NULL,
+            raw_source LONGTEXT NULL,
             raw_text_dump LONGTEXT NULL,
             parse_preview_json LONGTEXT NULL,
             parse_confidence DECIMAL(5,2) NULL,
@@ -65,6 +66,17 @@ function prospectsEnsureSchema(PDO $pdo): void
     }
     if (!prospectsColumnExists($pdo, 'prospects', 'converted_at')) {
         $pdo->exec("ALTER TABLE prospects ADD COLUMN converted_at DATETIME NULL AFTER converted_customer_id");
+    }
+    if (!prospectsColumnExists($pdo, 'prospects', 'raw_source')) {
+        $pdo->exec("ALTER TABLE prospects ADD COLUMN raw_source LONGTEXT NULL AFTER notes");
+    }
+    if (prospectsColumnExists($pdo, 'prospects', 'raw_text_dump')) {
+        $pdo->exec("
+            UPDATE prospects
+            SET raw_source = COALESCE(raw_source, raw_text_dump)
+            WHERE raw_source IS NULL
+              AND raw_text_dump IS NOT NULL
+        ");
     }
 
     $pdo->exec("

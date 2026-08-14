@@ -97,6 +97,14 @@ function prospectParseRawText(string $rawText): array
         $errors[] = 'Contact name could not be confidently detected.';
     }
 
+    $notes = '';
+    foreach ($cleanLines as $line) {
+        if (preg_match('/^(?:notes?|summary)\s*:\s*(.+)$/i', $line, $m)) {
+            $notes = prospectSanitizeField($m[1], 10000);
+            break;
+        }
+    }
+
     return [
         'fields' => [
             'company' => $company,
@@ -105,7 +113,7 @@ function prospectParseRawText(string $rawText): array
             'email' => prospectSanitizeField($email),
             'website' => prospectSanitizeField($website),
             'status' => $status,
-            'notes' => prospectSanitizeField($rawText, 10000),
+            'notes' => $notes,
         ],
         'confidence' => round($confidence * 100, 2),
         'provider' => 'heuristic-ai',

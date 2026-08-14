@@ -37,7 +37,16 @@ function prospectCleanDateTimeInput(string $value): ?string
     if ($dt !== false) {
         return $dt->format('Y-m-d H:i:s');
     }
+    $dt = DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $value);
+    if ($dt !== false) {
+        return $dt->format('Y-m-d H:i:s');
+    }
     return null;
+}
+
+function prospectNowLosAngeles(): string
+{
+    return (new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles')))->format('Y-m-d H:i:s');
 }
 
 function prospectSplitContactName(string $contactName): array
@@ -171,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $website = prospectSanitizeField((string) ($_POST['website'] ?? ''));
             $status = trim((string) ($_POST['status'] ?? 'new'));
             $notes = prospectSanitizeField((string) ($_POST['notes'] ?? ''), 10000);
-            $rawTextDump = prospectSanitizeField((string) ($_POST['raw_text_dump'] ?? ''), 65000);
+            $rawSource = prospectSanitizeField((string) ($_POST['raw_source'] ?? ($_POST['raw_text_dump'] ?? '')), 65000);
             $parseProvider = prospectSanitizeField((string) ($_POST['parse_provider'] ?? ''), 100);
             $parseConfidence = is_numeric($_POST['parse_confidence'] ?? null) ? (float) $_POST['parse_confidence'] : null;
             $parseErrors = prospectSanitizeField((string) ($_POST['parse_errors'] ?? ''), 3000);
@@ -211,7 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         website = :website,
                         status = :status,
                         notes = :notes,
-                        raw_text_dump = :raw_text_dump,
+                        raw_source = :raw_source,
                         parse_preview_json = :parse_preview_json,
                         parse_confidence = :parse_confidence,
                         parse_provider = :parse_provider,
@@ -227,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':website' => $website !== '' ? $website : null,
                     ':status' => $status,
                     ':notes' => $notes !== '' ? $notes : null,
-                    ':raw_text_dump' => $rawTextDump !== '' ? $rawTextDump : null,
+                    ':raw_source' => $rawSource !== '' ? $rawSource : null,
                     ':parse_preview_json' => $previewPayload,
                     ':parse_confidence' => $parseConfidence,
                     ':parse_provider' => $parseProvider !== '' ? $parseProvider : null,
@@ -240,11 +249,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("
                     INSERT INTO prospects (
                         company, contact_name, phone, email, website, status, notes,
-                        raw_text_dump, parse_preview_json, parse_confidence, parse_provider, parse_errors,
+                        raw_source, parse_preview_json, parse_confidence, parse_provider, parse_errors,
                         created_by, updated_by
                     ) VALUES (
                         :company, :contact_name, :phone, :email, :website, :status, :notes,
-                        :raw_text_dump, :parse_preview_json, :parse_confidence, :parse_provider, :parse_errors,
+                        :raw_source, :parse_preview_json, :parse_confidence, :parse_provider, :parse_errors,
                         :created_by, :updated_by
                     )
                 ");
@@ -256,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':website' => $website !== '' ? $website : null,
                     ':status' => $status,
                     ':notes' => $notes !== '' ? $notes : null,
-                    ':raw_text_dump' => $rawTextDump !== '' ? $rawTextDump : null,
+                    ':raw_source' => $rawSource !== '' ? $rawSource : null,
                     ':parse_preview_json' => $previewPayload,
                     ':parse_confidence' => $parseConfidence,
                     ':parse_provider' => $parseProvider !== '' ? $parseProvider : null,
@@ -288,7 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $type = trim((string) ($_POST['interaction_type'] ?? 'note'));
             $outcome = prospectSanitizeField((string) ($_POST['outcome'] ?? ''));
             $interactionNotes = prospectSanitizeField((string) ($_POST['interaction_notes'] ?? ''), 3000);
-            $interactedAt = prospectCleanDateTimeInput((string) ($_POST['interacted_at'] ?? '')) ?? date('Y-m-d H:i:s');
+            $interactedAt = prospectCleanDateTimeInput((string) ($_POST['interacted_at'] ?? '')) ?? prospectNowLosAngeles();
             $newStatus = trim((string) ($_POST['new_status'] ?? ''));
 
             if ($prospectId <= 0) {
@@ -507,13 +516,32 @@ if ($prospectIds !== []) {
         if (!isset($interactionsByProspect[$pid])) {
             $interactionsByProspect[$pid] = [];
         }
-        if (count($interactionsByProspect[$pid]) < 5) {
-            $interactionsByProspect[$pid][] = $row;
-        }
+        $interactionsByProspect[$pid][] = $row;
     }
 }
 
 $statusMap = prospectStatuses();
+$laNowDateTimeLocal = (new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles')))->format('Y-m-d\TH:i');
+$prospectsForJs = [];
+foreach ($prospects as $prospect) {
+    $pid = (int) ($prospect['id'] ?? 0);
+    $prospectsForJs[$pid] = [
+        'id' => $pid,
+        'company' => (string) ($prospect['company'] ?? ''),
+        'contact_name' => (string) ($prospect['contact_name'] ?? ''),
+        'phone' => (string) ($prospect['phone'] ?? ''),
+        'email' => (string) ($prospect['email'] ?? ''),
+        'website' => (string) ($prospect['website'] ?? ''),
+        'status' => (string) ($prospect['status'] ?? 'new'),
+        'last_called_at' => (string) ($prospect['last_called_at'] ?? ''),
+        'last_emailed_at' => (string) ($prospect['last_emailed_at'] ?? ''),
+        'notes' => (string) ($prospect['notes'] ?? ''),
+        'raw_source' => (string) (($prospect['raw_source'] ?? '') !== '' ? $prospect['raw_source'] : ($prospect['raw_text_dump'] ?? '')),
+        'parse_provider' => (string) ($prospect['parse_provider'] ?? ''),
+        'parse_confidence' => (string) ($prospect['parse_confidence'] ?? ''),
+        'parse_errors' => (string) ($prospect['parse_errors'] ?? ''),
+    ];
+}
 $pageTitle = 'Prospects | Ghost Laser';
 $pageDescription = 'Cold calling prospect pipeline management.';
 $headerRight = '<div class="flex items-center gap-3"><a href="prospect_notifications.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Prospect Templates</a><a href="dashboard.php" class="text-sm text-zinc-400 hover:text-white transition-colors">&larr; Dashboard</a></div>';
@@ -587,9 +615,8 @@ require_once __DIR__ . '/templates/header.php';
                                 $pid = (int) ($prospect['id'] ?? 0);
                                 $statusKey = (string) ($prospect['status'] ?? 'new');
                                 $statusLabel = $statusMap[$statusKey] ?? ucfirst(str_replace('_', ' ', $statusKey));
-                                $rowInteractions = $interactionsByProspect[$pid] ?? [];
                             ?>
-                            <tr class="align-top">
+                            <tr class="align-top cursor-pointer hover:bg-zinc-900/40 transition-colors" onclick="openDetailsModal(<?= $pid ?>)">
                                 <td class="py-3 pr-3">
                                     <div class="font-semibold text-white"><?= htmlspecialchars((string) ($prospect['company'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
                                     <div class="text-xs text-zinc-500 mt-1"><?= htmlspecialchars((string) ($prospect['website'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
@@ -602,29 +629,17 @@ require_once __DIR__ . '/templates/header.php';
                                 <td class="py-3 pr-3 text-zinc-300"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></td>
                                 <td class="py-3 pr-3 text-zinc-400"><?= htmlspecialchars((string) ($prospect['last_called_at'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td class="py-3 pr-3 text-zinc-400"><?= htmlspecialchars((string) ($prospect['last_emailed_at'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
-                                <td class="py-3 text-right">
+                                <td class="py-3 text-right" onclick="event.stopPropagation()">
                                     <div class="inline-flex flex-wrap justify-end gap-2">
                                         <button
                                             type="button"
                                             class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:text-cyan-300"
-                                            onclick='openEditModal(<?= htmlspecialchars(json_encode([
-                                                'id' => $pid,
-                                                'company' => (string) ($prospect['company'] ?? ''),
-                                                'contact_name' => (string) ($prospect['contact_name'] ?? ''),
-                                                'phone' => (string) ($prospect['phone'] ?? ''),
-                                                'email' => (string) ($prospect['email'] ?? ''),
-                                                'website' => (string) ($prospect['website'] ?? ''),
-                                                'status' => (string) ($prospect['status'] ?? 'new'),
-                                                'notes' => (string) ($prospect['notes'] ?? ''),
-                                                'raw_text_dump' => (string) ($prospect['raw_text_dump'] ?? ''),
-                                                'parse_provider' => (string) ($prospect['parse_provider'] ?? ''),
-                                                'parse_confidence' => (string) ($prospect['parse_confidence'] ?? ''),
-                                                'parse_errors' => (string) ($prospect['parse_errors'] ?? ''),
-                                            ]), ENT_QUOTES, 'UTF-8') ?>)'
+                                            onclick="openEditModalById(<?= $pid ?>)"
                                         >Edit</button>
+                                        <button type="button" class="rounded-md border border-cyan-700/60 bg-cyan-950/20 px-3 py-1.5 text-xs text-cyan-300 hover:border-cyan-500/60" onclick="openDetailsModal(<?= $pid ?>)">View</button>
 
                                         <?php if ((string) ($prospect['status'] ?? '') !== 'converted'): ?>
-                                            <form method="POST" action="prospects.php" onsubmit="return confirm('Convert this prospect to a customer?');">
+                                            <form method="POST" action="prospects.php" onsubmit="return confirm('Convert this prospect to a customer?');" onclick="event.stopPropagation()">
                                                 <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                                                 <input type="hidden" name="action" value="convert_to_customer">
                                                 <input type="hidden" name="prospect_id" value="<?= $pid ?>">
@@ -634,67 +649,13 @@ require_once __DIR__ . '/templates/header.php';
                                             </form>
                                         <?php endif; ?>
 
-                                        <form method="POST" action="prospects.php" onsubmit="return confirm('Archive this prospect?');">
+                                        <form method="POST" action="prospects.php" onsubmit="return confirm('Archive this prospect?');" onclick="event.stopPropagation()">
                                             <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                                             <input type="hidden" name="action" value="archive_prospect">
                                             <input type="hidden" name="prospect_id" value="<?= $pid ?>">
                                             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                                             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                                             <button type="submit" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 hover:text-red-400">Archive</button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td colspan="6" class="pb-4">
-                                    <div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 mt-1">
-                                        <div class="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
-                                            <div>
-                                                <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Notes</p>
-                                                <p class="text-sm text-zinc-300 whitespace-pre-line"><?= htmlspecialchars((string) ($prospect['notes'] ?? 'No notes yet.'), ENT_QUOTES, 'UTF-8') ?></p>
-                                            </div>
-                                            <div>
-                                                <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Recent Interactions</p>
-                                                <?php if ($rowInteractions === []): ?>
-                                                    <p class="text-xs text-zinc-500">No interactions logged.</p>
-                                                <?php else: ?>
-                                                    <div class="space-y-2">
-                                                        <?php foreach ($rowInteractions as $interaction): ?>
-                                                            <div class="text-xs text-zinc-300 border border-zinc-800 rounded-lg px-2 py-1.5">
-                                                                <div><span class="text-cyan-300 uppercase"><?= htmlspecialchars((string) $interaction['interaction_type'], ENT_QUOTES, 'UTF-8') ?></span> · <?= htmlspecialchars((string) $interaction['interacted_at'], ENT_QUOTES, 'UTF-8') ?></div>
-                                                                <div class="text-zinc-400"><?= htmlspecialchars((string) ($interaction['outcome'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
-                                                                <div class="text-zinc-500"><?= htmlspecialchars((string) ($interaction['interaction_notes'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
-                                                            </div>
-                                                        <?php endforeach; ?>
-                                                    </div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-
-                                        <form method="POST" action="prospects.php" class="mt-4 grid gap-2 md:grid-cols-5">
-                                            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                                            <input type="hidden" name="action" value="log_interaction">
-                                            <input type="hidden" name="prospect_id" value="<?= $pid ?>">
-                                            <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
-                                            <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
-                                            <select name="interaction_type" class="field">
-                                                <option value="call">Call</option>
-                                                <option value="email">Email</option>
-                                                <option value="note">Note</option>
-                                                <option value="status_change">Status Change</option>
-                                            </select>
-                                            <input type="text" name="outcome" maxlength="255" placeholder="Outcome" class="field">
-                                            <select name="new_status" class="field">
-                                                <option value="">Status (optional)</option>
-                                                <?php foreach ($statusMap as $statusKeyOption => $statusLabelOption): ?>
-                                                    <option value="<?= htmlspecialchars($statusKeyOption, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($statusLabelOption, ENT_QUOTES, 'UTF-8') ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <input type="datetime-local" name="interacted_at" class="field">
-                                            <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-zinc-950">Log</button>
-                                            <div class="md:col-span-5">
-                                                <textarea name="interaction_notes" rows="2" maxlength="3000" class="field" placeholder="Interaction notes"></textarea>
-                                            </div>
                                         </form>
                                     </div>
                                 </td>
@@ -707,6 +668,64 @@ require_once __DIR__ . '/templates/header.php';
         </section>
     </div>
 </main>
+
+<div id="prospectDetailsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="prospectDetailsTitle">
+    <div class="modal-box">
+        <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <h2 id="prospectDetailsTitle" class="text-lg font-semibold text-white">Prospect Details</h2>
+            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeDetailsModal()">Close</button>
+        </div>
+        <div class="p-5 space-y-4">
+            <div class="grid gap-3 md:grid-cols-2 text-sm">
+                <div><span class="text-zinc-500">Company:</span> <span id="details_company" class="text-zinc-200"></span></div>
+                <div><span class="text-zinc-500">Contact:</span> <span id="details_contact_name" class="text-zinc-200"></span></div>
+                <div><span class="text-zinc-500">Phone:</span> <span id="details_phone" class="text-zinc-200"></span></div>
+                <div><span class="text-zinc-500">Email:</span> <span id="details_email" class="text-zinc-200"></span></div>
+                <div><span class="text-zinc-500">Website:</span> <span id="details_website" class="text-zinc-200"></span></div>
+                <div><span class="text-zinc-500">Status:</span> <span id="details_status" class="text-zinc-200"></span></div>
+                <div><span class="text-zinc-500">Last Called:</span> <span id="details_last_called_at" class="text-zinc-200"></span></div>
+                <div><span class="text-zinc-500">Last Emailed:</span> <span id="details_last_emailed_at" class="text-zinc-200"></span></div>
+            </div>
+            <div>
+                <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Notes</p>
+                <div id="details_notes" class="text-sm text-zinc-300 whitespace-pre-line rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"></div>
+            </div>
+            <div>
+                <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Raw Source</p>
+                <div id="details_raw_source" class="text-xs text-zinc-400 whitespace-pre-line rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 max-h-48 overflow-auto"></div>
+            </div>
+            <div>
+                <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Interaction History</p>
+                <div id="details_interactions" class="space-y-2"></div>
+            </div>
+            <form method="POST" action="prospects.php" class="pt-2 grid gap-2 md:grid-cols-5">
+                <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="action" value="log_interaction">
+                <input type="hidden" name="prospect_id" id="details_prospect_id" value="0">
+                <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                <select name="interaction_type" class="field">
+                    <option value="call">Call</option>
+                    <option value="email">Email</option>
+                    <option value="note">Note</option>
+                    <option value="status_change">Status Change</option>
+                </select>
+                <input type="text" name="outcome" maxlength="255" placeholder="Outcome" class="field">
+                <select name="new_status" class="field">
+                    <option value="">Status (optional)</option>
+                    <?php foreach ($statusMap as $statusKeyOption => $statusLabelOption): ?>
+                        <option value="<?= htmlspecialchars($statusKeyOption, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($statusLabelOption, ENT_QUOTES, 'UTF-8') ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <input type="datetime-local" name="interacted_at" id="details_interacted_at" class="field" value="<?= htmlspecialchars($laNowDateTimeLocal, ENT_QUOTES, 'UTF-8') ?>">
+                <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-zinc-950">Log</button>
+                <div class="md:col-span-5">
+                    <textarea name="interaction_notes" rows="2" maxlength="3000" class="field" placeholder="Interaction notes"></textarea>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <div id="prospectModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="prospectModalTitle">
     <div class="modal-box">
@@ -744,8 +763,8 @@ require_once __DIR__ . '/templates/header.php';
                 <textarea class="field" rows="4" name="notes" id="form_notes" maxlength="10000"></textarea>
             </div>
             <div>
-                <label class="label">Smart Text Dump (AI Parse Preview)</label>
-                <textarea class="field" rows="6" name="raw_text_dump" id="form_raw_text_dump" maxlength="65000" placeholder="Paste website/company text dump here."></textarea>
+                <label class="label">Smart Raw Source (AI Parse Preview)</label>
+                <textarea class="field" rows="6" name="raw_source" id="form_raw_source" maxlength="65000" placeholder="Paste website/company text dump here."></textarea>
                 <div class="mt-2 flex items-center gap-2">
                     <button type="button" id="parseBtn" onclick="parseTextDump()" class="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-300 hover:bg-cyan-500/20">AI Parse &amp; Preview</button>
                     <span id="parseMeta" class="text-xs text-zinc-500"></span>
@@ -798,6 +817,10 @@ require_once __DIR__ . '/templates/header.php';
 
 <script>
 const prospectsCsrf = <?= json_encode($csrf, JSON_UNESCAPED_UNICODE) ?>;
+const prospectRecords = <?= json_encode($prospectsForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+const prospectInteractions = <?= json_encode($interactionsByProspect, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+const statusLabels = <?= json_encode($statusMap, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+const laNowDateTimeLocal = <?= json_encode($laNowDateTimeLocal, JSON_UNESCAPED_UNICODE) ?>;
 let latestParseResult = null;
 
 function openCreateModal() {
@@ -809,10 +832,16 @@ function openCreateModal() {
     document.getElementById('form_parse_confidence').value = '';
     document.getElementById('form_parse_errors').value = '';
     document.getElementById('parseMeta').textContent = '';
+    document.getElementById('form_raw_source').value = '';
     document.getElementById('prospectModal').classList.add('open');
 }
 
+function openEditModalById(prospectId) {
+    openEditModal(prospectRecords[String(prospectId)] || prospectRecords[prospectId] || null);
+}
+
 function openEditModal(prospect) {
+    if (!prospect) return;
     document.getElementById('prospectModalTitle').textContent = 'Edit Prospect';
     document.getElementById('form_prospect_id').value = String(prospect.id || 0);
     document.getElementById('form_company').value = prospect.company || '';
@@ -822,7 +851,7 @@ function openEditModal(prospect) {
     document.getElementById('form_website').value = prospect.website || '';
     document.getElementById('form_status').value = prospect.status || 'new';
     document.getElementById('form_notes').value = prospect.notes || '';
-    document.getElementById('form_raw_text_dump').value = prospect.raw_text_dump || '';
+    document.getElementById('form_raw_source').value = prospect.raw_source || '';
     document.getElementById('form_parse_provider').value = prospect.parse_provider || '';
     document.getElementById('form_parse_confidence').value = prospect.parse_confidence || '';
     document.getElementById('form_parse_errors').value = prospect.parse_errors || '';
@@ -834,8 +863,79 @@ function closeProspectModal() {
     document.getElementById('prospectModal').classList.remove('open');
 }
 
+function escapeHtml(value) {
+    return String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+}
+
+function openDetailsModal(prospectId) {
+    const prospect = prospectRecords[String(prospectId)] || prospectRecords[prospectId];
+    if (!prospect) return;
+    document.getElementById('details_prospect_id').value = String(prospect.id || 0);
+    document.getElementById('details_company').textContent = prospect.company || '—';
+    document.getElementById('details_contact_name').textContent = prospect.contact_name || '—';
+    document.getElementById('details_phone').textContent = prospect.phone || '—';
+    document.getElementById('details_email').textContent = prospect.email || '—';
+    document.getElementById('details_website').textContent = prospect.website || '—';
+    document.getElementById('details_status').textContent = statusLabels[prospect.status] || prospect.status || '—';
+    document.getElementById('details_last_called_at').textContent = prospect.last_called_at || '—';
+    document.getElementById('details_last_emailed_at').textContent = prospect.last_emailed_at || '—';
+    document.getElementById('details_notes').textContent = prospect.notes || 'No notes yet.';
+    document.getElementById('details_raw_source').textContent = prospect.raw_source || 'No raw source saved.';
+    document.getElementById('details_interacted_at').value = getCurrentLosAngelesDateTimeLocal();
+
+    const interactions = prospectInteractions[String(prospect.id)] || prospectInteractions[prospect.id] || [];
+    const history = document.getElementById('details_interactions');
+    if (!Array.isArray(interactions) || interactions.length === 0) {
+        history.innerHTML = '<p class="text-xs text-zinc-500">No interactions logged.</p>';
+    } else {
+        history.innerHTML = interactions.map((interaction) => `
+            <div class="text-xs text-zinc-300 border border-zinc-800 rounded-lg px-2 py-1.5">
+                <div><span class="text-cyan-300 uppercase">${escapeHtml(interaction.interaction_type || '')}</span> · ${escapeHtml(interaction.interacted_at || '')}</div>
+                <div class="text-zinc-400">${escapeHtml(interaction.outcome || '')}</div>
+                <div class="text-zinc-500">${escapeHtml(interaction.interaction_notes || '')}</div>
+            </div>
+        `).join('');
+    }
+    document.getElementById('prospectDetailsModal').classList.add('open');
+}
+
+function closeDetailsModal() {
+    document.getElementById('prospectDetailsModal').classList.remove('open');
+}
+
+function getCurrentLosAngelesDateTimeLocal() {
+    try {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Los_Angeles',
+            hour12: false,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+        }).formatToParts(new Date());
+        const get = (type) => parts.find((part) => part.type === type)?.value || '';
+        const year = get('year');
+        const month = get('month');
+        const day = get('day');
+        const hour = get('hour');
+        const minute = get('minute');
+        if (year && month && day && hour && minute) {
+            return `${year}-${month}-${day}T${hour}:${minute}`;
+        }
+    } catch (e) {
+        // Fall back below.
+    }
+    return laNowDateTimeLocal;
+}
+
 async function parseTextDump() {
-    const raw = document.getElementById('form_raw_text_dump').value.trim();
+    const raw = document.getElementById('form_raw_source').value.trim();
     const parseBtn = document.getElementById('parseBtn');
     if (!raw) {
         alert('Paste text to parse first.');
@@ -903,8 +1003,12 @@ document.getElementById('prospectModal').addEventListener('click', (e) => {
 document.getElementById('parsePreviewModal').addEventListener('click', (e) => {
     if (e.target.id === 'parsePreviewModal') closeParsePreview();
 });
+document.getElementById('prospectDetailsModal').addEventListener('click', (e) => {
+    if (e.target.id === 'prospectDetailsModal') closeDetailsModal();
+});
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+        closeDetailsModal();
         closeProspectModal();
         closeParsePreview();
     }
