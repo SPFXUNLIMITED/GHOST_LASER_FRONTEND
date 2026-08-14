@@ -402,6 +402,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $_SESSION['prospects_flash_success'] = 'Keyword removed.';
+        } elseif ($action === 'delete_category') {
+            $deleteCategoryId = (int) ($_POST['category_id'] ?? 0);
+            if ($deleteCategoryId <= 0) {
+                throw new RuntimeException('Invalid category.');
+            }
+            $pdo->prepare("DELETE FROM prospect_category_keywords WHERE category_id = :id")->execute([':id' => $deleteCategoryId]);
+            $pdo->prepare("DELETE FROM prospect_categories WHERE id = :id LIMIT 1")->execute([':id' => $deleteCategoryId]);
+            $_SESSION['prospects_flash_success'] = 'Category deleted.';
+            $redirectQs = http_build_query(array_filter([
+                'status' => $queryStatus,
+                'q' => $querySearch,
+            ], static fn($value) => $value !== ''));
         } elseif ($action === 'save_prospect') {
             $prospectId = (int) ($_POST['prospect_id'] ?? 0);
             $company = prospectSanitizeField((string) ($_POST['company'] ?? ''));
@@ -837,9 +849,10 @@ require_once __DIR__ . '/templates/header.php';
                             }
                             $isActiveCategoryLink = $isCategoryFocused && (int) $activeCategory['id'] === $categoryId;
                         ?>
-                        <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="rounded-full border px-3 py-1 text-xs font-semibold <?= $isActiveCategoryLink ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">
-                            <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>
-                        </a>
+                        <span class="inline-flex items-center rounded-full border <?= $isActiveCategoryLink ? 'border-cyan-500/60 bg-cyan-500/15' : 'border-zinc-700 bg-zinc-800' ?>">
+                            <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="px-3 py-1 text-xs font-semibold <?= $isActiveCategoryLink ? 'text-cyan-200' : 'text-zinc-300 hover:text-cyan-200' ?>"><?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?></a>
+                            <button type="button" onclick="confirmDeleteCategory(<?= $categoryId ?>, <?= htmlspecialchars(json_encode($categoryName), ENT_QUOTES, 'UTF-8') ?>)" class="pr-2 text-zinc-500 hover:text-red-400" title="Delete category" aria-label="Delete <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>">&#x2715;</button>
+                        </span>
                     <?php endforeach; ?>
                 </div>
 
@@ -1295,6 +1308,14 @@ function openCategoryModal() {
     document.getElementById('categoryModal').classList.add('open');
 }
 
+function confirmDeleteCategory(categoryId, categoryName) {
+    if (!confirm('Delete the category "' + categoryName + '"? This will also remove all its keywords. This cannot be undone.')) {
+        return;
+    }
+    document.getElementById('deleteCategoryId').value = categoryId;
+    document.getElementById('deleteCategoryForm').submit();
+}
+
 function closeCategoryModal() {
     document.getElementById('categoryModal').classList.remove('open');
 }
@@ -1662,4 +1683,11 @@ document.addEventListener('keydown', (e) => {
     }
 });
 </script>
+
+<form id="deleteCategoryForm" method="POST" action="prospects.php" hidden>
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="action" value="delete_category">
+    <input type="hidden" name="category_id" id="deleteCategoryId" value="">
+</form>
+
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
