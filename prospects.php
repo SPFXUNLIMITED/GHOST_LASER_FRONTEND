@@ -344,6 +344,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $_SESSION['prospects_flash_success'] = 'All pasted keywords already exist for this category.';
             }
+        } elseif ($action === 'bulk_add_categories') {
+            $rawLines = explode("\n", (string) ($_POST['bulk_category_names'] ?? ''));
+            $names = [];
+            foreach ($rawLines as $line) {
+                $name = prospectSanitizeField(trim($line));
+                if ($name !== '') {
+                    $names[] = $name;
+                }
+            }
+            $names = array_values(array_unique($names));
+            if ($names === []) {
+                throw new RuntimeException('Enter at least one category name.');
+            }
+
+            $insertStmt = $pdo->prepare("
+                INSERT IGNORE INTO prospect_categories (name, slug)
+                VALUES (:name, :slug)
+            ");
+
+            $addedCount = 0;
+            foreach ($names as $name) {
+                $slug = prospectCategorySlugify($name);
+                if ($slug === '') {
+                    continue;
+                }
+                $insertStmt->execute([':name' => $name, ':slug' => $slug]);
+                $addedCount += $insertStmt->rowCount();
+            }
+
+            if ($addedCount > 0) {
+                $_SESSION['prospects_flash_success'] = $addedCount === 1
+                    ? '1 category created.'
+                    : $addedCount . ' categories created.';
+            } else {
+                $_SESSION['prospects_flash_success'] = 'All pasted categories already exist.';
+            }
         } elseif ($action === 'remove_category_keyword') {
             if ($activeCategory === null) {
                 throw new RuntimeException('Select a category before managing keywords.');
@@ -817,6 +853,23 @@ require_once __DIR__ . '/templates/header.php';
                     <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Create Category</button>
                 </form>
             </div>
+        </section>
+
+        <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-3">
+            <h2 class="text-base font-semibold text-white">Bulk Add Categories</h2>
+            <form method="POST" action="prospects.php" class="space-y-3">
+                <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="action" value="bulk_add_categories">
+                <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                <div>
+                    <label class="label">Category Names (one per line)</label>
+                    <textarea name="bulk_category_names" rows="6" class="field" maxlength="20000" placeholder="Paste one category name per line"></textarea>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Add All Categories</button>
+                </div>
+            </form>
         </section>
 
         <?php if ($flashSuccess !== ''): ?>
