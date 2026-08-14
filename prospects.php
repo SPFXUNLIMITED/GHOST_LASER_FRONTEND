@@ -63,6 +63,20 @@ function prospectNormalizeKeyword(string $value): string
     return trim($value);
 }
 
+function prospectNormalizeKeywordList(string $value): array
+{
+    $lines = preg_split('/\R/', $value) ?: [];
+    $keywords = [];
+    foreach ($lines as $line) {
+        $keyword = prospectNormalizeKeyword((string) $line);
+        if ($keyword !== '') {
+            $keywords[] = $keyword;
+        }
+    }
+
+    return array_values(array_unique($keywords));
+}
+
 function prospectSplitContactName(string $contactName): array
 {
     $contactName = trim($contactName);
@@ -265,6 +279,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['prospects_flash_success'] = $stmt->rowCount() > 0
                 ? 'Keyword added.'
                 : 'Keyword already exists for this category.';
+        } elseif ($action === 'bulk_add_category_keywords') {
+            if ($activeCategory === null) {
+                throw new RuntimeException('Select a category before managing keywords.');
+            }
+
+            $keywords = prospectNormalizeKeywordList((string) ($_POST['bulk_keywords'] ?? ''));
+            if ($keywords === []) {
+                throw new RuntimeException('Enter at least one keyword.');
+            }
+
+            $stmt = $pdo->prepare("
+                INSERT IGNORE INTO prospect_category_keywords (category_id, keyword)
+                VALUES (:category_id, :keyword)
+            ");
+
+            $addedCount = 0;
+            foreach ($keywords as $keyword) {
+                $stmt->execute([
+                    ':category_id' => (int) $activeCategory['id'],
+                    ':keyword' => $keyword,
+                ]);
+                $addedCount += $stmt->rowCount();
+            }
+
+            if ($addedCount > 0) {
+                $_SESSION['prospects_flash_success'] = $addedCount === 1
+                    ? '1 keyword added.'
+                    : $addedCount . ' keywords added.';
+            } else {
+                $_SESSION['prospects_flash_success'] = 'All pasted keywords already exist for this category.';
+            }
         } elseif ($action === 'remove_category_keyword') {
             if ($activeCategory === null) {
                 throw new RuntimeException('Select a category before managing keywords.');
@@ -750,6 +795,21 @@ require_once __DIR__ . '/templates/header.php';
                     <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                     <input type="text" name="keyword" class="field" maxlength="255" placeholder="e.g. channel letters" required>
                     <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Add</button>
+                </form>
+
+                <form method="POST" action="prospects.php" class="space-y-3">
+                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="action" value="bulk_add_category_keywords">
+                    <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                    <div>
+                        <label class="label">Bulk Add Keywords</label>
+                        <textarea name="bulk_keywords" rows="6" class="field" maxlength="20000" placeholder="Paste one keyword per line"></textarea>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="submit" class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/20">Add All Keywords</button>
+                    </div>
                 </form>
 
                 <div class="flex flex-wrap gap-2">
