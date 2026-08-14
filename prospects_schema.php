@@ -17,6 +17,40 @@ function prospectsColumnExists(PDO $pdo, string $table, string $column): bool
     return (int) $stmt->fetchColumn() > 0;
 }
 
+function prospectsIndexExists(PDO $pdo, string $table, string $index): bool
+{
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+          AND INDEX_NAME = :index_name
+    ");
+    $stmt->execute([
+        ':table_name' => $table,
+        ':index_name' => $index,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function prospectsConstraintExists(PDO $pdo, string $table, string $constraint): bool
+{
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM information_schema.TABLE_CONSTRAINTS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+          AND CONSTRAINT_NAME = :constraint_name
+    ");
+    $stmt->execute([
+        ':table_name' => $table,
+        ':constraint_name' => $constraint,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
 function prospectsEnsureSchema(PDO $pdo): void
 {
     $pdo->exec("
@@ -27,6 +61,7 @@ function prospectsEnsureSchema(PDO $pdo): void
             phone VARCHAR(100) NULL,
             email VARCHAR(255) NULL,
             website VARCHAR(255) NULL,
+            prospect_category_id BIGINT UNSIGNED NULL,
             last_called_at DATETIME NULL,
             last_emailed_at DATETIME NULL,
             status ENUM(
@@ -57,9 +92,55 @@ function prospectsEnsureSchema(PDO $pdo): void
             INDEX idx_prospects_email (email),
             INDEX idx_prospects_phone (phone),
             INDEX idx_prospects_last_called_at (last_called_at),
-            INDEX idx_prospects_archived (is_archived)
+            INDEX idx_prospects_archived (is_archived),
+            INDEX idx_prospects_category_id (prospect_category_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS prospect_categories (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(120) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_prospect_categories_name (name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    $pdo->exec("
+        INSERT INTO prospect_categories (name)
+        SELECT 'Uncategorized'
+        FROM DUAL
+        WHERE NOT EXISTS (
+            SELECT 1 FROM prospect_categories
+        )
+    ");
+
+    if (!prospectsColumnExists($pdo, 'prospects', 'prospect_category_id')) {
+        $pdo->exec("ALTER TABLE prospects ADD COLUMN prospect_category_id BIGINT UNSIGNED NULL AFTER website");
+    }
+    if (!prospectsIndexExists($pdo, 'prospects', 'idx_prospects_category_id')) {
+        $pdo->exec("ALTER TABLE prospects ADD INDEX idx_prospects_category_id (prospect_category_id)");
+    }
+
+    $defaultCategoryId = (int) ($pdo->query("SELECT id FROM prospect_categories ORDER BY id ASC LIMIT 1")->fetchColumn() ?: 0);
+    if ($defaultCategoryId > 0) {
+        $updateCategoryStmt = $pdo->prepare("
+            UPDATE prospects
+            SET prospect_category_id = :category_id
+            WHERE prospect_category_id IS NULL
+        ");
+        $updateCategoryStmt->execute([':category_id' => $defaultCategoryId]);
+    }
+
+    if (!prospectsConstraintExists($pdo, 'prospects', 'fk_prospects_category')) {
+        $pdo->exec("
+            ALTER TABLE prospects
+            ADD CONSTRAINT fk_prospects_category
+            FOREIGN KEY (prospect_category_id) REFERENCES prospect_categories(id)
+            ON DELETE SET NULL
+        ");
+    }
 
     if (!prospectsColumnExists($pdo, 'prospects', 'converted_customer_id')) {
         $pdo->exec("ALTER TABLE prospects ADD COLUMN converted_customer_id INT UNSIGNED NULL AFTER parse_errors");

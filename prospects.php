@@ -23,6 +23,32 @@ function prospectAllowedStatuses(): array
     return array_keys(prospectStatuses());
 }
 
+function prospectFetchCategories(PDO $pdo): array
+{
+    $stmt = $pdo->query("SELECT id, name FROM prospect_categories ORDER BY name ASC");
+    $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    return is_array($rows) ? $rows : [];
+}
+
+function prospectFindFallbackCategoryId(PDO $pdo, int $excludeId = 0): int
+{
+    $sql = "SELECT id FROM prospect_categories";
+    $params = [];
+    if ($excludeId > 0) {
+        $sql .= " WHERE id != :exclude_id";
+        $params[':exclude_id'] = $excludeId;
+    }
+    $sql .= " ORDER BY CASE WHEN LOWER(name) = 'uncategorized' THEN 0 ELSE 1 END, name ASC LIMIT 1";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return (int) ($stmt->fetchColumn() ?: 0);
+}
+
+function prospectNormalizeCategoryName(string $value): string
+{
+    return prospectSanitizeField($value, 120);
+}
+
 function prospectCleanDateTimeInput(string $value): ?string
 {
     $value = trim($value);
@@ -158,9 +184,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postCsrf = trim((string) ($_POST['csrf'] ?? ''));
     $action = trim((string) ($_POST['action'] ?? ''));
     $queryStatus = trim((string) ($_POST['status_filter'] ?? 'all'));
+    $queryCategory = (int) ($_POST['category_filter'] ?? 0);
     $querySearch = trim((string) ($_POST['q'] ?? ''));
     $redirectQs = http_build_query(array_filter([
         'status' => $queryStatus,
+        'category' => $queryCategory > 0 ? $queryCategory : null,
         'q' => $querySearch,
     ], static fn($value) => $value !== ''));
 
@@ -179,6 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email = strtolower(prospectSanitizeField((string) ($_POST['email'] ?? '')));
             $website = prospectSanitizeField((string) ($_POST['website'] ?? ''));
             $status = trim((string) ($_POST['status'] ?? 'new'));
+            $categoryId = (int) ($_POST['prospect_category_id'] ?? 0);
             $notes = prospectSanitizeField((string) ($_POST['notes'] ?? ''), 10000);
             $rawSource = prospectSanitizeField((string) ($_POST['raw_source'] ?? ($_POST['raw_text_dump'] ?? '')), 65000);
             $parseProvider = prospectSanitizeField((string) ($_POST['parse_provider'] ?? ''), 100);
@@ -193,6 +222,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new RuntimeException('Invalid email format.');
+            }
+            $categoryExistsStmt = $pdo->prepare("SELECT COUNT(*) FROM prospect_categories WHERE id = :id");
+            $categoryExistsStmt->execute([':id' => $categoryId]);
+            if ($categoryId <= 0 || (int) $categoryExistsStmt->fetchColumn() <= 0) {
+                throw new RuntimeException('Please select a valid category.');
             }
 
             $duplicate = prospectFindDuplicate($pdo, $prospectId, $email, $phone, $company);
@@ -218,6 +252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         phone = :phone,
                         email = :email,
                         website = :website,
+                        prospect_category_id = :prospect_category_id,
                         status = :status,
                         notes = :notes,
                         raw_source = :raw_source,
@@ -234,6 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':phone' => $phone !== '' ? $phone : null,
                     ':email' => $email !== '' ? $email : null,
                     ':website' => $website !== '' ? $website : null,
+                    ':prospect_category_id' => $categoryId,
                     ':status' => $status,
                     ':notes' => $notes !== '' ? $notes : null,
                     ':raw_source' => $rawSource !== '' ? $rawSource : null,
@@ -248,11 +284,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $stmt = $pdo->prepare("
                     INSERT INTO prospects (
-                        company, contact_name, phone, email, website, status, notes,
+                        company, contact_name, phone, email, website, prospect_category_id, status, notes,
                         raw_source, parse_preview_json, parse_confidence, parse_provider, parse_errors,
                         created_by, updated_by
                     ) VALUES (
-                        :company, :contact_name, :phone, :email, :website, :status, :notes,
+                        :company, :contact_name, :phone, :email, :website, :prospect_category_id, :status, :notes,
                         :raw_source, :parse_preview_json, :parse_confidence, :parse_provider, :parse_errors,
                         :created_by, :updated_by
                     )
@@ -263,6 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':phone' => $phone !== '' ? $phone : null,
                     ':email' => $email !== '' ? $email : null,
                     ':website' => $website !== '' ? $website : null,
+                    ':prospect_category_id' => $categoryId,
                     ':status' => $status,
                     ':notes' => $notes !== '' ? $notes : null,
                     ':raw_source' => $rawSource !== '' ? $rawSource : null,
@@ -467,6 +504,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
             $_SESSION['prospects_flash_success'] = 'Prospect converted to customer #' . $customerId . '.';
+        } elseif ($action === 'create_category') {
+            $name = prospectNormalizeCategoryName((string) ($_POST['category_name'] ?? ''));
+            if ($name === '') {
+                throw new RuntimeException('Category name is required.');
+            }
+            $stmt = $pdo->prepare("INSERT INTO prospect_categories (name) VALUES (:name)");
+            $stmt->execute([':name' => $name]);
+            $_SESSION['prospects_flash_success'] = 'Category created.';
+        } elseif ($action === 'update_category') {
+            $categoryId = (int) ($_POST['category_id'] ?? 0);
+            $name = prospectNormalizeCategoryName((string) ($_POST['category_name'] ?? ''));
+            if ($categoryId <= 0 || $name === '') {
+                throw new RuntimeException('Category name is required.');
+            }
+            $stmt = $pdo->prepare("UPDATE prospect_categories SET name = :name WHERE id = :id");
+            $stmt->execute([
+                ':name' => $name,
+                ':id' => $categoryId,
+            ]);
+            $_SESSION['prospects_flash_success'] = 'Category updated.';
+        } elseif ($action === 'delete_category') {
+            $categoryId = (int) ($_POST['category_id'] ?? 0);
+            if ($categoryId <= 0) {
+                throw new RuntimeException('Invalid category.');
+            }
+            $countStmt = $pdo->query("SELECT COUNT(*) FROM prospect_categories");
+            $categoryCount = (int) ($countStmt ? $countStmt->fetchColumn() : 0);
+            if ($categoryCount <= 1) {
+                throw new RuntimeException('At least one category must remain.');
+            }
+            $fallbackCategoryId = prospectFindFallbackCategoryId($pdo, $categoryId);
+            if ($fallbackCategoryId <= 0) {
+                throw new RuntimeException('Could not find fallback category.');
+            }
+
+            $pdo->beginTransaction();
+            $reassignStmt = $pdo->prepare("
+                UPDATE prospects
+                SET prospect_category_id = :fallback_category_id
+                WHERE prospect_category_id = :category_id
+            ");
+            $reassignStmt->execute([
+                ':fallback_category_id' => $fallbackCategoryId,
+                ':category_id' => $categoryId,
+            ]);
+            $deleteStmt = $pdo->prepare("DELETE FROM prospect_categories WHERE id = :id");
+            $deleteStmt->execute([':id' => $categoryId]);
+            $pdo->commit();
+            $_SESSION['prospects_flash_success'] = 'Category deleted.';
         }
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -480,7 +566,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $statusFilter = trim((string) ($_GET['status'] ?? 'all'));
+$categoryFilter = (int) ($_GET['category'] ?? 0);
 $search = trim((string) ($_GET['q'] ?? ''));
+$categories = prospectFetchCategories($pdo);
+$categoryOptions = [];
+foreach ($categories as $categoryRow) {
+    $cid = (int) ($categoryRow['id'] ?? 0);
+    if ($cid <= 0) {
+        continue;
+    }
+    $categoryOptions[$cid] = (string) ($categoryRow['name'] ?? '');
+}
+if ($categoryFilter > 0 && !isset($categoryOptions[$categoryFilter])) {
+    $categoryFilter = 0;
+}
+$defaultCategoryId = $categoryFilter > 0
+    ? $categoryFilter
+    : (array_key_first($categoryOptions) !== null ? (int) array_key_first($categoryOptions) : 0);
 
 $where = ['is_archived = 0'];
 $params = [];
@@ -489,6 +591,10 @@ if ($statusFilter !== '' && $statusFilter !== 'all' && in_array($statusFilter, p
     $params[':status'] = $statusFilter;
 } else {
     $statusFilter = 'all';
+}
+if ($categoryFilter > 0) {
+    $where[] = 'prospect_category_id = :category_id';
+    $params[':category_id'] = $categoryFilter;
 }
 if ($search !== '') {
     $where[] = '(company LIKE :q OR contact_name LIKE :q OR email LIKE :q OR phone LIKE :q)';
@@ -532,6 +638,7 @@ foreach ($prospects as $prospect) {
         'phone' => (string) ($prospect['phone'] ?? ''),
         'email' => (string) ($prospect['email'] ?? ''),
         'website' => (string) ($prospect['website'] ?? ''),
+        'prospect_category_id' => (int) ($prospect['prospect_category_id'] ?? 0),
         'status' => (string) ($prospect['status'] ?? 'new'),
         'last_called_at' => (string) ($prospect['last_called_at'] ?? ''),
         'last_emailed_at' => (string) ($prospect['last_emailed_at'] ?? ''),
@@ -541,6 +648,10 @@ foreach ($prospects as $prospect) {
         'parse_confidence' => (string) ($prospect['parse_confidence'] ?? ''),
         'parse_errors' => (string) ($prospect['parse_errors'] ?? ''),
     ];
+}
+$categoriesForJs = [];
+foreach ($categoryOptions as $categoryId => $categoryName) {
+    $categoriesForJs[(string) $categoryId] = $categoryName;
 }
 $pageTitle = 'Prospects | Ghost Laser';
 $pageDescription = 'Cold calling prospect pipeline management.';
@@ -581,7 +692,13 @@ require_once __DIR__ . '/templates/header.php';
         <?php endif; ?>
 
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
-            <form method="GET" action="prospects.php" class="grid gap-3 md:grid-cols-[220px_1fr_auto]">
+            <form method="GET" action="prospects.php" class="grid gap-3 md:grid-cols-[220px_220px_1fr_auto]">
+                <select name="category" class="field">
+                    <option value="0"<?= $categoryFilter === 0 ? ' selected' : '' ?>>All categories</option>
+                    <?php foreach ($categoryOptions as $categoryId => $categoryName): ?>
+                        <option value="<?= (int) $categoryId ?>"<?= $categoryFilter === (int) $categoryId ? ' selected' : '' ?>><?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?></option>
+                    <?php endforeach; ?>
+                </select>
                 <select name="status" class="field">
                     <option value="all"<?= $statusFilter === 'all' ? ' selected' : '' ?>>All statuses</option>
                     <?php foreach ($statusMap as $statusKey => $statusLabel): ?>
@@ -593,6 +710,48 @@ require_once __DIR__ . '/templates/header.php';
             </form>
         </section>
 
+        <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between gap-3">
+                <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-300">Prospect Categories</h2>
+            </div>
+            <form method="POST" action="prospects.php" class="grid gap-2 md:grid-cols-[1fr_auto]">
+                <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="action" value="create_category">
+                <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="category_filter" value="<?= (int) $categoryFilter ?>">
+                <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="text" name="category_name" maxlength="120" class="field" placeholder="Add category (e.g. Sign Shops)" required>
+                <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Add Category</button>
+            </form>
+            <?php if ($categoryOptions !== []): ?>
+                <div class="space-y-2">
+                    <?php foreach ($categoryOptions as $categoryId => $categoryName): ?>
+                        <div class="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                            <form method="POST" action="prospects.php" class="contents">
+                                <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="hidden" name="action" value="update_category">
+                                <input type="hidden" name="category_id" value="<?= (int) $categoryId ?>">
+                                <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="hidden" name="category_filter" value="<?= (int) $categoryFilter ?>">
+                                <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="text" name="category_name" maxlength="120" class="field" value="<?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>" required>
+                                <button type="submit" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300 hover:text-cyan-300">Rename</button>
+                            </form>
+                            <form method="POST" action="prospects.php" onsubmit="return confirm('Delete this category? Prospects in it will be moved to another category.');">
+                                <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="hidden" name="action" value="delete_category">
+                                <input type="hidden" name="category_id" value="<?= (int) $categoryId ?>">
+                                <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="hidden" name="category_filter" value="<?= (int) $categoryFilter ?>">
+                                <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                                <button type="submit" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-400 hover:text-red-400">Delete</button>
+                            </form>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </section>
+
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
             <?php if ($prospects === []): ?>
                 <p class="text-sm text-zinc-500">No prospects found.</p>
@@ -602,6 +761,7 @@ require_once __DIR__ . '/templates/header.php';
                         <thead>
                             <tr class="border-b border-zinc-800">
                                 <th class="pb-3 text-left text-zinc-500">Company</th>
+                                <th class="pb-3 text-left text-zinc-500">Category</th>
                                 <th class="pb-3 text-left text-zinc-500">Contact</th>
                                 <th class="pb-3 text-left text-zinc-500">Status</th>
                                 <th class="pb-3 text-left text-zinc-500">Last Called</th>
@@ -621,6 +781,7 @@ require_once __DIR__ . '/templates/header.php';
                                     <div class="font-semibold text-white"><?= htmlspecialchars((string) ($prospect['company'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
                                     <div class="text-xs text-zinc-500 mt-1"><?= htmlspecialchars((string) ($prospect['website'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
                                 </td>
+                                <td class="py-3 pr-3 text-zinc-300"><?= htmlspecialchars($categoryOptions[(int) ($prospect['prospect_category_id'] ?? 0)] ?? '—', ENT_QUOTES, 'UTF-8') ?></td>
                                 <td class="py-3 pr-3 text-zinc-300">
                                     <div><?= htmlspecialchars((string) ($prospect['contact_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
                                     <div class="text-xs text-zinc-500 mt-1"><?= htmlspecialchars((string) ($prospect['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
@@ -644,6 +805,7 @@ require_once __DIR__ . '/templates/header.php';
                                                 <input type="hidden" name="action" value="convert_to_customer">
                                                 <input type="hidden" name="prospect_id" value="<?= $pid ?>">
                                                 <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                                <input type="hidden" name="category_filter" value="<?= (int) $categoryFilter ?>">
                                                 <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                                                 <button type="submit" class="rounded-md border border-emerald-700/60 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-500/60">Convert to Customer</button>
                                             </form>
@@ -654,6 +816,7 @@ require_once __DIR__ . '/templates/header.php';
                                             <input type="hidden" name="action" value="archive_prospect">
                                             <input type="hidden" name="prospect_id" value="<?= $pid ?>">
                                             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="category_filter" value="<?= (int) $categoryFilter ?>">
                                             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                                             <button type="submit" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 hover:text-red-400">Archive</button>
                                         </form>
@@ -685,6 +848,7 @@ require_once __DIR__ . '/templates/header.php';
                 <div><span class="text-zinc-500">Phone:</span> <span id="details_phone" class="text-zinc-200"></span></div>
                 <div><span class="text-zinc-500">Email:</span> <span id="details_email" class="text-zinc-200"></span></div>
                 <div><span class="text-zinc-500">Website:</span> <span id="details_website" class="text-zinc-200"></span></div>
+                <div><span class="text-zinc-500">Category:</span> <span id="details_category" class="text-zinc-200"></span></div>
                 <div><span class="text-zinc-500">Status:</span> <span id="details_status" class="text-zinc-200"></span></div>
                 <div><span class="text-zinc-500">Last Called:</span> <span id="details_last_called_at" class="text-zinc-200"></span></div>
                 <div><span class="text-zinc-500">Last Emailed:</span> <span id="details_last_emailed_at" class="text-zinc-200"></span></div>
@@ -706,6 +870,7 @@ require_once __DIR__ . '/templates/header.php';
                 <input type="hidden" name="action" value="log_interaction">
                 <input type="hidden" name="prospect_id" id="details_prospect_id" value="0">
                 <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="category_filter" value="<?= (int) $categoryFilter ?>">
                 <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                 <select name="interaction_type" class="field">
                     <option value="call">Call</option>
@@ -771,6 +936,7 @@ require_once __DIR__ . '/templates/header.php';
             <input type="hidden" name="action" value="save_prospect">
             <input type="hidden" name="prospect_id" id="form_prospect_id" value="0">
             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="category_filter" value="<?= (int) $categoryFilter ?>">
             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="parse_provider" id="form_parse_provider" value="">
             <input type="hidden" name="parse_confidence" id="form_parse_confidence" value="">
@@ -782,6 +948,14 @@ require_once __DIR__ . '/templates/header.php';
                 <div><label class="label">Phone</label><input class="field" type="text" name="phone" id="form_phone" maxlength="100"></div>
                 <div><label class="label">Email</label><input class="field" type="email" name="email" id="form_email" maxlength="255"></div>
                 <div><label class="label">Website</label><input class="field" type="text" name="website" id="form_website" maxlength="255"></div>
+                <div>
+                    <label class="label">Category</label>
+                    <select class="field" name="prospect_category_id" id="form_prospect_category_id" required>
+                        <?php foreach ($categoryOptions as $categoryId => $categoryName): ?>
+                            <option value="<?= (int) $categoryId ?>"><?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <div>
                     <label class="label">Status</label>
                     <select class="field" name="status" id="form_status">
@@ -853,6 +1027,8 @@ const prospectsCsrf = <?= json_encode($csrf, JSON_UNESCAPED_UNICODE) ?>;
 const prospectRecords = <?= json_encode($prospectsForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const prospectInteractions = <?= json_encode($interactionsByProspect, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const statusLabels = <?= json_encode($statusMap, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+const categoryLabels = <?= json_encode($categoriesForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+const defaultCategoryId = <?= json_encode($defaultCategoryId, JSON_UNESCAPED_UNICODE) ?>;
 const laNowDateTimeLocal = <?= json_encode($laNowDateTimeLocal, JSON_UNESCAPED_UNICODE) ?>;
 let latestParseResult = null;
 
@@ -860,6 +1036,7 @@ function openCreateModal() {
     document.getElementById('prospectModalTitle').textContent = 'Add Prospect';
     document.getElementById('prospectForm').reset();
     document.getElementById('form_prospect_id').value = '0';
+    document.getElementById('form_prospect_category_id').value = String(defaultCategoryId || '');
     document.getElementById('form_status').value = 'new';
     document.getElementById('form_parse_provider').value = '';
     document.getElementById('form_parse_confidence').value = '';
@@ -882,6 +1059,7 @@ function openEditModal(prospect) {
     document.getElementById('form_phone').value = prospect.phone || '';
     document.getElementById('form_email').value = prospect.email || '';
     document.getElementById('form_website').value = prospect.website || '';
+    document.getElementById('form_prospect_category_id').value = String(prospect.prospect_category_id || defaultCategoryId || '');
     document.getElementById('form_status').value = prospect.status || 'new';
     document.getElementById('form_notes').value = prospect.notes || '';
     document.getElementById('form_raw_source').value = prospect.raw_source || '';
@@ -914,6 +1092,7 @@ function openDetailsModal(prospectId) {
     document.getElementById('details_phone').textContent = prospect.phone || '—';
     document.getElementById('details_email').textContent = prospect.email || '—';
     document.getElementById('details_website').textContent = prospect.website || '—';
+    document.getElementById('details_category').textContent = categoryLabels[String(prospect.prospect_category_id || '')] || '—';
     document.getElementById('details_status').textContent = statusLabels[prospect.status] || prospect.status || '—';
     document.getElementById('details_last_called_at').textContent = prospect.last_called_at || '—';
     document.getElementById('details_last_emailed_at').textContent = prospect.last_emailed_at || '—';
