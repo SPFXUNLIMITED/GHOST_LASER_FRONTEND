@@ -1685,7 +1685,7 @@ document.addEventListener('keydown', (e) => {
 </script>
 
 <form id="deleteCategoryForm" method="POST" action="prospects.php" hidden>
-    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" name="action" value="delete_category">
     <input type="hidden" name="category_id" id="deleteCategoryId" value="">
 </form>
