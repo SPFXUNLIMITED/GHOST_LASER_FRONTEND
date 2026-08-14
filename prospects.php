@@ -56,6 +56,13 @@ function prospectNowLosAngeles(): string
     return (new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles')))->format('Y-m-d H:i:s');
 }
 
+function prospectNormalizeKeyword(string $value): string
+{
+    $value = prospectSanitizeField($value, 255);
+    $value = preg_replace('/\s+/', ' ', $value) ?? $value;
+    return trim($value);
+}
+
 function prospectSplitContactName(string $contactName): array
 {
     $contactName = trim($contactName);
@@ -179,7 +186,7 @@ foreach ($categoryRows as $categoryRow) {
     }
 }
 
-$rawCategoryParam = trim((string) ($_GET['category'] ?? ''));
+$rawCategoryParam = trim((string) ($_GET['category'] ?? ($_POST['category'] ?? '')));
 $activeCategory = null;
 if ($rawCategoryParam !== '') {
     if (ctype_digit($rawCategoryParam)) {
@@ -203,6 +210,20 @@ if ($rawCategoryParam !== '' && $activeCategory === null && $flashError === '') 
     $flashError = 'Category not found.';
 }
 
+$categoryKeywords = [];
+if ($activeCategory !== null) {
+    $keywordStmt = $pdo->prepare("
+        SELECT keyword
+        FROM prospect_category_keywords
+        WHERE category_id = :category_id
+        ORDER BY keyword ASC
+    ");
+    $keywordStmt->execute([
+        ':category_id' => (int) $activeCategory['id'],
+    ]);
+    $categoryKeywords = $keywordStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postCsrf = trim((string) ($_POST['csrf'] ?? ''));
     $action = trim((string) ($_POST['action'] ?? ''));
@@ -222,7 +243,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     try {
-        if ($action === 'save_prospect') {
+        if ($action === 'add_category_keyword') {
+            if ($activeCategory === null) {
+                throw new RuntimeException('Select a category before managing keywords.');
+            }
+
+            $keyword = prospectNormalizeKeyword((string) ($_POST['keyword'] ?? ''));
+            if ($keyword === '') {
+                throw new RuntimeException('Keyword is required.');
+            }
+
+            $stmt = $pdo->prepare("
+                INSERT IGNORE INTO prospect_category_keywords (category_id, keyword)
+                VALUES (:category_id, :keyword)
+            ");
+            $stmt->execute([
+                ':category_id' => (int) $activeCategory['id'],
+                ':keyword' => $keyword,
+            ]);
+
+            $_SESSION['prospects_flash_success'] = $stmt->rowCount() > 0
+                ? 'Keyword added.'
+                : 'Keyword already exists for this category.';
+        } elseif ($action === 'remove_category_keyword') {
+            if ($activeCategory === null) {
+                throw new RuntimeException('Select a category before managing keywords.');
+            }
+
+            $keyword = prospectNormalizeKeyword((string) ($_POST['keyword'] ?? ''));
+            if ($keyword === '') {
+                throw new RuntimeException('Keyword is required.');
+            }
+
+            $stmt = $pdo->prepare("
+                DELETE FROM prospect_category_keywords
+                WHERE category_id = :category_id
+                  AND keyword = :keyword
+                LIMIT 1
+            ");
+            $stmt->execute([
+                ':category_id' => (int) $activeCategory['id'],
+                ':keyword' => $keyword,
+            ]);
+
+            $_SESSION['prospects_flash_success'] = 'Keyword removed.';
+        } elseif ($action === 'save_prospect') {
             $prospectId = (int) ($_POST['prospect_id'] ?? 0);
             $company = prospectSanitizeField((string) ($_POST['company'] ?? ''));
             $contactName = prospectSanitizeField((string) ($_POST['contact_name'] ?? ''));
@@ -668,6 +733,49 @@ require_once __DIR__ . '/templates/header.php';
         <?php endif; ?>
         <?php if ($flashError !== ''): ?>
             <div class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400"><?= htmlspecialchars($flashError, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+
+        <?php if ($isCategoryFocused): ?>
+            <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-white">Search Keywords for this Category</h2>
+                    <p class="mt-1 text-sm text-zinc-400">Add reusable Google search terms for <?= htmlspecialchars($currentCategoryName, ENT_QUOTES, 'UTF-8') ?>.</p>
+                </div>
+
+                <form method="POST" action="prospects.php" class="grid gap-3 md:grid-cols-[1fr_auto]">
+                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="action" value="add_category_keyword">
+                    <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="text" name="keyword" class="field" maxlength="255" placeholder="e.g. channel letters" required>
+                    <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Add</button>
+                </form>
+
+                <div class="flex flex-wrap gap-2">
+                    <?php if ($categoryKeywords === []): ?>
+                        <p class="text-sm text-zinc-500">No keywords added yet.</p>
+                    <?php else: ?>
+                        <?php foreach ($categoryKeywords as $keyword): ?>
+                            <?php $googleSearchUrl = 'https://www.google.com/search?q=' . rawurlencode(trim((string) $keyword . ' ' . $currentCategoryName)); ?>
+                            <span class="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-sm text-zinc-200">
+                                <a href="<?= htmlspecialchars($googleSearchUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="hover:text-cyan-300">
+                                    <?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                                <form method="POST" action="prospects.php" class="inline" onsubmit="return confirm('Remove this keyword?');">
+                                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="action" value="remove_category_keyword">
+                                    <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="keyword" value="<?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>">
+                                    <button type="submit" class="text-zinc-500 transition-colors hover:text-red-400" aria-label="Remove keyword <?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>">&times;</button>
+                                </form>
+                            </span>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </section>
         <?php endif; ?>
 
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
