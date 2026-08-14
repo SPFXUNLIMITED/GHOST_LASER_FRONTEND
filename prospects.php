@@ -863,7 +863,7 @@ require_once __DIR__ . '/templates/header.php';
                         <p class="text-sm text-zinc-500">No keywords added yet.</p>
                     <?php else: ?>
                         <?php foreach ($categoryKeywords as $keyword): ?>
-                            <?php $googleSearchUrl = 'https://www.google.com/search?q=' . rawurlencode(trim((string) $keyword)); ?>
+                            <?php $googleSearchUrl = 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode(trim((string) $keyword)); ?>
                             <span class="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-sm text-zinc-200">
                                 <a href="<?= htmlspecialchars($googleSearchUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="hover:text-cyan-300">
                                     <?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>
