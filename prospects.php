@@ -673,7 +673,10 @@ require_once __DIR__ . '/templates/header.php';
     <div class="modal-box">
         <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
             <h2 id="prospectDetailsTitle" class="text-lg font-semibold text-white">Prospect Details</h2>
-            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeDetailsModal()">Close</button>
+            <div class="flex items-center gap-2">
+                <button type="button" id="sendEmailBtn" class="rounded-md border border-cyan-700/60 bg-cyan-950/20 px-3 py-1 text-xs text-cyan-300 hover:border-cyan-500/60" onclick="openEmailModal()">Send Email</button>
+                <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeDetailsModal()">Close</button>
+            </div>
         </div>
         <div class="p-5 space-y-4">
             <div class="grid gap-3 md:grid-cols-2 text-sm">
@@ -723,6 +726,36 @@ require_once __DIR__ . '/templates/header.php';
                     <textarea name="interaction_notes" rows="2" maxlength="3000" class="field" placeholder="Interaction notes"></textarea>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<div id="prospectEmailModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="emailModalTitle">
+    <div class="modal-box">
+        <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <h2 id="emailModalTitle" class="text-lg font-semibold text-white">Send Email</h2>
+            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeEmailModal()">Cancel</button>
+        </div>
+        <div class="p-5 space-y-4">
+            <div>
+                <label class="block text-xs uppercase tracking-wider text-zinc-500 mb-1">Template</label>
+                <select id="email_template_select" class="field w-full" onchange="applyEmailTemplate()">
+                    <option value="">— Select a template —</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs uppercase tracking-wider text-zinc-500 mb-1">Subject</label>
+                <input type="text" id="email_subject" maxlength="255" class="field w-full" placeholder="Email subject">
+            </div>
+            <div>
+                <label class="block text-xs uppercase tracking-wider text-zinc-500 mb-1">Body</label>
+                <textarea id="email_body" rows="10" class="field w-full" placeholder="Email body"></textarea>
+            </div>
+            <div id="email_send_error" class="hidden rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400"></div>
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300" onclick="closeEmailModal()">Cancel</button>
+                <button type="button" id="email_send_btn" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-cyan-400" onclick="submitSendEmail()">Send Email</button>
+            </div>
         </div>
     </div>
 </div>
@@ -997,6 +1030,116 @@ function applyPreviewToForm() {
     closeParsePreview();
 }
 
+// ── Email modal ───────────────────────────────────────────────────────────────
+let emailProspectData = null;
+let emailTemplates = [];
+
+async function openEmailModal() {
+    const prospectId = parseInt(document.getElementById('details_prospect_id').value || '0', 10);
+    const prospect = prospectRecords[String(prospectId)] || prospectRecords[prospectId];
+    if (!prospect) return;
+    emailProspectData = prospect;
+
+    // Load templates if not already loaded
+    if (emailTemplates.length === 0) {
+        try {
+            const res = await fetch('api/prospect-send-email.php');
+            const json = await res.json();
+            emailTemplates = json.templates || [];
+        } catch (err) {
+            emailTemplates = [];
+        }
+    }
+
+    const sel = document.getElementById('email_template_select');
+    sel.innerHTML = '<option value="">— Select a template —</option>';
+    emailTemplates.forEach((t) => {
+        const opt = document.createElement('option');
+        opt.value = String(t.id);
+        opt.textContent = t.title;
+        opt.dataset.subject = t.subject || '';
+        opt.dataset.body = t.body || '';
+        sel.appendChild(opt);
+    });
+
+    document.getElementById('email_subject').value = '';
+    document.getElementById('email_body').value = '';
+    document.getElementById('email_send_error').classList.add('hidden');
+    document.getElementById('email_send_btn').disabled = false;
+    document.getElementById('email_send_btn').textContent = 'Send Email';
+
+    document.getElementById('prospectEmailModal').classList.add('open');
+}
+
+function closeEmailModal() {
+    document.getElementById('prospectEmailModal').classList.remove('open');
+}
+
+function prospectReplaceTags(text, prospect) {
+    const adminName = <?= json_encode((string) ($_SESSION['admin_username'] ?? ''), JSON_UNESCAPED_UNICODE) ?>;
+    return text
+        .replaceAll('{company}', prospect.company || '')
+        .replaceAll('{contact_name}', prospect.contact_name || '')
+        .replaceAll('{phone}', prospect.phone || '')
+        .replaceAll('{email}', prospect.email || '')
+        .replaceAll('{website}', prospect.website || '')
+        .replaceAll('{status}', statusLabels[prospect.status] || prospect.status || '')
+        .replaceAll('{last_called}', prospect.last_called_at || '')
+        .replaceAll('{last_emailed}', prospect.last_emailed_at || '')
+        .replaceAll('{admin_name}', adminName);
+}
+
+function applyEmailTemplate() {
+    const sel = document.getElementById('email_template_select');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || opt.value === '' || !emailProspectData) return;
+    document.getElementById('email_subject').value = prospectReplaceTags(opt.dataset.subject || '', emailProspectData);
+    document.getElementById('email_body').value = prospectReplaceTags(opt.dataset.body || '', emailProspectData);
+}
+
+async function submitSendEmail() {
+    const btn = document.getElementById('email_send_btn');
+    const errBox = document.getElementById('email_send_error');
+    const subject = document.getElementById('email_subject').value.trim();
+    const body = document.getElementById('email_body').value.trim();
+
+    errBox.classList.add('hidden');
+
+    if (!subject || !body) {
+        errBox.textContent = 'Subject and body are required.';
+        errBox.classList.remove('hidden');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    try {
+        const res = await fetch('api/prospect-send-email.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                csrf: <?= json_encode($csrf) ?>,
+                prospect_id: parseInt(document.getElementById('details_prospect_id').value || '0', 10),
+                subject,
+                body,
+            }),
+        });
+        const json = await res.json();
+        if (!res.ok || json.error) {
+            throw new Error(json.error || 'Send failed.');
+        }
+        closeEmailModal();
+        // Reload the page to reflect updated last_emailed_at and interaction log
+        window.location.reload();
+    } catch (err) {
+        errBox.textContent = err.message || 'Could not send email.';
+        errBox.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Send Email';
+    }
+}
+
 document.getElementById('prospectModal').addEventListener('click', (e) => {
     if (e.target.id === 'prospectModal') closeProspectModal();
 });
@@ -1006,11 +1149,15 @@ document.getElementById('parsePreviewModal').addEventListener('click', (e) => {
 document.getElementById('prospectDetailsModal').addEventListener('click', (e) => {
     if (e.target.id === 'prospectDetailsModal') closeDetailsModal();
 });
+document.getElementById('prospectEmailModal').addEventListener('click', (e) => {
+    if (e.target.id === 'prospectEmailModal') closeEmailModal();
+});
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         closeDetailsModal();
         closeProspectModal();
         closeParsePreview();
+        closeEmailModal();
     }
 });
 </script>
