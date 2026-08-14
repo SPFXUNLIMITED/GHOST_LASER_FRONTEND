@@ -851,7 +851,7 @@ require_once __DIR__ . '/templates/header.php';
                         ?>
                         <span class="inline-flex items-center rounded-full border <?= $isActiveCategoryLink ? 'border-cyan-500/60 bg-cyan-500/15' : 'border-zinc-700 bg-zinc-800' ?>">
                             <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="px-3 py-1 text-xs font-semibold <?= $isActiveCategoryLink ? 'text-cyan-200' : 'text-zinc-300 hover:text-cyan-200' ?>"><?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?></a>
-                            <button type="button" onclick="confirmDeleteCategory(<?= $categoryId ?>, <?= htmlspecialchars(json_encode($categoryName), ENT_QUOTES, 'UTF-8') ?>)" class="pr-2 text-zinc-500 hover:text-red-400" title="Delete category" aria-label="Delete <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>">&#x2715;</button>
+                            <button type="button" onclick="confirmDeleteCategory(<?= $categoryId ?>, <?= htmlspecialchars(json_encode($categoryName), ENT_QUOTES, 'UTF-8') ?>)" class="pr-2 text-sm leading-none text-zinc-500 transition-colors hover:text-red-400" title="Delete category" aria-label="Delete <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>">&times;</button>
                         </span>
                     <?php endforeach; ?>
                 </div>
