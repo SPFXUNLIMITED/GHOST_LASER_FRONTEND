@@ -793,6 +793,10 @@ foreach ($prospects as $prospect) {
 $isCategoryFocused = $activeCategory !== null;
 $currentCategoryName = $isCategoryFocused ? (string) $activeCategory['name'] : 'All Prospects';
 $currentCategorySlug = $isCategoryFocused ? (string) $activeCategory['slug'] : '';
+$badgeBaseClasses = 'inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-sm text-zinc-200';
+$badgeLinkClasses = 'transition-colors hover:text-cyan-300';
+$activeBadgeLinkClasses = 'text-cyan-200';
+$badgeRemoveButtonClasses = 'text-sm leading-none text-zinc-500 transition-colors hover:text-red-400';
 $pageTitle = $currentCategoryName . ' Prospects | Ghost Laser';
 $pageDescription = $isCategoryFocused
     ? ('Cold calling prospect pipeline focused on ' . $currentCategoryName . '.')
@@ -835,7 +839,9 @@ require_once __DIR__ . '/templates/header.php';
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
             <div class="space-y-4">
                 <div class="flex flex-wrap items-center gap-2">
-                    <a href="prospects.php" class="rounded-full border px-3 py-1 text-xs font-semibold <?= !$isCategoryFocused ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200' ?>">All Prospects</a>
+                    <span class="<?= htmlspecialchars($badgeBaseClasses, ENT_QUOTES, 'UTF-8') ?>">
+                        <a href="prospects.php" class="<?= htmlspecialchars((!$isCategoryFocused ? $activeBadgeLinkClasses : $badgeLinkClasses), ENT_QUOTES, 'UTF-8') ?>">All Prospects</a>
+                    </span>
                     <?php foreach ($categoryRows as $category): ?>
                         <?php
                             $categoryId = (int) ($category['id'] ?? 0);
@@ -849,9 +855,9 @@ require_once __DIR__ . '/templates/header.php';
                             }
                             $isActiveCategoryLink = $isCategoryFocused && (int) $activeCategory['id'] === $categoryId;
                         ?>
-                        <span class="inline-flex items-center rounded-full border <?= $isActiveCategoryLink ? 'border-cyan-500/60 bg-cyan-500/15' : 'border-zinc-700 bg-zinc-800' ?>">
-                            <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="px-3 py-1 text-xs font-semibold <?= $isActiveCategoryLink ? 'text-cyan-200' : 'text-zinc-300 hover:text-cyan-200' ?>"><?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?></a>
-                            <button type="button" onclick="confirmDeleteCategory(<?= $categoryId ?>, <?= htmlspecialchars(json_encode($categoryName), ENT_QUOTES, 'UTF-8') ?>)" class="pr-2 text-sm leading-none text-zinc-500 transition-colors hover:text-red-400" title="Delete category" aria-label="Delete <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>">&times;</button>
+                        <span class="<?= htmlspecialchars($badgeBaseClasses, ENT_QUOTES, 'UTF-8') ?>">
+                            <a href="prospects.php?category=<?= urlencode($categorySlug) ?>" class="<?= htmlspecialchars(($isActiveCategoryLink ? $activeBadgeLinkClasses : $badgeLinkClasses), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?></a>
+                            <button type="button" onclick="confirmDeleteCategory(<?= $categoryId ?>, <?= htmlspecialchars(json_encode($categoryName), ENT_QUOTES, 'UTF-8') ?>)" class="<?= htmlspecialchars($badgeRemoveButtonClasses, ENT_QUOTES, 'UTF-8') ?>" title="Delete category" aria-label="Delete <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>">&times;</button>
                         </span>
                     <?php endforeach; ?>
                 </div>
@@ -895,8 +901,8 @@ require_once __DIR__ . '/templates/header.php';
                     <?php else: ?>
                         <?php foreach ($categoryKeywords as $keyword): ?>
                             <?php $googleSearchUrl = 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode(trim((string) $keyword)); ?>
-                            <span class="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-sm text-zinc-200">
-                                <a href="<?= htmlspecialchars($googleSearchUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="hover:text-cyan-300">
+                            <span class="<?= htmlspecialchars($badgeBaseClasses, ENT_QUOTES, 'UTF-8') ?>">
+                                <a href="<?= htmlspecialchars($googleSearchUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" class="<?= htmlspecialchars($badgeLinkClasses, ENT_QUOTES, 'UTF-8') ?>">
                                     <?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>
                                 </a>
                                 <form method="POST" action="prospects.php" class="inline" onsubmit="return confirm('Remove this keyword?');">
@@ -906,7 +912,7 @@ require_once __DIR__ . '/templates/header.php';
                                     <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="keyword" value="<?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="submit" class="text-zinc-500 transition-colors hover:text-red-400" aria-label="Remove keyword <?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>">&times;</button>
+                                    <button type="submit" class="<?= htmlspecialchars($badgeRemoveButtonClasses, ENT_QUOTES, 'UTF-8') ?>" aria-label="Remove keyword <?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>">&times;</button>
                                 </form>
                             </span>
                         <?php endforeach; ?>
