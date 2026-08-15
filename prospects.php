@@ -922,22 +922,28 @@ require_once __DIR__ . '/templates/header.php';
         <?php endif; ?>
 
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
-            <form method="GET" action="prospects.php" class="grid gap-3 md:grid-cols-[220px_1fr_auto]">
-                <?php if ($isCategoryFocused): ?>
-                    <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
-                <?php endif; ?>
-                <select name="status" class="field">
-                    <option value="all"<?= $statusFilter === 'all' ? ' selected' : '' ?>>All statuses</option>
-                    <?php foreach ($statusMap as $statusKey => $statusLabel): ?>
-                        <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>"<?= $statusFilter === $statusKey ? ' selected' : '' ?>><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <input type="text" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>" class="field" placeholder="Search company, contact, phone, or email">
-                <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Filter</button>
-            </form>
-            <div class="mt-4 flex flex-wrap items-center gap-3">
-                <a href="prospect_notifications.php" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:border-cyan-500/50 hover:text-cyan-300">Prospect Templates</a>
-                <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 btn-glow">Add New Prospect</button>
+            <div class="flex flex-wrap items-center gap-3">
+                <form method="GET" action="prospects.php" class="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                    <?php if ($isCategoryFocused): ?>
+                        <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
+                    <?php endif; ?>
+                    <div class="w-full sm:w-56">
+                        <select name="status" class="field">
+                            <option value="all"<?= $statusFilter === 'all' ? ' selected' : '' ?>>All statuses</option>
+                            <?php foreach ($statusMap as $statusKey => $statusLabel): ?>
+                                <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>"<?= $statusFilter === $statusKey ? ' selected' : '' ?>><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="w-full sm:w-72 lg:w-80">
+                        <input type="text" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>" class="field" placeholder="Search company or phone">
+                    </div>
+                    <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Filter</button>
+                </form>
+                <div class="flex flex-wrap items-center gap-3 sm:ml-auto">
+                    <a href="prospect_notifications.php" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:border-cyan-500/50 hover:text-cyan-300">Prospect Templates</a>
+                    <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 btn-glow">Add New Prospect</button>
+                </div>
             </div>
         </section>
 
