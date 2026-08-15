@@ -984,7 +984,7 @@ require_once __DIR__ . '/templates/header.php';
                                 $statusKey = (string) ($prospect['status'] ?? 'new');
                                 $statusLabel = $statusMap[$statusKey] ?? ucfirst(str_replace('_', ' ', $statusKey));
                             ?>
-                            <tr class="align-top cursor-pointer hover:bg-zinc-900/40 transition-colors" onclick="openDetailsModal(<?= $pid ?>)">
+                            <tr class="align-top">
                                 <td class="py-3 pr-3">
                                     <div class="font-semibold text-white"><?= htmlspecialchars((string) ($prospect['company'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
                                     <div class="text-xs text-zinc-500 mt-1"><?= htmlspecialchars((string) ($prospect['website'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
@@ -1062,10 +1062,6 @@ require_once __DIR__ . '/templates/header.php';
             <div>
                 <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Notes</p>
                 <div id="details_notes" class="text-sm text-zinc-300 whitespace-pre-line rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"></div>
-            </div>
-            <div>
-                <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Raw Source</p>
-                <div id="details_raw_source" class="text-xs text-zinc-400 whitespace-pre-line rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 max-h-48 overflow-auto"></div>
             </div>
             <div>
                 <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Interaction History</p>
@@ -1467,7 +1463,6 @@ function openDetailsModal(prospectId) {
     document.getElementById('details_last_called_at').textContent = prospect.last_called_at || '—';
     document.getElementById('details_last_emailed_at').textContent = prospect.last_emailed_at || '—';
     document.getElementById('details_notes').textContent = prospect.notes || 'No notes yet.';
-    document.getElementById('details_raw_source').textContent = prospect.raw_source || 'No raw source saved.';
     document.getElementById('details_interacted_at').value = getCurrentLosAngelesDateTimeLocal();
 
     const interactions = prospectInteractions[String(prospect.id)] || prospectInteractions[prospect.id] || [];
