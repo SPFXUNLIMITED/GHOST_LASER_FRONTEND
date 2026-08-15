@@ -88,14 +88,19 @@ function prospectsEnsureSchema(PDO $pdo): void
             last_called_at DATETIME NULL,
             last_emailed_at DATETIME NULL,
             status ENUM(
-                'new',
-                'attempting_contact',
-                'contacted',
-                'qualified',
+                'no_answer',
+                'left_voicemail',
+                'disconnected',
                 'not_interested',
+                'has_provider',
+                'farms_out',
+                'interested_service',
+                'interested_machine',
+                'needs_follow_up',
+                'contacted',
                 'converted',
                 'archived'
-            ) NOT NULL DEFAULT 'new',
+            ) NOT NULL DEFAULT 'no_answer',
             notes TEXT NULL,
             raw_source LONGTEXT NULL,
             raw_text_dump LONGTEXT NULL,
@@ -154,6 +159,34 @@ function prospectsEnsureSchema(PDO $pdo): void
         ");
     }
 
+    // Migrate old status values to new schema and update the ENUM definition.
+    $pdo->exec("
+        UPDATE prospects
+        SET status = 'no_answer'
+        WHERE status IN ('new', 'attempting_contact')
+    ");
+    $pdo->exec("
+        UPDATE prospects
+        SET status = 'interested_service'
+        WHERE status = 'qualified'
+    ");
+    $pdo->exec("
+        ALTER TABLE prospects
+        MODIFY COLUMN status ENUM(
+            'no_answer',
+            'left_voicemail',
+            'disconnected',
+            'not_interested',
+            'has_provider',
+            'farms_out',
+            'interested_service',
+            'interested_machine',
+            'needs_follow_up',
+            'contacted',
+            'converted',
+            'archived'
+        ) NOT NULL DEFAULT 'no_answer'
+    ");
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS prospect_interactions (
             id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

@@ -3,11 +3,16 @@
 function prospectStatuses(): array
 {
     return [
-        'new' => 'New',
-        'attempting_contact' => 'Attempting Contact',
-        'contacted' => 'Contacted',
-        'qualified' => 'Qualified',
+        'no_answer' => 'No Answer',
+        'left_voicemail' => 'Left Voicemail',
+        'disconnected' => 'Disconnected / Bad Number',
         'not_interested' => 'Not Interested',
+        'has_provider' => 'Already Has Service Provider',
+        'farms_out' => 'Farms Out Laser Work',
+        'interested_service' => 'Interested in Service',
+        'interested_machine' => 'Interested in Machine',
+        'needs_follow_up' => 'Needs Follow Up',
+        'contacted' => 'Contacted',
         'converted' => 'Converted',
         'archived' => 'Archived',
     ];
@@ -71,12 +76,24 @@ function prospectParseRawText(string $rawText): array
         }
     }
 
-    $status = 'new';
+    $status = 'no_answer';
     $lower = strtolower($rawText);
     if (str_contains($lower, 'not interested')) {
         $status = 'not_interested';
-    } elseif (str_contains($lower, 'qualified') || str_contains($lower, 'booked')) {
-        $status = 'qualified';
+    } elseif (str_contains($lower, 'farms out') || str_contains($lower, 'farms laser')) {
+        $status = 'farms_out';
+    } elseif (str_contains($lower, 'already has') || str_contains($lower, 'has provider') || str_contains($lower, 'current provider')) {
+        $status = 'has_provider';
+    } elseif (str_contains($lower, 'interested in machine') || str_contains($lower, 'buy a laser') || str_contains($lower, 'purchase machine')) {
+        $status = 'interested_machine';
+    } elseif (str_contains($lower, 'interested in service') || str_contains($lower, 'quote for service') || str_contains($lower, 'interested in getting')) {
+        $status = 'interested_service';
+    } elseif (str_contains($lower, 'follow up') || str_contains($lower, 'follow-up')) {
+        $status = 'needs_follow_up';
+    } elseif (str_contains($lower, 'left voicemail') || str_contains($lower, 'voicemail')) {
+        $status = 'left_voicemail';
+    } elseif (str_contains($lower, 'disconnected') || str_contains($lower, 'bad number') || str_contains($lower, 'wrong number')) {
+        $status = 'disconnected';
     } elseif (str_contains($lower, 'called') || str_contains($lower, 'emailed') || str_contains($lower, 'contacted')) {
         $status = 'contacted';
     }

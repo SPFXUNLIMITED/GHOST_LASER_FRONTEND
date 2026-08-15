@@ -421,15 +421,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $phone = prospectSanitizeField((string) ($_POST['phone'] ?? ''), 100);
             $email = strtolower(prospectSanitizeField((string) ($_POST['email'] ?? '')));
             $website = prospectSanitizeField((string) ($_POST['website'] ?? ''));
-            $status = trim((string) ($_POST['status'] ?? 'new'));
+            $status = trim((string) ($_POST['status'] ?? 'contacted'));
             $notes = prospectSanitizeField((string) ($_POST['notes'] ?? ''), 10000);
             $rawSource = prospectSanitizeField((string) ($_POST['raw_source'] ?? ($_POST['raw_text_dump'] ?? '')), 65000);
             $parseProvider = prospectSanitizeField((string) ($_POST['parse_provider'] ?? ''), 100);
             $parseConfidence = is_numeric($_POST['parse_confidence'] ?? null) ? (float) $_POST['parse_confidence'] : null;
             $parseErrors = prospectSanitizeField((string) ($_POST['parse_errors'] ?? ''), 3000);
+            $formOutcome = prospectSanitizeField((string) ($_POST['form_outcome'] ?? ''));
+            $formLastCalledAt = trim((string) ($_POST['form_last_called_at'] ?? ''));
 
             if (!in_array($status, prospectAllowedStatuses(), true)) {
-                $status = 'new';
+                $status = 'contacted';
             }
             if ($company === '' && $contactName === '') {
                 throw new RuntimeException('Company or contact name is required.');
@@ -489,15 +491,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $_SESSION['prospects_flash_success'] = 'Prospect updated.';
             } else {
+                $insertLastCalledAt = ($formLastCalledAt !== '') ? date('Y-m-d H:i:s', strtotime($formLastCalledAt)) : null;
                 $stmt = $pdo->prepare("
                     INSERT INTO prospects (
                         company, contact_name, phone, email, website, status, notes,
                         raw_source, parse_preview_json, parse_confidence, parse_provider, parse_errors,
-                        created_by, updated_by, category_id
+                        last_called_at, created_by, updated_by, category_id
                     ) VALUES (
                         :company, :contact_name, :phone, :email, :website, :status, :notes,
                         :raw_source, :parse_preview_json, :parse_confidence, :parse_provider, :parse_errors,
-                        :created_by, :updated_by, :category_id
+                        :last_called_at, :created_by, :updated_by, :category_id
                     )
                 ");
                 $stmt->execute([
@@ -513,10 +516,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':parse_confidence' => $parseConfidence,
                     ':parse_provider' => $parseProvider !== '' ? $parseProvider : null,
                     ':parse_errors' => $parseErrors !== '' ? $parseErrors : null,
+                    ':last_called_at' => $insertLastCalledAt,
                     ':created_by' => $adminId > 0 ? $adminId : null,
                     ':updated_by' => $adminId > 0 ? $adminId : null,
                     ':category_id' => $activeCategory !== null ? (int) $activeCategory['id'] : null,
                 ]);
+                $newProspectId = (int) $pdo->lastInsertId();
+                if ($formOutcome !== '' && $newProspectId > 0) {
+                    $iStmt = $pdo->prepare("
+                        INSERT INTO prospect_interactions (prospect_id, interaction_type, outcome, interacted_at, admin_id)
+                        VALUES (:prospect_id, 'call', :outcome, :interacted_at, :admin_id)
+                    ");
+                    $iStmt->execute([
+                        ':prospect_id' => $newProspectId,
+                        ':outcome' => $formOutcome,
+                        ':interacted_at' => $insertLastCalledAt ?? date('Y-m-d H:i:s'),
+                        ':admin_id' => $adminId > 0 ? $adminId : null,
+                    ]);
+                }
                 $_SESSION['prospects_flash_success'] = 'Prospect created.';
             }
         } elseif ($action === 'archive_prospect') {
@@ -921,28 +938,24 @@ require_once __DIR__ . '/templates/header.php';
             </section>
         <?php endif; ?>
 
-        <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
-            <div class="flex flex-wrap items-center gap-3">
-                <form method="GET" action="prospects.php" class="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+        <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4">
+            <div class="flex flex-wrap items-center gap-2">
+                <form method="GET" action="prospects.php" class="flex flex-wrap items-center gap-2">
                     <?php if ($isCategoryFocused): ?>
                         <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
                     <?php endif; ?>
-                    <div class="w-full sm:w-56">
-                        <select name="status" class="field">
-                            <option value="all"<?= $statusFilter === 'all' ? ' selected' : '' ?>>All statuses</option>
-                            <?php foreach ($statusMap as $statusKey => $statusLabel): ?>
-                                <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>"<?= $statusFilter === $statusKey ? ' selected' : '' ?>><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="w-full sm:w-72 lg:w-80">
-                        <input type="text" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>" class="field" placeholder="Search company or phone">
-                    </div>
-                    <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Filter</button>
+                    <select name="status" class="field w-40" style="max-width:160px;">
+                        <option value="all"<?= $statusFilter === 'all' ? ' selected' : '' ?>>All statuses</option>
+                        <?php foreach ($statusMap as $statusKey => $statusLabel): ?>
+                            <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>"<?= $statusFilter === $statusKey ? ' selected' : '' ?>><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <input type="text" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>" class="field w-48" style="max-width:192px;" placeholder="Company or phone">
+                    <button type="submit" class="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-semibold text-zinc-950 whitespace-nowrap">Filter</button>
                 </form>
-                <div class="flex flex-wrap items-center gap-3 sm:ml-auto">
-                    <a href="prospect_notifications.php" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:border-cyan-500/50 hover:text-cyan-300">Prospect Templates</a>
-                    <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 btn-glow">Add New Prospect</button>
+                <div class="flex flex-wrap items-center gap-2 ml-auto">
+                    <a href="prospect_notifications.php" class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 hover:border-cyan-500/50 hover:text-cyan-300 whitespace-nowrap">Prospect Templates</a>
+                    <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-semibold text-zinc-950 btn-glow whitespace-nowrap">Add New Prospect</button>
                 </div>
             </div>
         </section>
@@ -1250,7 +1263,25 @@ require_once __DIR__ . '/templates/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <div>
+                    <label class="label">Last Called</label>
+                    <input class="field" type="datetime-local" name="form_last_called_at" id="form_last_called_at">
+                </div>
             </div>
+            <div>
+                <label class="label">Outcome</label>
+                <select class="field" name="form_outcome" id="form_outcome">
+                    <option value="">— Select outcome —</option>
+                    <option value="No answer, will try again later">No answer, will try again later</option>
+                    <option value="Left voicemail, no callback yet">Left voicemail, no callback yet</option>
+                    <option value="Phone number disconnected">Phone number disconnected</option>
+                    <option value="Not interested in changing service">Not interested in changing service</option>
+                    <option value="Already happy with current service provider">Already happy with current service provider</option>
+                    <option value="Farms out all laser work to another company">Farms out all laser work to another company</option>
+                    <option value="Interested in getting a quote for service">Interested in getting a quote for service</option>
+                    <option value="Interested in buying a laser machine">Interested in buying a laser machine</option>
+                    <option value="Needs follow up in 2–3 weeks">Needs follow up in 2–3 weeks</option>
+                </select>
             <div>
                 <label class="label">Notes</label>
                 <textarea class="field" rows="4" name="notes" id="form_notes" maxlength="10000"></textarea>
