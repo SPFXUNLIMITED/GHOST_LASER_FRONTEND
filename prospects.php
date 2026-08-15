@@ -823,9 +823,10 @@ $extraHead = <<<'HTML'
 <style>
     .btn-glow { box-shadow: 0 0 20px rgba(6,182,212,0.35); }
     .btn-glow:hover { box-shadow: 0 0 30px rgba(6,182,212,0.55); }
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); backdrop-filter: blur(2px); display: none; align-items: center; justify-content: center; z-index: 60; padding: 1rem; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); backdrop-filter: blur(2px); display: none; align-items: center; justify-content: center; z-index: 9999; padding: 1rem; overflow-y: auto; }
     .modal-overlay.open { display: flex; }
-    .modal-box { width: min(920px, 96vw); max-height: 92vh; overflow: auto; border: 1px solid rgb(63,63,70); background: rgba(24,24,27,.98); border-radius: 1rem; }
+    body.modal-open { overflow: hidden; }
+    .modal-box { width: min(920px, 96vw); max-height: 92vh; overflow: auto; border: 1px solid rgb(63,63,70); background: rgba(24,24,27,.98); border-radius: 1rem; margin: auto; }
     .field { width: 100%; border: 1px solid rgb(63,63,70); background: rgb(9,9,11); color: #fff; border-radius: .5rem; padding: .55rem .75rem; font-size: .875rem; }
     .label { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: rgb(161,161,170); margin-bottom: .35rem; display: block; font-weight: 600; }
 </style>
@@ -1258,9 +1259,15 @@ require_once __DIR__ . '/templates/header.php';
                 <div>
                     <label class="label">Status</label>
                     <select class="field" name="status" id="form_status">
-                        <?php foreach ($statusMap as $statusKey => $statusLabel): ?>
-                            <option value="<?= htmlspecialchars($statusKey, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></option>
-                        <?php endforeach; ?>
+                        <option value="no_answer">No Answer</option>
+                        <option value="left_voicemail">Left Voicemail</option>
+                        <option value="disconnected">Disconnected / Bad Number</option>
+                        <option value="not_interested">Not Interested</option>
+                        <option value="has_provider">Already Has Service Provider</option>
+                        <option value="farms_out">Farms Out Laser Work</option>
+                        <option value="interested_service">Interested in Service</option>
+                        <option value="interested_machine">Interested in Machine</option>
+                        <option value="needs_follow_up">Needs Follow Up</option>
                     </select>
                 </div>
                 <div>
@@ -1268,20 +1275,6 @@ require_once __DIR__ . '/templates/header.php';
                     <input class="field" type="datetime-local" name="form_last_called_at" id="form_last_called_at">
                 </div>
             </div>
-            <div>
-                <label class="label">Outcome</label>
-                <select class="field" name="form_outcome" id="form_outcome">
-                    <option value="">— Select outcome —</option>
-                    <option value="No answer, will try again later">No answer, will try again later</option>
-                    <option value="Left voicemail, no callback yet">Left voicemail, no callback yet</option>
-                    <option value="Phone number disconnected">Phone number disconnected</option>
-                    <option value="Not interested in changing service">Not interested in changing service</option>
-                    <option value="Already happy with current service provider">Already happy with current service provider</option>
-                    <option value="Farms out all laser work to another company">Farms out all laser work to another company</option>
-                    <option value="Interested in getting a quote for service">Interested in getting a quote for service</option>
-                    <option value="Interested in buying a laser machine">Interested in buying a laser machine</option>
-                    <option value="Needs follow up in 2–3 weeks">Needs follow up in 2–3 weeks</option>
-                </select>
             <div>
                 <label class="label">Notes</label>
                 <textarea class="field" rows="4" name="notes" id="form_notes" maxlength="10000"></textarea>
@@ -1399,17 +1392,27 @@ function closeBulkKeywordsModal() {
     }
 }
 
+function getLaNow() {
+    return new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'America/Los_Angeles',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false
+    }).format(new Date()).replace(' ', 'T');
+}
+
 function openCreateModal() {
     document.getElementById('prospectModalTitle').textContent = 'Add Prospect';
     document.getElementById('prospectForm').reset();
     document.getElementById('form_prospect_id').value = '0';
-    document.getElementById('form_status').value = 'new';
+    document.getElementById('form_status').value = 'no_answer';
+    document.getElementById('form_last_called_at').value = getLaNow();
     document.getElementById('form_parse_provider').value = '';
     document.getElementById('form_parse_confidence').value = '';
     document.getElementById('form_parse_errors').value = '';
     document.getElementById('parseMeta').textContent = '';
     document.getElementById('form_raw_source').value = '';
     document.getElementById('prospectModal').classList.add('open');
+    document.body.classList.add('modal-open');
 }
 
 function openEditModalById(prospectId) {
@@ -1425,7 +1428,8 @@ function openEditModal(prospect) {
     document.getElementById('form_phone').value = prospect.phone || '';
     document.getElementById('form_email').value = prospect.email || '';
     document.getElementById('form_website').value = prospect.website || '';
-    document.getElementById('form_status').value = prospect.status || 'new';
+    document.getElementById('form_status').value = prospect.status || 'no_answer';
+    document.getElementById('form_last_called_at').value = prospect.last_called_at ? prospect.last_called_at.replace(' ', 'T').substring(0, 16) : getLaNow();
     document.getElementById('form_notes').value = prospect.notes || '';
     document.getElementById('form_raw_source').value = prospect.raw_source || '';
     document.getElementById('form_parse_provider').value = prospect.parse_provider || '';
@@ -1433,10 +1437,12 @@ function openEditModal(prospect) {
     document.getElementById('form_parse_errors').value = prospect.parse_errors || '';
     document.getElementById('parseMeta').textContent = prospect.parse_provider ? `Last parse: ${prospect.parse_provider} (${prospect.parse_confidence || ''}%)` : '';
     document.getElementById('prospectModal').classList.add('open');
+    document.body.classList.add('modal-open');
 }
 
 function closeProspectModal() {
     document.getElementById('prospectModal').classList.remove('open');
+    document.body.classList.remove('modal-open');
 }
 
 function escapeHtml(value) {
@@ -1478,10 +1484,12 @@ function openDetailsModal(prospectId) {
         `).join('');
     }
     document.getElementById('prospectDetailsModal').classList.add('open');
+    document.body.classList.add('modal-open');
 }
 
 function closeDetailsModal() {
     document.getElementById('prospectDetailsModal').classList.remove('open');
+    document.body.classList.remove('modal-open');
 }
 
 function getCurrentLosAngelesDateTimeLocal() {
@@ -1612,10 +1620,12 @@ async function openEmailModal() {
     document.getElementById('email_send_btn').textContent = 'Send Email';
 
     document.getElementById('prospectEmailModal').classList.add('open');
+    document.body.classList.add('modal-open');
 }
 
 function closeEmailModal() {
     document.getElementById('prospectEmailModal').classList.remove('open');
+    document.body.classList.remove('modal-open');
 }
 
 function prospectReplaceTags(text, prospect) {

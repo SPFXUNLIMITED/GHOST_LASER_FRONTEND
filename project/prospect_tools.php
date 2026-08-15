@@ -12,9 +12,6 @@ function prospectStatuses(): array
         'interested_service' => 'Interested in Service',
         'interested_machine' => 'Interested in Machine',
         'needs_follow_up' => 'Needs Follow Up',
-        'contacted' => 'Contacted',
-        'converted' => 'Converted',
-        'archived' => 'Archived',
     ];
 }
 
