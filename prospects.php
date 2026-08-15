@@ -56,6 +56,31 @@ function prospectNowLosAngeles(): string
     return (new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles')))->format('Y-m-d H:i:s');
 }
 
+function prospectFormatDisplayDateTime(?string $value): string
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '—';
+    }
+
+    $timezone = new DateTimeZone('America/Los_Angeles');
+    foreach (['Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d\TH:i:s', 'Y-m-d\TH:i', 'Y-m-d'] as $format) {
+        $dt = DateTimeImmutable::createFromFormat($format, $value, $timezone);
+        if ($dt !== false) {
+            return $dt->format($format === 'Y-m-d' ? 'm/d/Y' : 'm/d/Y g:i A');
+        }
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp !== false) {
+        return (new DateTimeImmutable('@' . $timestamp))
+            ->setTimezone($timezone)
+            ->format('m/d/Y g:i A');
+    }
+
+    return $value;
+}
+
 function prospectNormalizeKeyword(string $value): string
 {
     $value = prospectSanitizeField($value, 255);
@@ -429,6 +454,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $parseErrors = prospectSanitizeField((string) ($_POST['parse_errors'] ?? ''), 3000);
             $formOutcome = prospectSanitizeField((string) ($_POST['form_outcome'] ?? ''));
             $formLastCalledAt = trim((string) ($_POST['form_last_called_at'] ?? ''));
+            $normalizedLastCalledAt = prospectCleanDateTimeInput($formLastCalledAt);
 
             if (!in_array($status, prospectAllowedStatuses(), true)) {
                 $status = 'contacted';
@@ -465,6 +491,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         website = :website,
                         status = :status,
                         notes = :notes,
+                        last_called_at = :last_called_at,
                         raw_source = :raw_source,
                         parse_preview_json = :parse_preview_json,
                         parse_confidence = :parse_confidence,
@@ -481,6 +508,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':website' => $website !== '' ? $website : null,
                     ':status' => $status,
                     ':notes' => $notes !== '' ? $notes : null,
+                    ':last_called_at' => $normalizedLastCalledAt,
                     ':raw_source' => $rawSource !== '' ? $rawSource : null,
                     ':parse_preview_json' => $previewPayload,
                     ':parse_confidence' => $parseConfidence,
@@ -491,7 +519,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $_SESSION['prospects_flash_success'] = 'Prospect updated.';
             } else {
-                $insertLastCalledAt = ($formLastCalledAt !== '') ? date('Y-m-d H:i:s', strtotime($formLastCalledAt)) : null;
+                $insertLastCalledAt = $normalizedLastCalledAt;
                 $stmt = $pdo->prepare("
                     INSERT INTO prospects (
                         company, contact_name, phone, email, website, status, notes,
@@ -602,9 +630,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($type === 'status_change' && in_array($newStatus, prospectAllowedStatuses(), true)) {
-                $update = $pdo->prepare("UPDATE prospects SET status = :status, updated_by = :admin_id WHERE id = :id");
+                $update = $pdo->prepare("UPDATE prospects SET status = :status, last_called_at = :ts, updated_by = :admin_id WHERE id = :id");
                 $update->execute([
                     ':status' => $newStatus,
+                    ':ts' => $interactedAt,
                     ':id' => $prospectId,
                     ':admin_id' => $adminId > 0 ? $adminId : null,
                 ]);
@@ -778,6 +807,7 @@ if ($prospectIds !== []) {
     $interactionStmt->execute($prospectIds);
     foreach ($interactionStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $pid = (int) ($row['prospect_id'] ?? 0);
+        $row['interacted_at_display'] = prospectFormatDisplayDateTime((string) ($row['interacted_at'] ?? ''));
         if (!isset($interactionsByProspect[$pid])) {
             $interactionsByProspect[$pid] = [];
         }
@@ -799,7 +829,9 @@ foreach ($prospects as $prospect) {
         'website' => (string) ($prospect['website'] ?? ''),
         'status' => (string) ($prospect['status'] ?? 'new'),
         'last_called_at' => (string) ($prospect['last_called_at'] ?? ''),
+        'last_called_at_display' => prospectFormatDisplayDateTime((string) ($prospect['last_called_at'] ?? '')),
         'last_emailed_at' => (string) ($prospect['last_emailed_at'] ?? ''),
+        'last_emailed_at_display' => prospectFormatDisplayDateTime((string) ($prospect['last_emailed_at'] ?? '')),
         'notes' => (string) ($prospect['notes'] ?? ''),
         'raw_source' => (string) (($prospect['raw_source'] ?? '') !== '' ? $prospect['raw_source'] : ($prospect['raw_text_dump'] ?? '')),
         'parse_provider' => (string) ($prospect['parse_provider'] ?? ''),
@@ -995,8 +1027,8 @@ require_once __DIR__ . '/templates/header.php';
                                     <div class="text-xs text-zinc-500"><?= htmlspecialchars((string) ($prospect['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
                                 </td>
                                 <td class="py-3 pr-3 text-zinc-300"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></td>
-                                <td class="py-3 pr-3 text-zinc-400"><?= htmlspecialchars((string) ($prospect['last_called_at'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
-                                <td class="py-3 pr-3 text-zinc-400"><?= htmlspecialchars((string) ($prospect['last_emailed_at'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td class="py-3 pr-3 text-zinc-400"><?= htmlspecialchars(prospectFormatDisplayDateTime((string) ($prospect['last_called_at'] ?? '')), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td class="py-3 pr-3 text-zinc-400"><?= htmlspecialchars(prospectFormatDisplayDateTime((string) ($prospect['last_emailed_at'] ?? '')), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td class="py-3 text-right" onclick="event.stopPropagation()">
                                     <div class="inline-flex flex-wrap justify-end gap-2">
                                         <button
