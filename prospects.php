@@ -818,7 +818,7 @@ require_once __DIR__ . '/templates/header.php';
 <main class="min-h-screen hero-grid pt-24 pb-16 px-4">
     <div class="max-w-7xl mx-auto space-y-7">
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-col gap-4">
                 <div>
                     <h1 class="text-3xl font-bold tracking-tight">
                         <?= htmlspecialchars($currentCategoryName, ENT_QUOTES, 'UTF-8') ?>
@@ -828,10 +828,6 @@ require_once __DIR__ . '/templates/header.php';
                             ? ('Dedicated prospect view for ' . htmlspecialchars($currentCategoryName, ENT_QUOTES, 'UTF-8') . '.')
                             : 'All prospects across every category.' ?>
                     </p>
-                </div>
-                <div class="flex items-center gap-3">
-                    <a href="prospect_notifications.php" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:border-cyan-500/50 hover:text-cyan-300">Prospect Templates</a>
-                    <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 btn-glow">Add New Prospect</button>
                 </div>
             </div>
         </section>
@@ -939,6 +935,10 @@ require_once __DIR__ . '/templates/header.php';
                 <input type="text" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>" class="field" placeholder="Search company, contact, phone, or email">
                 <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950">Filter</button>
             </form>
+            <div class="mt-4 flex flex-wrap items-center gap-3">
+                <a href="prospect_notifications.php" class="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 hover:border-cyan-500/50 hover:text-cyan-300">Prospect Templates</a>
+                <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 btn-glow">Add New Prospect</button>
+            </div>
         </section>
 
         <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
