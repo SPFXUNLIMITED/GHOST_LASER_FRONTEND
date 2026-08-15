@@ -1492,8 +1492,8 @@ function openDetailsModal(prospectId) {
     document.getElementById('details_email').textContent = prospect.email || '—';
     document.getElementById('details_website').textContent = prospect.website || '—';
     document.getElementById('details_status').textContent = statusLabels[prospect.status] || prospect.status || '—';
-    document.getElementById('details_last_called_at').textContent = prospect.last_called_at || '—';
-    document.getElementById('details_last_emailed_at').textContent = prospect.last_emailed_at || '—';
+    document.getElementById('details_last_called_at').textContent = prospect.last_called_at_display || '—';
+    document.getElementById('details_last_emailed_at').textContent = prospect.last_emailed_at_display || '—';
     document.getElementById('details_notes').textContent = prospect.notes || 'No notes yet.';
     document.getElementById('details_interacted_at').value = getCurrentLosAngelesDateTimeLocal();
 
@@ -1504,7 +1504,7 @@ function openDetailsModal(prospectId) {
     } else {
         history.innerHTML = interactions.map((interaction) => `
             <div class="text-xs text-zinc-300 border border-zinc-800 rounded-lg px-2 py-1.5">
-                <div><span class="text-cyan-300 uppercase">${escapeHtml(interaction.interaction_type || '')}</span> · ${escapeHtml(interaction.interacted_at || '')}</div>
+                <div><span class="text-cyan-300 uppercase">${escapeHtml(interaction.interaction_type || '')}</span> · ${escapeHtml(interaction.interacted_at_display || interaction.interacted_at || '')}</div>
                 <div class="text-zinc-400">${escapeHtml(interaction.outcome || '')}</div>
                 <div class="text-zinc-500">${escapeHtml(interaction.interaction_notes || '')}</div>
             </div>
@@ -1664,8 +1664,8 @@ function prospectReplaceTags(text, prospect) {
         .replaceAll('{email}', prospect.email || '')
         .replaceAll('{website}', prospect.website || '')
         .replaceAll('{status}', statusLabels[prospect.status] || prospect.status || '')
-        .replaceAll('{last_called}', prospect.last_called_at || '')
-        .replaceAll('{last_emailed}', prospect.last_emailed_at || '')
+        .replaceAll('{last_called}', prospect.last_called_at_display || prospect.last_called_at || '')
+        .replaceAll('{last_emailed}', prospect.last_emailed_at_display || prospect.last_emailed_at || '')
         .replaceAll('{admin_name}', adminName);
 }
 
