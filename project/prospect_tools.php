@@ -74,28 +74,69 @@ function prospectParseRawText(string $rawText): array
     }
 
     $address = '';
-    // Pass 1: look for an explicit "Location" or "Address" label line whose value
-    // is either on the same line ("Location: 123 Main St") or on the very next line.
+    $city    = '';
+    $state   = '';
+    $zip     = '';
+
+    // Locate the raw address line via label (Pass 1) or street pattern (Pass 2).
+    $rawAddressLine = '';
+
+    // Pass 1: explicit "Location" or "Address" label on its own line or with inline value.
     foreach ($cleanLines as $idx => $line) {
         if (preg_match('/^(?:location|address)\s*:?\s*(.*)$/i', $line, $m)) {
             $inline = trim($m[1]);
             if ($inline !== '') {
-                $address = prospectSanitizeField($inline, 500);
+                $rawAddressLine = $inline;
             } elseif (isset($cleanLines[$idx + 1])) {
-                $address = prospectSanitizeField($cleanLines[$idx + 1], 500);
+                $rawAddressLine = $cleanLines[$idx + 1];
             }
             break;
         }
     }
 
-    // Pass 2: if still empty, scan every line for a street-address pattern
-    // (starts with a house/suite number followed by recognisable address tokens).
-    if ($address === '') {
+    // Pass 2: scan for a line that starts with a street number.
+    if ($rawAddressLine === '') {
         $streetPattern = '/^\d+\s+\S.*(?:st\.?|ave\.?|blvd\.?|rd\.?|dr\.?|ln\.?|way|ct\.?|pl\.?|pkwy\.?|hwy\.?|washington|valley|mountain|hills?|park|circle|court|boulevard|avenue|street|road|drive|lane)/i';
         foreach ($cleanLines as $line) {
             if (preg_match($streetPattern, $line)) {
-                $address = prospectSanitizeField($line, 500);
+                $rawAddressLine = $line;
                 break;
+            }
+        }
+    }
+
+    // Split the raw address line into street / city / state / zip.
+    // Expected formats (all common US address forms):
+    //   "18109 Mount Washington St. Fountain Valley, CA. 92708"
+    //   "18109 Mount Washington St., Fountain Valley, CA 92708"
+    //   "18109 Mount Washington St., Fountain Valley, CA, 92708"
+    if ($rawAddressLine !== '') {
+        // Pattern: everything up to the last street suffix, then city, state, zip.
+        // We try a structured regex first that captures the four parts.
+        $splitPattern = '/^(.+?(?:st\.?|ave\.?|blvd\.?|rd\.?|dr\.?|ln\.?|way|ct\.?|pl\.?|pkwy\.?|hwy\.?|suite\s+\S+|ste\.?\s+\S+|#\S+))\s*[,\s]+\s*(.+?)\s*[,\s]+\s*([A-Z]{2})\.?\s*[,\s]*\s*(\d{5}(?:-\d{4})?)$/i';
+        if (preg_match($splitPattern, $rawAddressLine, $m)) {
+            $address = prospectSanitizeField(rtrim($m[1], ' ,'), 255);
+            $city    = prospectSanitizeField($m[2], 100);
+            $state   = prospectSanitizeField(rtrim($m[3], '.'), 50);
+            $zip     = prospectSanitizeField($m[4], 20);
+        } else {
+            // Fallback: pull zip (5-digit) and two-letter state from the end, keep rest as street.
+            $remaining = $rawAddressLine;
+            if (preg_match('/\b(\d{5}(?:-\d{4})?)\b/', $remaining, $zm)) {
+                $zip       = $zm[1];
+                $remaining = trim(str_replace($zm[0], '', $remaining), " \t\n\r,.");
+            }
+            if (preg_match('/\b([A-Z]{2})\.?\b/', $remaining, $sm)) {
+                $state     = rtrim($sm[1], '.');
+                $remaining = trim(str_replace($sm[0], '', $remaining), " \t\n\r,.");
+            }
+            // Try to split remaining into street + city at the last comma.
+            $commaPos = strrpos($remaining, ',');
+            if ($commaPos !== false) {
+                $address = prospectSanitizeField(substr($remaining, 0, $commaPos), 255);
+                $city    = prospectSanitizeField(substr($remaining, $commaPos + 1), 100);
+            } else {
+                $address = prospectSanitizeField($remaining, 255);
             }
         }
     }
@@ -123,7 +164,7 @@ function prospectParseRawText(string $rawText): array
     }
 
     $confidence = 0.35;
-    foreach ([$company, $contact, $phone, $email, $website, $address] as $field) {
+    foreach ([$company, $contact, $phone, $email, $website, $address, $city, $state, $zip] as $field) {
         if (trim((string) $field) !== '') {
             $confidence += 0.12;
         }
@@ -154,6 +195,9 @@ function prospectParseRawText(string $rawText): array
             'email' => prospectSanitizeField($email),
             'website' => prospectSanitizeField($website),
             'address' => $address,
+            'city'    => $city,
+            'state'   => $state,
+            'zip'     => $zip,
             'status' => $status,
             'notes' => $notes,
         ],
