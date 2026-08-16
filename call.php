@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Call Now</title>
+    <title>Send to Dialer</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -84,7 +84,7 @@
             gap: 0.75rem;
             margin-top: 3rem;
             padding: 1.25rem 0;
-            background: #16a34a;
+            background: #2563eb;
             color: #fff;
             font-size: 1.6rem;
             font-weight: 800;
@@ -101,8 +101,8 @@
             -webkit-appearance: none;
         }
 
-        #call-btn:hover  { background: #15803d; }
-        #call-btn:active { transform: scale(0.96); background: #166534; }
+        #call-btn:hover  { background: #1d4ed8; }
+        #call-btn:active { transform: scale(0.96); background: #1e40af; }
 
         #call-btn.disabled,
         #call-btn:disabled {
@@ -150,7 +150,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.07 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 9.09a16 16 0 0 0 5.82 5.82l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
         </svg>
-        Call Now
+        Send to Dialer
     </button>
 
     <p class="hint">
@@ -268,7 +268,7 @@
                 btn.disabled = false;
                 btn.classList.remove('disabled');
                 statusDot.classList.add('live');
-                statusText.textContent = 'Number received — tap Call Now to dial';
+                statusText.textContent = 'Number received — tap Send to Dialer to open the dialer';
             } else {
                 companyDisplay.textContent = '—';
                 companyDisplay.classList.add('empty');
