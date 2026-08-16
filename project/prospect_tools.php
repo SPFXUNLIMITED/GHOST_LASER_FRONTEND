@@ -113,7 +113,7 @@ function prospectParseRawText(string $rawText): array
     if ($rawAddressLine !== '') {
         // Pattern: everything up to the last street suffix, then city, state, zip.
         // We try a structured regex first that captures the four parts.
-        $splitPattern = '/^(.+?(?:st\.?|ave\.?|blvd\.?|rd\.?|dr\.?|ln\.?|way|ct\.?|pl\.?|pkwy\.?|hwy\.?|suite\s+\S+|ste\.?\s+\S+|#\S+))\s*[,\s]+\s*(.+?)\s*[,\s]+\s*([A-Z]{2})\.?\s*[,\s]*\s*(\d{5}(?:-\d{4})?)$/i';
+        $splitPattern = '/^(.+?(?:st\.?|ave\.?|blvd\.?|rd\.?|dr\.?|ln\.?|way|ct\.?|pl\.?|pkwy\.?|hwy\.?|suite\s+\S+|ste\.?\s+\S+|#\S+)(?:\s+(?:unit|apt\.?|apartment|bldg\.?|building|fl\.?|floor|room|rm\.?|dept\.?|department|lot|trlr\.?|trailer|sp\.?|space|box|pmb)\s+\S+)?)\s*[,\s]+\s*(.+?)\s*[,\s]+\s*([A-Z]{2})\.?\s*[,\s]*\s*(\d{5}(?:-\d{4})?)$/i';
         if (preg_match($splitPattern, $rawAddressLine, $m)) {
             $address = prospectSanitizeField(rtrim($m[1], ' ,'), 255);
             $city    = prospectSanitizeField($m[2], 100);
