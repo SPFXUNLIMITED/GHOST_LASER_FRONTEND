@@ -111,6 +111,9 @@ function prospectsEnsureSchema(PDO $pdo): void
             converted_customer_id INT UNSIGNED NULL,
             converted_at DATETIME NULL,
             address VARCHAR(255) NULL,
+            city VARCHAR(100) NULL,
+            state VARCHAR(50) NULL,
+            zip VARCHAR(20) NULL,
             is_archived TINYINT(1) NOT NULL DEFAULT 0,
             created_by INT UNSIGNED NULL,
             updated_by INT UNSIGNED NULL,
@@ -131,6 +134,15 @@ function prospectsEnsureSchema(PDO $pdo): void
 
     if (!prospectsColumnExists($pdo, 'prospects', 'address')) {
         $pdo->exec("ALTER TABLE prospects ADD COLUMN address VARCHAR(255) NULL AFTER website");
+    }
+    if (!prospectsColumnExists($pdo, 'prospects', 'city')) {
+        $pdo->exec("ALTER TABLE prospects ADD COLUMN city VARCHAR(100) NULL AFTER address");
+    }
+    if (!prospectsColumnExists($pdo, 'prospects', 'state')) {
+        $pdo->exec("ALTER TABLE prospects ADD COLUMN state VARCHAR(50) NULL AFTER city");
+    }
+    if (!prospectsColumnExists($pdo, 'prospects', 'zip')) {
+        $pdo->exec("ALTER TABLE prospects ADD COLUMN zip VARCHAR(20) NULL AFTER state");
     }
     if (!prospectsColumnExists($pdo, 'prospects', 'converted_customer_id')) {
         $pdo->exec("ALTER TABLE prospects ADD COLUMN converted_customer_id INT UNSIGNED NULL AFTER parse_errors");
