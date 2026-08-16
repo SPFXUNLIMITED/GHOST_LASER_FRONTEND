@@ -1343,7 +1343,7 @@ require_once __DIR__ . '/templates/header.php';
                 <label class="label">Smart Raw Source (AI Parse Preview)</label>
                 <textarea class="field" rows="6" name="raw_source" id="form_raw_source" maxlength="65000" placeholder="Paste website/company text dump here."></textarea>
                 <div class="mt-2 flex items-center gap-2">
-                    <button type="button" id="parseBtn" onclick="parseTextDump()" class="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-300 hover:bg-cyan-500/20">AI Parse &amp; Preview</button>
+                    <button type="button" id="parseBtn" onclick="parseTextDump()" class="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-300 hover:bg-cyan-500/20">AI Parse</button>
                     <span id="parseMeta" class="text-xs text-zinc-500"></span>
                 </div>
             </div>
@@ -1680,7 +1680,7 @@ async function parseTextDump() {
         latestParseResult = data;
         latestDuplicate = data.duplicate || null;
 
-        // Populate the preview fields regardless so they're ready for either path.
+        // Populate the preview fields so they're ready if the duplicate "Create Anyway" path is taken.
         document.getElementById('preview_company').value = data.parsed_fields.company || '';
         document.getElementById('preview_contact_name').value = data.parsed_fields.contact_name || '';
         document.getElementById('preview_phone').value = data.parsed_fields.phone || '';
@@ -1698,13 +1698,14 @@ async function parseTextDump() {
         if (latestDuplicate) {
             openDuplicateModal(latestDuplicate, data.parsed_fields);
         } else {
-            document.getElementById('parsePreviewModal').classList.add('open');
+            // Directly fill the main form fields — no second modal needed.
+            applyPreviewToForm();
         }
     } catch (err) {
         alert(err.message || 'Parse failed.');
     } finally {
         parseBtn.disabled = false;
-        parseBtn.textContent = 'AI Parse & Preview';
+        parseBtn.textContent = 'AI Parse';
     }
 }
 
