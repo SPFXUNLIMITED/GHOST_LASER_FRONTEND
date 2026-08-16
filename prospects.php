@@ -1099,7 +1099,7 @@ require_once __DIR__ . '/templates/header.php';
                 <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Interaction History</p>
                 <div id="details_interactions" class="space-y-2"></div>
             </div>
-            <form method="POST" action="prospects.php" class="pt-2 grid gap-2 md:grid-cols-4">
+            <form method="POST" action="prospects.php" class="pt-2 grid gap-2 grid-cols-4">
                 <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="action" value="log_interaction">
                 <input type="hidden" name="prospect_id" id="details_prospect_id" value="0">
@@ -1119,8 +1119,8 @@ require_once __DIR__ . '/templates/header.php';
                     <?php endforeach; ?>
                 </select>
                 <input type="datetime-local" name="interacted_at" id="details_interacted_at" class="field" value="<?= htmlspecialchars($laNowDateTimeLocal, ENT_QUOTES, 'UTF-8') ?>">
-                <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-zinc-950">Log</button>
-                <div class="md:col-span-4">
+                <button type="submit" class="justify-self-start rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-zinc-950">Log</button>
+                <div class="col-span-4">
                     <textarea name="interaction_notes" rows="2" maxlength="3000" class="field" placeholder="Interaction notes"></textarea>
                 </div>
             </form>
