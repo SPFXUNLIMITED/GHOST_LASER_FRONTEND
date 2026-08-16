@@ -1099,30 +1099,30 @@ require_once __DIR__ . '/templates/header.php';
                 <p class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Interaction History</p>
                 <div id="details_interactions" class="space-y-2"></div>
             </div>
-            <form method="POST" action="prospects.php" class="pt-2 grid gap-2 grid-cols-4">
+            <form method="POST" action="prospects.php" class="pt-2 space-y-2">
                 <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="action" value="log_interaction">
                 <input type="hidden" name="prospect_id" id="details_prospect_id" value="0">
                 <input type="hidden" name="category" value="<?= htmlspecialchars($isCategoryFocused ? $currentCategorySlug : '', ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
-                <select name="interaction_type" class="field">
-                    <option value="call">Call</option>
-                    <option value="email">Email</option>
-                    <option value="note">Note</option>
-                    <option value="status_change">Status Change</option>
-                </select>
-                <select name="new_status" class="field">
-                    <option value="">Status (optional)</option>
-                    <?php foreach ($statusMap as $statusKeyOption => $statusLabelOption): ?>
-                        <option value="<?= htmlspecialchars($statusKeyOption, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($statusLabelOption, ENT_QUOTES, 'UTF-8') ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <input type="datetime-local" name="interacted_at" id="details_interacted_at" class="field" value="<?= htmlspecialchars($laNowDateTimeLocal, ENT_QUOTES, 'UTF-8') ?>">
-                <button type="submit" class="justify-self-start rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-zinc-950">Log</button>
-                <div class="col-span-4">
-                    <textarea name="interaction_notes" rows="2" maxlength="3000" class="field" placeholder="Interaction notes"></textarea>
+                <div class="flex gap-2 items-center">
+                    <select name="interaction_type" class="field" style="width:auto;">
+                        <option value="call">Call</option>
+                        <option value="email">Email</option>
+                        <option value="note">Note</option>
+                        <option value="status_change">Status Change</option>
+                    </select>
+                    <select name="new_status" class="field" style="width:auto;">
+                        <option value="">Status (optional)</option>
+                        <?php foreach ($statusMap as $statusKeyOption => $statusLabelOption): ?>
+                            <option value="<?= htmlspecialchars($statusKeyOption, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($statusLabelOption, ENT_QUOTES, 'UTF-8') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <input type="datetime-local" name="interacted_at" id="details_interacted_at" class="field" style="width:auto;" value="<?= htmlspecialchars($laNowDateTimeLocal, ENT_QUOTES, 'UTF-8') ?>">
+                    <button type="submit" class="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-zinc-950 whitespace-nowrap">Log</button>
                 </div>
+                <textarea name="interaction_notes" rows="2" maxlength="3000" class="field" placeholder="Interaction notes"></textarea>
             </form>
         </div>
     </div>
