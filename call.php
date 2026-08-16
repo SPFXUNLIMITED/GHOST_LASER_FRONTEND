@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Call Now</title>
+    <title>Send to Dialer</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -27,6 +27,25 @@
             text-align: center;
             user-select: none;
             -webkit-user-select: none;
+        }
+
+        .headset-reminder {
+            position: fixed;
+            top: 1.25rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(28vw, 7rem);
+            height: min(28vw, 7rem);
+            color: #60a5fa;
+            filter: drop-shadow(0 0 18px rgba(96, 165, 250, 0.35));
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .headset-reminder svg {
+            width: 100%;
+            height: 100%;
+            display: block;
         }
 
         .label {
@@ -84,7 +103,7 @@
             gap: 0.75rem;
             margin-top: 3rem;
             padding: 1.25rem 0;
-            background: #16a34a;
+            background: #2563eb;
             color: #fff;
             font-size: 1.6rem;
             font-weight: 800;
@@ -101,8 +120,8 @@
             -webkit-appearance: none;
         }
 
-        #call-btn:hover  { background: #15803d; }
-        #call-btn:active { transform: scale(0.96); background: #166534; }
+        #call-btn:hover  { background: #1d4ed8; }
+        #call-btn:active { transform: scale(0.96); background: #1e40af; }
 
         #call-btn.disabled,
         #call-btn:disabled {
@@ -141,6 +160,15 @@
 </head>
 <body>
 
+    <div class="headset-reminder" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 13v-1a8 8 0 0 1 16 0v1"/>
+            <path d="M4 13a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h1.5A1.5 1.5 0 0 0 7 17.5v-3A1.5 1.5 0 0 0 5.5 13z"/>
+            <path d="M20 13a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1.5a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z"/>
+            <path d="M9 19v1a2 2 0 0 0 2 2h2"/>
+        </svg>
+    </div>
+
     <p class="label">Send to Phone</p>
 
     <div id="company-display" class="company-name empty">—</div>
@@ -150,7 +178,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.07 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 9.09a16 16 0 0 0 5.82 5.82l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
         </svg>
-        Call Now
+        Send to Dialer
     </button>
 
     <p class="hint">
@@ -268,7 +296,7 @@
                 btn.disabled = false;
                 btn.classList.remove('disabled');
                 statusDot.classList.add('live');
-                statusText.textContent = 'Number received — tap Call Now to dial';
+                statusText.textContent = 'Number received — tap Send to Dialer to open the dialer';
             } else {
                 companyDisplay.textContent = '—';
                 companyDisplay.classList.add('empty');
