@@ -28,5 +28,6 @@ if (!is_array($data) || !isset($data['number'])) {
 
 echo json_encode([
     'number'    => $data['number'],
+    'company'   => $data['company'] ?? '',
     'timestamp' => (int)($data['timestamp'] ?? 0),
 ]);
