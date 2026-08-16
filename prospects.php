@@ -467,7 +467,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $duplicate = prospectFindDuplicate($pdo, $prospectId, $email, $phone, $company);
-            if ($duplicate !== null) {
+            $forceCreate = !empty($_POST['force_create']);
+            if ($duplicate !== null && !$forceCreate) {
                 throw new RuntimeException('Duplicate prospect found (email, phone, or company).');
             }
 
@@ -1276,6 +1277,7 @@ require_once __DIR__ . '/templates/header.php';
             <input type="hidden" name="parse_provider" id="form_parse_provider" value="">
             <input type="hidden" name="parse_confidence" id="form_parse_confidence" value="">
             <input type="hidden" name="parse_errors" id="form_parse_errors" value="">
+            <input type="hidden" name="force_create" id="form_force_create" value="">
 
             <div class="grid gap-4 md:grid-cols-2">
                 <div><label class="label">Company</label><input class="field" type="text" name="company" id="form_company" maxlength="255"></div>
@@ -1359,6 +1361,40 @@ require_once __DIR__ . '/templates/header.php';
     </div>
 </div>
 
+<div id="parseDuplicateModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="parseDuplicateTitle">
+    <div class="modal-box" style="width:min(560px,96vw);">
+        <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <h2 id="parseDuplicateTitle" class="text-lg font-semibold text-amber-400">⚠ Duplicate Detected</h2>
+            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeDuplicateModal()">Close</button>
+        </div>
+        <div class="p-5 space-y-4">
+            <p class="text-sm text-zinc-200">This company already exists in the database.</p>
+            <div class="rounded-lg border border-zinc-700 bg-zinc-900 p-4 space-y-1 text-sm">
+                <div><span class="text-zinc-400 text-xs uppercase tracking-wide">Company</span><br><span id="dup_company" class="text-white font-medium"></span></div>
+                <div class="mt-2"><span class="text-zinc-400 text-xs uppercase tracking-wide">Phone on record</span><br><span id="dup_phone" class="text-zinc-200"></span></div>
+                <div class="mt-2"><span class="text-zinc-400 text-xs uppercase tracking-wide">Last Called</span><br><span id="dup_last_called" class="text-zinc-200"></span></div>
+            </div>
+            <p id="dup_phone_diff_notice" class="hidden text-xs text-amber-300 bg-amber-900/30 border border-amber-700/40 rounded-md px-3 py-2">
+                📞 The parsed phone number differs from the one on file. Choosing "Update Existing" will update the phone number.
+            </p>
+            <div class="flex flex-col gap-2 pt-1">
+                <button type="button" id="dupUpdateBtn" onclick="duplicateUpdateExisting()"
+                    class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-zinc-950 w-full">
+                    Update Existing Record
+                </button>
+                <button type="button" onclick="duplicateCreateAnyway()"
+                    class="rounded-lg border border-zinc-600 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 w-full">
+                    Create as New Prospect Anyway
+                </button>
+                <button type="button" onclick="closeDuplicateModal()"
+                    class="text-xs text-zinc-500 hover:text-zinc-300 text-center mt-1">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 const prospectsCsrf = <?= json_encode($csrf, JSON_UNESCAPED_UNICODE) ?>;
 const prospectRecords = <?= json_encode($prospectsForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
@@ -1366,6 +1402,7 @@ const prospectInteractions = <?= json_encode($interactionsByProspect, JSON_UNESC
 const statusLabels = <?= json_encode($statusMap, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const laNowDateTimeLocal = <?= json_encode($laNowDateTimeLocal, JSON_UNESCAPED_UNICODE) ?>;
 let latestParseResult = null;
+let latestDuplicate = null;
 
 function openCategoryModal() {
     document.getElementById('categoryModal').classList.add('open');
@@ -1438,6 +1475,7 @@ function openCreateModal() {
     document.getElementById('form_parse_errors').value = '';
     document.getElementById('parseMeta').textContent = '';
     document.getElementById('form_raw_source').value = '';
+    document.getElementById('form_force_create').value = '';
     document.getElementById('prospectModal').classList.add('open');
     document.body.classList.add('modal-open');
 }
@@ -1567,6 +1605,9 @@ async function parseTextDump() {
             throw new Error(data.error || 'Parse failed.');
         }
         latestParseResult = data;
+        latestDuplicate = data.duplicate || null;
+
+        // Populate the preview fields regardless so they're ready for either path.
         document.getElementById('preview_company').value = data.parsed_fields.company || '';
         document.getElementById('preview_contact_name').value = data.parsed_fields.contact_name || '';
         document.getElementById('preview_phone').value = data.parsed_fields.phone || '';
@@ -1576,7 +1617,12 @@ async function parseTextDump() {
         document.getElementById('preview_notes').value = data.parsed_fields.notes || '';
         document.getElementById('parsePreviewMeta').textContent = `Provider: ${data.provider || 'ai'} · Confidence: ${data.confidence || 0}%`;
         document.getElementById('parsePreviewErrors').textContent = Array.isArray(data.errors) && data.errors.length > 0 ? data.errors.join(' ') : '';
-        document.getElementById('parsePreviewModal').classList.add('open');
+
+        if (latestDuplicate) {
+            openDuplicateModal(latestDuplicate, data.parsed_fields);
+        } else {
+            document.getElementById('parsePreviewModal').classList.add('open');
+        }
     } catch (err) {
         alert(err.message || 'Parse failed.');
     } finally {
@@ -1587,6 +1633,67 @@ async function parseTextDump() {
 
 function closeParsePreview() {
     document.getElementById('parsePreviewModal').classList.remove('open');
+}
+
+// ── Duplicate detection modal ──────────────────────────────────────────────────
+function openDuplicateModal(dup, parsedFields) {
+    document.getElementById('dup_company').textContent = dup.company || '(unknown)';
+    document.getElementById('dup_phone').textContent = dup.phone || '—';
+
+    const lastCalled = dup.last_called_at
+        ? new Date(dup.last_called_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
+        : 'Never';
+    document.getElementById('dup_last_called').textContent = lastCalled;
+
+    const parsedPhone = (parsedFields.phone || '').replace(/\D/g, '');
+    const existingPhone = (dup.phone || '').replace(/\D/g, '');
+    const diffNotice = document.getElementById('dup_phone_diff_notice');
+    if (parsedPhone !== '' && existingPhone !== '' && parsedPhone !== existingPhone) {
+        diffNotice.classList.remove('hidden');
+    } else {
+        diffNotice.classList.add('hidden');
+    }
+
+    document.getElementById('parseDuplicateModal').classList.add('open');
+}
+
+function closeDuplicateModal() {
+    document.getElementById('parseDuplicateModal').classList.remove('open');
+}
+
+function duplicateUpdateExisting() {
+    if (!latestDuplicate || !latestParseResult) return;
+    closeDuplicateModal();
+    // Load the existing record into the edit form.
+    const existing = prospectRecords[String(latestDuplicate.id)] || prospectRecords[latestDuplicate.id];
+    if (existing) {
+        openEditModal(existing);
+    } else {
+        // Record not in current page's JS data (e.g. filtered out) — open a blank edit form with the ID.
+        openCreateModal();
+        document.getElementById('form_prospect_id').value = latestDuplicate.id;
+        document.getElementById('prospectModalTitle').textContent = 'Update Existing Prospect';
+    }
+    // Overlay the parsed fields on top of the existing record.
+    const f = latestParseResult.parsed_fields;
+    if (f.company)       document.getElementById('form_company').value = f.company;
+    if (f.contact_name)  document.getElementById('form_contact_name').value = f.contact_name;
+    if (f.phone)         document.getElementById('form_phone').value = f.phone;
+    if (f.email)         document.getElementById('form_email').value = f.email;
+    if (f.website)       document.getElementById('form_website').value = f.website;
+    if (f.notes)         document.getElementById('form_notes').value = f.notes;
+    document.getElementById('form_parse_provider').value = latestParseResult.provider || '';
+    document.getElementById('form_parse_confidence').value = latestParseResult.confidence || '';
+    document.getElementById('form_parse_errors').value = Array.isArray(latestParseResult.errors) ? latestParseResult.errors.join(' ') : '';
+    document.getElementById('parseMeta').textContent = `Last parse: ${latestParseResult.provider || 'ai'} (${latestParseResult.confidence || 0}%)`;
+    document.getElementById('form_force_create').value = '';
+}
+
+function duplicateCreateAnyway() {
+    closeDuplicateModal();
+    // Mark the submission as intentionally bypassing the duplicate check.
+    document.getElementById('form_force_create').value = '1';
+    document.getElementById('parsePreviewModal').classList.add('open');
 }
 
 function applyPreviewToForm() {
@@ -1743,6 +1850,9 @@ if (bulkKeywordsModalEl) {
 document.getElementById('parsePreviewModal').addEventListener('click', (e) => {
     if (e.target.id === 'parsePreviewModal') closeParsePreview();
 });
+document.getElementById('parseDuplicateModal').addEventListener('click', (e) => {
+    if (e.target.id === 'parseDuplicateModal') closeDuplicateModal();
+});
 document.getElementById('prospectDetailsModal').addEventListener('click', (e) => {
     if (e.target.id === 'prospectDetailsModal') closeDetailsModal();
 });
@@ -1758,6 +1868,7 @@ document.addEventListener('keydown', (e) => {
         closeDetailsModal();
         closeProspectModal();
         closeParsePreview();
+        closeDuplicateModal();
         closeEmailModal();
     }
 });

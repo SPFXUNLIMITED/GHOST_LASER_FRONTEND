@@ -41,9 +41,30 @@ require_once dirname(__DIR__) . '/project/prospect_tools.php';
 
 $parsed = prospectParseRawText($rawText);
 
+// Duplicate detection: if a company name was parsed, check the DB for a similar prospect.
+$duplicate = null;
+$parsedCompany = trim((string) ($parsed['fields']['company'] ?? ''));
+if ($parsedCompany !== '') {
+    try {
+        require_once dirname(__DIR__) . '/project/db.php';
+        $dup = prospectFindSimilarByCompany($pdo, $parsedCompany);
+        if ($dup !== null) {
+            $duplicate = [
+                'id'             => (int) $dup['id'],
+                'company'        => (string) ($dup['company'] ?? ''),
+                'phone'          => (string) ($dup['phone'] ?? ''),
+                'last_called_at' => (string) ($dup['last_called_at'] ?? ''),
+            ];
+        }
+    } catch (Throwable $e) {
+        // Non-fatal: duplicate check failure should not block the parse response.
+    }
+}
+
 echo json_encode([
     'parsed_fields' => $parsed['fields'],
     'confidence' => $parsed['confidence'],
     'provider' => $parsed['provider'],
     'errors' => $parsed['errors'],
+    'duplicate' => $duplicate,
 ], JSON_UNESCAPED_UNICODE);

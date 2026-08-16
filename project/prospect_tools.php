@@ -73,6 +73,74 @@ function prospectParseRawText(string $rawText): array
         }
     }
 
+    $address = '';
+    $city    = '';
+    $state   = '';
+    $zip     = '';
+
+    // Locate the raw address line via label (Pass 1) or street pattern (Pass 2).
+    $rawAddressLine = '';
+
+    // Pass 1: explicit "Location" or "Address" label on its own line or with inline value.
+    foreach ($cleanLines as $idx => $line) {
+        if (preg_match('/^(?:location|address)\s*:?\s*(.*)$/i', $line, $m)) {
+            $inline = trim($m[1]);
+            if ($inline !== '') {
+                $rawAddressLine = $inline;
+            } elseif (isset($cleanLines[$idx + 1])) {
+                $rawAddressLine = $cleanLines[$idx + 1];
+            }
+            break;
+        }
+    }
+
+    // Pass 2: scan for a line that starts with a street number.
+    if ($rawAddressLine === '') {
+        $streetPattern = '/^\d+\s+\S.*(?:st\.?|ave\.?|blvd\.?|rd\.?|dr\.?|ln\.?|way|ct\.?|pl\.?|pkwy\.?|hwy\.?|washington|valley|mountain|hills?|park|circle|court|boulevard|avenue|street|road|drive|lane)/i';
+        foreach ($cleanLines as $line) {
+            if (preg_match($streetPattern, $line)) {
+                $rawAddressLine = $line;
+                break;
+            }
+        }
+    }
+
+    // Split the raw address line into street / city / state / zip.
+    // Expected formats (all common US address forms):
+    //   "18109 Mount Washington St. Fountain Valley, CA. 92708"
+    //   "18109 Mount Washington St., Fountain Valley, CA 92708"
+    //   "18109 Mount Washington St., Fountain Valley, CA, 92708"
+    if ($rawAddressLine !== '') {
+        // Pattern: everything up to the last street suffix, then city, state, zip.
+        // We try a structured regex first that captures the four parts.
+        $splitPattern = '/^(.+?(?:st\.?|ave\.?|blvd\.?|rd\.?|dr\.?|ln\.?|way|ct\.?|pl\.?|pkwy\.?|hwy\.?|suite\s+\S+|ste\.?\s+\S+|#\S+))\s*[,\s]+\s*(.+?)\s*[,\s]+\s*([A-Z]{2})\.?\s*[,\s]*\s*(\d{5}(?:-\d{4})?)$/i';
+        if (preg_match($splitPattern, $rawAddressLine, $m)) {
+            $address = prospectSanitizeField(rtrim($m[1], ' ,'), 255);
+            $city    = prospectSanitizeField($m[2], 100);
+            $state   = prospectSanitizeField(rtrim($m[3], '.'), 50);
+            $zip     = prospectSanitizeField($m[4], 20);
+        } else {
+            // Fallback: pull zip (5-digit) and two-letter state from the end, keep rest as street.
+            $remaining = $rawAddressLine;
+            if (preg_match('/\b(\d{5}(?:-\d{4})?)\b/', $remaining, $zm)) {
+                $zip       = $zm[1];
+                $remaining = trim(str_replace($zm[0], '', $remaining), " \t\n\r,.");
+            }
+            if (preg_match('/\b([A-Z]{2})\.?\b/', $remaining, $sm)) {
+                $state     = rtrim($sm[1], '.');
+                $remaining = trim(str_replace($sm[0], '', $remaining), " \t\n\r,.");
+            }
+            // Try to split remaining into street + city at the last comma.
+            $commaPos = strrpos($remaining, ',');
+            if ($commaPos !== false) {
+                $address = prospectSanitizeField(substr($remaining, 0, $commaPos), 255);
+                $city    = prospectSanitizeField(substr($remaining, $commaPos + 1), 100);
+            } else {
+                $address = prospectSanitizeField($remaining, 255);
+            }
+        }
+    }
+
     $status = 'no_answer';
     $lower = strtolower($rawText);
     if (str_contains($lower, 'not interested')) {
@@ -96,7 +164,7 @@ function prospectParseRawText(string $rawText): array
     }
 
     $confidence = 0.35;
-    foreach ([$company, $contact, $phone, $email, $website] as $field) {
+    foreach ([$company, $contact, $phone, $email, $website, $address, $city, $state, $zip] as $field) {
         if (trim((string) $field) !== '') {
             $confidence += 0.12;
         }
@@ -126,6 +194,10 @@ function prospectParseRawText(string $rawText): array
             'phone' => prospectSanitizeField($phone, 100),
             'email' => prospectSanitizeField($email),
             'website' => prospectSanitizeField($website),
+            'address' => $address,
+            'city'    => $city,
+            'state'   => $state,
+            'zip'     => $zip,
             'status' => $status,
             'notes' => $notes,
         ],
@@ -133,4 +205,51 @@ function prospectParseRawText(string $rawText): array
         'provider' => 'heuristic-ai',
         'errors' => $errors,
     ];
+}
+
+/**
+ * Look for an existing non-archived prospect whose company name closely
+ * matches $company (case-insensitive exact, then partial containment).
+ * Returns id, company, phone, last_called_at, or null if none found.
+ */
+function prospectFindSimilarByCompany(PDO $pdo, string $company): ?array
+{
+    $company = trim($company);
+    if ($company === '') {
+        return null;
+    }
+
+    // 1. Exact case-insensitive match.
+    $stmt = $pdo->prepare("
+        SELECT id, company, phone, last_called_at
+        FROM prospects
+        WHERE is_archived = 0
+          AND LOWER(company) = LOWER(:company)
+        ORDER BY id ASC
+        LIMIT 1
+    ");
+    $stmt->execute([':company' => $company]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        return $row;
+    }
+
+    // 2. Partial containment: stored name contains parsed name, or vice-versa.
+    $stmt = $pdo->prepare("
+        SELECT id, company, phone, last_called_at
+        FROM prospects
+        WHERE is_archived = 0
+          AND (
+              LOWER(company) LIKE LOWER(:like_parsed)
+              OR LOWER(:company) LIKE CONCAT('%', LOWER(company), '%')
+          )
+        ORDER BY id ASC
+        LIMIT 1
+    ");
+    $stmt->execute([
+        ':like_parsed' => '%' . $company . '%',
+        ':company'     => $company,
+    ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
 }
