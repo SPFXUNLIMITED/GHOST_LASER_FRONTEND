@@ -1601,25 +1601,30 @@ function sendToPhone() {
     const raw = document.getElementById('details_phone').textContent.trim();
     if (!raw || raw === '—') return;
 
-    const STORAGE_KEY  = 'ghost_call_number';
-    const CHANNEL_NAME = 'ghost_call_channel';
-
-    localStorage.setItem(STORAGE_KEY, raw);
-
-    if (typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel(CHANNEL_NAME);
-        bc.postMessage({ number: raw });
-        bc.close();
-    }
-
     const btn = document.getElementById('sendToPhoneBtn');
     const orig = btn.textContent;
-    btn.textContent = '✓ Sent!';
+    btn.textContent = '⏳ Sending…';
     btn.disabled = true;
-    setTimeout(function () {
-        btn.textContent = orig;
-        btn.disabled = false;
-    }, 2000);
+
+    fetch('/api/send-to-phone.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number: raw }),
+    })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            btn.textContent = data.success ? '✓ Sent!' : '✗ Failed';
+        })
+        .catch(function () {
+            btn.textContent = '✗ Failed';
+        })
+        .finally(function () {
+            setTimeout(function () {
+                btn.textContent = orig;
+                btn.disabled = false;
+            }, 2000);
+        });
 }
 
 function getCurrentLosAngelesDateTimeLocal() {

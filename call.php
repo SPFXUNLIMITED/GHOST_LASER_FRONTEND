@@ -137,8 +137,8 @@
 
 <script>
 (function () {
-    const STORAGE_KEY  = 'ghost_call_number';
-    const CHANNEL_NAME = 'ghost_call_channel';
+    const POLL_URL = '/api/get-phone-number.php';
+    const POLL_MS  = 2000;
 
     const display    = document.getElementById('phone-display');
     const btn        = document.getElementById('call-btn');
@@ -241,39 +241,23 @@
         }, 250);
     }
 
-    // ── Seed from last stored number ──────────────────────────────────────
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-        // Apply immediately without animation on initial load
-        const digits = stored.replace(/\D/g, '');
-        display.textContent = formatPhone(stored);
-        display.classList.remove('empty');
-        btn.href = 'tel:' + digits;
-        btn.classList.remove('disabled');
-        statusDot.classList.add('live');
-        statusText.textContent = 'Number received — tap Call Now to dial';
+    // ── Server polling (every 2 s, works across all devices) ─────────────
+    let lastTimestamp = 0;
+
+    function pollNumber() {
+        fetch(POLL_URL, { credentials: 'same-origin', cache: 'no-store' })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data && data.timestamp && data.timestamp > lastTimestamp) {
+                    lastTimestamp = data.timestamp;
+                    setNumber(data.number || '');
+                }
+            })
+            .catch(function () { /* silently ignore network errors */ });
     }
 
-    // ── BroadcastChannel (same-origin cross-tab, instant) ─────────────────
-    if (typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel(CHANNEL_NAME);
-        bc.onmessage = function (e) {
-            if (e.data && e.data.number !== undefined) {
-                localStorage.setItem(STORAGE_KEY, e.data.number);
-                setNumber(e.data.number);
-            }
-        };
-    }
-
-    // ── localStorage polling fallback (1.5 s interval) ────────────────────
-    let lastValue = localStorage.getItem(STORAGE_KEY) || '';
-    setInterval(function () {
-        const current = localStorage.getItem(STORAGE_KEY) || '';
-        if (current !== lastValue) {
-            lastValue = current;
-            setNumber(current);
-        }
-    }, 1500);
+    pollNumber(); // immediate check on load
+    setInterval(pollNumber, POLL_MS);
 
     // ── Session keepalive (every 10 minutes) ──────────────────────────────
     // Pings the server to reset the session idle timer so this tab never
