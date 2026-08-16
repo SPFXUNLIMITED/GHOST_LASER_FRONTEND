@@ -110,6 +110,7 @@ function prospectsEnsureSchema(PDO $pdo): void
             parse_errors TEXT NULL,
             converted_customer_id INT UNSIGNED NULL,
             converted_at DATETIME NULL,
+            address VARCHAR(255) NULL,
             is_archived TINYINT(1) NOT NULL DEFAULT 0,
             created_by INT UNSIGNED NULL,
             updated_by INT UNSIGNED NULL,
@@ -128,6 +129,9 @@ function prospectsEnsureSchema(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 
+    if (!prospectsColumnExists($pdo, 'prospects', 'address')) {
+        $pdo->exec("ALTER TABLE prospects ADD COLUMN address VARCHAR(255) NULL AFTER website");
+    }
     if (!prospectsColumnExists($pdo, 'prospects', 'converted_customer_id')) {
         $pdo->exec("ALTER TABLE prospects ADD COLUMN converted_customer_id INT UNSIGNED NULL AFTER parse_errors");
     }

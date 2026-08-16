@@ -446,6 +446,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $phone = prospectSanitizeField((string) ($_POST['phone'] ?? ''), 100);
             $email = strtolower(prospectSanitizeField((string) ($_POST['email'] ?? '')));
             $website = prospectSanitizeField((string) ($_POST['website'] ?? ''));
+            $address = prospectSanitizeField((string) ($_POST['address'] ?? ''));
             $status = trim((string) ($_POST['status'] ?? 'contacted'));
             $notes = prospectSanitizeField((string) ($_POST['notes'] ?? ''), 10000);
             $rawSource = prospectSanitizeField((string) ($_POST['raw_source'] ?? ($_POST['raw_text_dump'] ?? '')), 65000);
@@ -478,6 +479,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'phone' => $phone,
                 'email' => $email,
                 'website' => $website,
+                'address' => $address,
                 'status' => $status,
                 'notes' => $notes,
             ], JSON_UNESCAPED_UNICODE);
@@ -490,6 +492,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         phone = :phone,
                         email = :email,
                         website = :website,
+                        address = :address,
                         status = :status,
                         notes = :notes,
                         last_called_at = :last_called_at,
@@ -507,6 +510,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':phone' => $phone !== '' ? $phone : null,
                     ':email' => $email !== '' ? $email : null,
                     ':website' => $website !== '' ? $website : null,
+                    ':address' => $address !== '' ? $address : null,
                     ':status' => $status,
                     ':notes' => $notes !== '' ? $notes : null,
                     ':last_called_at' => $normalizedLastCalledAt,
@@ -523,11 +527,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insertLastCalledAt = $normalizedLastCalledAt;
                 $stmt = $pdo->prepare("
                     INSERT INTO prospects (
-                        company, contact_name, phone, email, website, status, notes,
+                        company, contact_name, phone, email, website, address, status, notes,
                         raw_source, parse_preview_json, parse_confidence, parse_provider, parse_errors,
                         last_called_at, created_by, updated_by, category_id
                     ) VALUES (
-                        :company, :contact_name, :phone, :email, :website, :status, :notes,
+                        :company, :contact_name, :phone, :email, :website, :address, :status, :notes,
                         :raw_source, :parse_preview_json, :parse_confidence, :parse_provider, :parse_errors,
                         :last_called_at, :created_by, :updated_by, :category_id
                     )
@@ -538,6 +542,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':phone' => $phone !== '' ? $phone : null,
                     ':email' => $email !== '' ? $email : null,
                     ':website' => $website !== '' ? $website : null,
+                    ':address' => $address !== '' ? $address : null,
                     ':status' => $status,
                     ':notes' => $notes !== '' ? $notes : null,
                     ':raw_source' => $rawSource !== '' ? $rawSource : null,
@@ -828,6 +833,7 @@ foreach ($prospects as $prospect) {
         'phone' => (string) ($prospect['phone'] ?? ''),
         'email' => (string) ($prospect['email'] ?? ''),
         'website' => (string) ($prospect['website'] ?? ''),
+        'address' => (string) ($prospect['address'] ?? ''),
         'status' => (string) ($prospect['status'] ?? 'new'),
         'last_called_at' => (string) ($prospect['last_called_at'] ?? ''),
         'last_called_at_display' => prospectFormatDisplayDateTime((string) ($prospect['last_called_at'] ?? '')),
@@ -1303,6 +1309,7 @@ require_once __DIR__ . '/templates/header.php';
                     <label class="label">Last Called</label>
                     <input class="field" type="datetime-local" name="form_last_called_at" id="form_last_called_at">
                 </div>
+                <div class="md:col-span-2"><label class="label">Address</label><input class="field" type="text" name="address" id="form_address" maxlength="255" placeholder="Street address"></div>
             </div>
             <div>
                 <label class="label">Notes</label>
@@ -1347,6 +1354,7 @@ require_once __DIR__ . '/templates/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <div class="md:col-span-2"><label class="label">Address</label><input class="field" type="text" id="preview_address" placeholder="Street address"></div>
             </div>
             <div>
                 <label class="label">Notes (editable before apply)</label>
@@ -1493,6 +1501,7 @@ function openEditModal(prospect) {
     document.getElementById('form_phone').value = prospect.phone || '';
     document.getElementById('form_email').value = prospect.email || '';
     document.getElementById('form_website').value = prospect.website || '';
+    document.getElementById('form_address').value = prospect.address || '';
     document.getElementById('form_status').value = prospect.status || 'no_answer';
     document.getElementById('form_last_called_at').value = prospect.last_called_at ? prospect.last_called_at.replace(' ', 'T').substring(0, 16) : getLaNow();
     document.getElementById('form_notes').value = prospect.notes || '';
@@ -1613,6 +1622,7 @@ async function parseTextDump() {
         document.getElementById('preview_phone').value = data.parsed_fields.phone || '';
         document.getElementById('preview_email').value = data.parsed_fields.email || '';
         document.getElementById('preview_website').value = data.parsed_fields.website || '';
+        document.getElementById('preview_address').value = data.parsed_fields.address || '';
         document.getElementById('preview_status').value = data.parsed_fields.status || 'new';
         document.getElementById('preview_notes').value = data.parsed_fields.notes || '';
         document.getElementById('parsePreviewMeta').textContent = `Provider: ${data.provider || 'ai'} · Confidence: ${data.confidence || 0}%`;
@@ -1681,6 +1691,7 @@ function duplicateUpdateExisting() {
     if (f.phone)         document.getElementById('form_phone').value = f.phone;
     if (f.email)         document.getElementById('form_email').value = f.email;
     if (f.website)       document.getElementById('form_website').value = f.website;
+    if (f.address)       document.getElementById('form_address').value = f.address;
     if (f.notes)         document.getElementById('form_notes').value = f.notes;
     document.getElementById('form_parse_provider').value = latestParseResult.provider || '';
     document.getElementById('form_parse_confidence').value = latestParseResult.confidence || '';
@@ -1702,6 +1713,7 @@ function applyPreviewToForm() {
     document.getElementById('form_phone').value = document.getElementById('preview_phone').value;
     document.getElementById('form_email').value = document.getElementById('preview_email').value;
     document.getElementById('form_website').value = document.getElementById('preview_website').value;
+    document.getElementById('form_address').value = document.getElementById('preview_address').value;
     document.getElementById('form_status').value = document.getElementById('preview_status').value;
     document.getElementById('form_notes').value = document.getElementById('preview_notes').value;
 
