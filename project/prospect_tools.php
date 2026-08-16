@@ -73,6 +73,33 @@ function prospectParseRawText(string $rawText): array
         }
     }
 
+    $address = '';
+    // Pass 1: look for an explicit "Location" or "Address" label line whose value
+    // is either on the same line ("Location: 123 Main St") or on the very next line.
+    foreach ($cleanLines as $idx => $line) {
+        if (preg_match('/^(?:location|address)\s*:?\s*(.*)$/i', $line, $m)) {
+            $inline = trim($m[1]);
+            if ($inline !== '') {
+                $address = prospectSanitizeField($inline, 500);
+            } elseif (isset($cleanLines[$idx + 1])) {
+                $address = prospectSanitizeField($cleanLines[$idx + 1], 500);
+            }
+            break;
+        }
+    }
+
+    // Pass 2: if still empty, scan every line for a street-address pattern
+    // (starts with a house/suite number followed by recognisable address tokens).
+    if ($address === '') {
+        $streetPattern = '/^\d+\s+\S.*(?:st\.?|ave\.?|blvd\.?|rd\.?|dr\.?|ln\.?|way|ct\.?|pl\.?|pkwy\.?|hwy\.?|washington|valley|mountain|hills?|park|circle|court|boulevard|avenue|street|road|drive|lane)/i';
+        foreach ($cleanLines as $line) {
+            if (preg_match($streetPattern, $line)) {
+                $address = prospectSanitizeField($line, 500);
+                break;
+            }
+        }
+    }
+
     $status = 'no_answer';
     $lower = strtolower($rawText);
     if (str_contains($lower, 'not interested')) {
@@ -96,7 +123,7 @@ function prospectParseRawText(string $rawText): array
     }
 
     $confidence = 0.35;
-    foreach ([$company, $contact, $phone, $email, $website] as $field) {
+    foreach ([$company, $contact, $phone, $email, $website, $address] as $field) {
         if (trim((string) $field) !== '') {
             $confidence += 0.12;
         }
@@ -126,6 +153,7 @@ function prospectParseRawText(string $rawText): array
             'phone' => prospectSanitizeField($phone, 100),
             'email' => prospectSanitizeField($email),
             'website' => prospectSanitizeField($website),
+            'address' => $address,
             'status' => $status,
             'notes' => $notes,
         ],
