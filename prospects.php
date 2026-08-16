@@ -1102,6 +1102,7 @@ require_once __DIR__ . '/templates/header.php';
             <h2 id="prospectDetailsTitle" class="text-lg font-semibold text-white">Prospect Details</h2>
             <div class="flex items-center gap-2">
                 <button type="button" id="sendEmailBtn" class="rounded-md border border-cyan-700/60 bg-cyan-950/20 px-3 py-1 text-xs text-cyan-300 hover:border-cyan-500/60" onclick="openEmailModal()">Send Email</button>
+                <button type="button" id="sendToPhoneBtn" class="rounded-md border border-green-700/60 bg-green-950/20 px-3 py-1 text-xs text-green-300 hover:border-green-500/60" onclick="sendToPhone()">📞 Send to Phone</button>
                 <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeDetailsModal()">Close</button>
             </div>
         </div>
@@ -1594,6 +1595,31 @@ function openDetailsModal(prospectId) {
 function closeDetailsModal() {
     document.getElementById('prospectDetailsModal').classList.remove('open');
     document.body.classList.remove('modal-open');
+}
+
+function sendToPhone() {
+    const raw = document.getElementById('details_phone').textContent.trim();
+    if (!raw || raw === '—') return;
+
+    const STORAGE_KEY  = 'ghost_call_number';
+    const CHANNEL_NAME = 'ghost_call_channel';
+
+    localStorage.setItem(STORAGE_KEY, raw);
+
+    if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel(CHANNEL_NAME);
+        bc.postMessage({ number: raw });
+        bc.close();
+    }
+
+    const btn = document.getElementById('sendToPhoneBtn');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Sent!';
+    btn.disabled = true;
+    setTimeout(function () {
+        btn.textContent = orig;
+        btn.disabled = false;
+    }, 2000);
 }
 
 function getCurrentLosAngelesDateTimeLocal() {
