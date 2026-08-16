@@ -206,3 +206,50 @@ function prospectParseRawText(string $rawText): array
         'errors' => $errors,
     ];
 }
+
+/**
+ * Look for an existing non-archived prospect whose company name closely
+ * matches $company (case-insensitive exact, then partial containment).
+ * Returns id, company, phone, last_called_at, or null if none found.
+ */
+function prospectFindSimilarByCompany(PDO $pdo, string $company): ?array
+{
+    $company = trim($company);
+    if ($company === '') {
+        return null;
+    }
+
+    // 1. Exact case-insensitive match.
+    $stmt = $pdo->prepare("
+        SELECT id, company, phone, last_called_at
+        FROM prospects
+        WHERE is_archived = 0
+          AND LOWER(company) = LOWER(:company)
+        ORDER BY id ASC
+        LIMIT 1
+    ");
+    $stmt->execute([':company' => $company]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        return $row;
+    }
+
+    // 2. Partial containment: stored name contains parsed name, or vice-versa.
+    $stmt = $pdo->prepare("
+        SELECT id, company, phone, last_called_at
+        FROM prospects
+        WHERE is_archived = 0
+          AND (
+              LOWER(company) LIKE LOWER(:like_parsed)
+              OR LOWER(:company) LIKE CONCAT('%', LOWER(company), '%')
+          )
+        ORDER BY id ASC
+        LIMIT 1
+    ");
+    $stmt->execute([
+        ':like_parsed' => '%' . $company . '%',
+        ':company'     => $company,
+    ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
