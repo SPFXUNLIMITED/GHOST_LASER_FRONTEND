@@ -97,12 +97,15 @@
             transition: background 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
+            appearance: none;
+            -webkit-appearance: none;
         }
 
         #call-btn:hover  { background: #15803d; }
         #call-btn:active { transform: scale(0.96); background: #166534; }
 
-        #call-btn.disabled {
+        #call-btn.disabled,
+        #call-btn:disabled {
             background: #1c1c1e;
             color: #3f3f46;
             pointer-events: none;
@@ -143,12 +146,12 @@
     <div id="company-display" class="company-name empty">—</div>
     <div id="phone-display" class="empty">—</div>
 
-    <a id="call-btn" href="#" class="disabled">
+    <button id="call-btn" type="button" class="disabled" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.07 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 9.09a16 16 0 0 0 5.82 5.82l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
         </svg>
         Call Now
-    </a>
+    </button>
 
     <p class="hint">
         <span class="dot" id="status-dot"></span>
@@ -223,6 +226,13 @@
     document.addEventListener('touchstart', unlockAudio, true);
     document.addEventListener('click',      unlockAudio, true);
 
+    btn.addEventListener('click', function () {
+        const digits = btn.dataset.phone || '';
+        if (digits) {
+            window.location.href = 'tel:' + digits;
+        }
+    });
+
     function formatPhone(raw) {
         if (!raw) return raw;
         const digits = raw.replace(/\D/g, '');
@@ -254,7 +264,8 @@
                 }
                 display.textContent = formatPhone(raw);
                 display.classList.remove('empty');
-                btn.href = 'tel:' + digits;
+                btn.dataset.phone = digits;
+                btn.disabled = false;
                 btn.classList.remove('disabled');
                 statusDot.classList.add('live');
                 statusText.textContent = 'Number received — tap Call Now to dial';
@@ -263,7 +274,8 @@
                 companyDisplay.classList.add('empty');
                 display.textContent = '—';
                 display.classList.add('empty');
-                btn.href = '#';
+                btn.dataset.phone = '';
+                btn.disabled = true;
                 btn.classList.add('disabled');
                 statusDot.classList.remove('live');
                 statusText.textContent = 'Waiting for a number…';
