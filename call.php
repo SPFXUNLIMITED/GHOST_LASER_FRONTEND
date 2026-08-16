@@ -29,6 +29,25 @@
             -webkit-user-select: none;
         }
 
+        .headset-reminder {
+            position: fixed;
+            top: 1.25rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(28vw, 7rem);
+            height: min(28vw, 7rem);
+            color: #60a5fa;
+            filter: drop-shadow(0 0 18px rgba(96, 165, 250, 0.35));
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .headset-reminder svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
         .label {
             font-size: 0.7rem;
             font-weight: 700;
@@ -140,6 +159,15 @@
     </style>
 </head>
 <body>
+
+    <div class="headset-reminder" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 13v-1a8 8 0 0 1 16 0v1"/>
+            <path d="M4 13a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h1.5A1.5 1.5 0 0 0 7 17.5v-3A1.5 1.5 0 0 0 5.5 13z"/>
+            <path d="M20 13a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1.5a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z"/>
+            <path d="M9 19v1a2 2 0 0 0 2 2h2"/>
+        </svg>
+    </div>
 
     <p class="label">Send to Phone</p>
 
