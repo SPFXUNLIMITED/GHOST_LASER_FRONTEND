@@ -234,6 +234,13 @@ require_once __DIR__ . '/templates/header.php';
                         >
                             SMS Invite
                         </a>
+                        <a
+                            href="call.php"
+                            target="_blank"
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-green-700/60 bg-green-950/30 hover:border-green-500/60 hover:bg-green-950/50 text-green-300 font-medium text-sm px-4 py-2.5 transition-all"
+                        >
+                            Send to Phone
+                        </a>
 
                         <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 pt-3">Admin Tools</p>
                         <a

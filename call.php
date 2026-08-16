@@ -145,6 +145,63 @@
     const statusDot  = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
 
+    // ── Audio context (created lazily after first user interaction) ────────
+    let audioCtx = null;
+
+    function getAudioCtx() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        // Resume if the browser suspended it (autoplay policy)
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        return audioCtx;
+    }
+
+    // Play a single short sine-wave beep
+    function beep(frequency, startTime, duration) {
+        const ctx      = getAudioCtx();
+        const osc      = ctx.createOscillator();
+        const gain     = ctx.createGain();
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.type      = 'sine';
+        osc.frequency.setValueAtTime(frequency, startTime);
+
+        // Soft envelope: quick fade-in, hold, gentle fade-out
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.18, startTime + 0.01);
+        gain.gain.setValueAtTime(0.18, startTime + duration - 0.04);
+        gain.gain.linearRampToValueAtTime(0, startTime + duration);
+
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+    }
+
+    // Two soft beeps — 880 Hz then 1100 Hz, 120 ms each, 80 ms apart
+    function playDoubleBeep() {
+        try {
+            const ctx   = getAudioCtx();
+            const now   = ctx.currentTime;
+            beep(880,  now,        0.12);
+            beep(1100, now + 0.20, 0.12);
+        } catch (e) {
+            // Audio not supported or blocked — silently ignore
+        }
+    }
+
+    // Unlock audio on first touch/click so autoplay policy is satisfied
+    function unlockAudio() {
+        getAudioCtx();
+        document.removeEventListener('touchstart', unlockAudio, true);
+        document.removeEventListener('click',      unlockAudio, true);
+    }
+    document.addEventListener('touchstart', unlockAudio, true);
+    document.addEventListener('click',      unlockAudio, true);
+
     function formatPhone(raw) {
         if (!raw) return raw;
         const digits = raw.replace(/\D/g, '');
@@ -159,6 +216,8 @@
 
     function setNumber(raw) {
         const digits = raw ? raw.replace(/\D/g, '') : '';
+
+        playDoubleBeep();
 
         // Fade out → update → fade in
         display.classList.add('fade-out');
