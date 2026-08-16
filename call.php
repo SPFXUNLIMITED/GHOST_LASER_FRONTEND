@@ -275,6 +275,16 @@
         }
     }, 1500);
 
+    // ── Session keepalive (every 10 minutes) ──────────────────────────────
+    // Pings the server to reset the session idle timer so this tab never
+    // gets logged out while Patty keeps it open.
+    function pingSession() {
+        fetch('/api/session-ping.php', { method: 'GET', credentials: 'same-origin' })
+            .catch(function () { /* silently ignore network errors */ });
+    }
+    pingSession(); // immediate ping on load
+    setInterval(pingSession, 10 * 60 * 1000); // then every 10 minutes
+
 })();
 </script>
 </body>
