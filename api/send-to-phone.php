@@ -30,10 +30,16 @@ if ($number === '') {
 // Strip everything except digits, spaces, parens, dashes, and plus
 $number = preg_replace('/[^\d\s()\-+]/', '', $number);
 
+$company = isset($body['company']) ? trim((string) $body['company']) : '';
+// Strip HTML tags and limit length
+$company = strip_tags($company);
+$company = mb_substr($company, 0, 200);
+
 $file = sys_get_temp_dir() . '/ghost_call_number.json';
 
 $data = json_encode([
     'number'    => $number,
+    'company'   => $company,
     'timestamp' => time(),
 ]);
 

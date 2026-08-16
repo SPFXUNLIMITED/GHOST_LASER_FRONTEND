@@ -1601,6 +1601,8 @@ function sendToPhone() {
     const raw = document.getElementById('details_phone').textContent.trim();
     if (!raw || raw === '—') return;
 
+    const company = document.getElementById('details_company').textContent.trim();
+
     const btn = document.getElementById('sendToPhoneBtn');
     const orig = btn.textContent;
     btn.textContent = '⏳ Sending…';
@@ -1610,7 +1612,7 @@ function sendToPhone() {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ number: raw }),
+        body: JSON.stringify({ number: raw, company: company }),
     })
         .then(function (res) { return res.json(); })
         .then(function (data) {

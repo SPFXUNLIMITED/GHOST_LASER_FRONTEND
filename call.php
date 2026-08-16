@@ -38,13 +38,32 @@
             margin-bottom: 2rem;
         }
 
+        .company-name {
+            font-size: clamp(1rem, 4vw, 1.5rem);
+            font-weight: 700;
+            color: #a1a1aa;
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.01em;
+            min-height: 1.2em;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .company-name.fade-out {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+
+        .company-name.empty {
+            color: #3f3f46;
+        }
+
         #phone-display {
-            font-size: clamp(3.5rem, 16vw, 7rem);
+            font-size: clamp(2rem, 10vw, 4.5rem);
             font-weight: 900;
             letter-spacing: -0.01em;
             color: #ffffff;
             line-height: 1;
-            word-break: break-all;
+            white-space: nowrap;
             transition: opacity 0.25s ease, transform 0.25s ease;
             min-height: 1em;
         }
@@ -121,6 +140,7 @@
 
     <p class="label">Send to Phone</p>
 
+    <div id="company-display" class="company-name empty">—</div>
     <div id="phone-display" class="empty">—</div>
 
     <a id="call-btn" href="#" class="disabled">
@@ -140,8 +160,9 @@
     const POLL_URL = '/api/get-phone-number.php';
     const POLL_MS  = 2000;
 
-    const display    = document.getElementById('phone-display');
-    const btn        = document.getElementById('call-btn');
+    const display        = document.getElementById('phone-display');
+    const companyDisplay = document.getElementById('company-display');
+    const btn            = document.getElementById('call-btn');
     const statusDot  = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
 
@@ -214,15 +235,23 @@
         return raw;
     }
 
-    function setNumber(raw) {
+    function setNumber(raw, company) {
         const digits = raw ? raw.replace(/\D/g, '') : '';
 
         playDoubleBeep();
 
         // Fade out → update → fade in
         display.classList.add('fade-out');
+        companyDisplay.classList.add('fade-out');
         setTimeout(function () {
             if (digits) {
+                companyDisplay.textContent = company || '';
+                if (company) {
+                    companyDisplay.classList.remove('empty');
+                } else {
+                    companyDisplay.classList.add('empty');
+                    companyDisplay.textContent = '';
+                }
                 display.textContent = formatPhone(raw);
                 display.classList.remove('empty');
                 btn.href = 'tel:' + digits;
@@ -230,6 +259,8 @@
                 statusDot.classList.add('live');
                 statusText.textContent = 'Number received — tap Call Now to dial';
             } else {
+                companyDisplay.textContent = '—';
+                companyDisplay.classList.add('empty');
                 display.textContent = '—';
                 display.classList.add('empty');
                 btn.href = '#';
@@ -238,6 +269,7 @@
                 statusText.textContent = 'Waiting for a number…';
             }
             display.classList.remove('fade-out');
+            companyDisplay.classList.remove('fade-out');
         }, 250);
     }
 
@@ -250,7 +282,7 @@
             .then(function (data) {
                 if (data && data.timestamp && data.timestamp > lastTimestamp) {
                     lastTimestamp = data.timestamp;
-                    setNumber(data.number || '');
+                    setNumber(data.number || '', data.company || '');
                 }
             })
             .catch(function () { /* silently ignore network errors */ });
