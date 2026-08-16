@@ -447,6 +447,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email = strtolower(prospectSanitizeField((string) ($_POST['email'] ?? '')));
             $website = prospectSanitizeField((string) ($_POST['website'] ?? ''));
             $address = prospectSanitizeField((string) ($_POST['address'] ?? ''));
+            $city    = prospectSanitizeField((string) ($_POST['city'] ?? ''), 100);
+            $state   = prospectSanitizeField((string) ($_POST['state'] ?? ''), 50);
+            $zip     = prospectSanitizeField((string) ($_POST['zip'] ?? ''), 20);
             $status = trim((string) ($_POST['status'] ?? 'contacted'));
             $notes = prospectSanitizeField((string) ($_POST['notes'] ?? ''), 10000);
             $rawSource = prospectSanitizeField((string) ($_POST['raw_source'] ?? ($_POST['raw_text_dump'] ?? '')), 65000);
@@ -480,6 +483,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email' => $email,
                 'website' => $website,
                 'address' => $address,
+                'city'    => $city,
+                'state'   => $state,
+                'zip'     => $zip,
                 'status' => $status,
                 'notes' => $notes,
             ], JSON_UNESCAPED_UNICODE);
@@ -493,6 +499,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         email = :email,
                         website = :website,
                         address = :address,
+                        city = :city,
+                        state = :state,
+                        zip = :zip,
                         status = :status,
                         notes = :notes,
                         last_called_at = :last_called_at,
@@ -511,6 +520,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':email' => $email !== '' ? $email : null,
                     ':website' => $website !== '' ? $website : null,
                     ':address' => $address !== '' ? $address : null,
+                    ':city' => $city !== '' ? $city : null,
+                    ':state' => $state !== '' ? $state : null,
+                    ':zip' => $zip !== '' ? $zip : null,
                     ':status' => $status,
                     ':notes' => $notes !== '' ? $notes : null,
                     ':last_called_at' => $normalizedLastCalledAt,
@@ -527,11 +539,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insertLastCalledAt = $normalizedLastCalledAt;
                 $stmt = $pdo->prepare("
                     INSERT INTO prospects (
-                        company, contact_name, phone, email, website, address, status, notes,
+                        company, contact_name, phone, email, website, address, city, state, zip, status, notes,
                         raw_source, parse_preview_json, parse_confidence, parse_provider, parse_errors,
                         last_called_at, created_by, updated_by, category_id
                     ) VALUES (
-                        :company, :contact_name, :phone, :email, :website, :address, :status, :notes,
+                        :company, :contact_name, :phone, :email, :website, :address, :city, :state, :zip, :status, :notes,
                         :raw_source, :parse_preview_json, :parse_confidence, :parse_provider, :parse_errors,
                         :last_called_at, :created_by, :updated_by, :category_id
                     )
@@ -543,6 +555,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':email' => $email !== '' ? $email : null,
                     ':website' => $website !== '' ? $website : null,
                     ':address' => $address !== '' ? $address : null,
+                    ':city' => $city !== '' ? $city : null,
+                    ':state' => $state !== '' ? $state : null,
+                    ':zip' => $zip !== '' ? $zip : null,
                     ':status' => $status,
                     ':notes' => $notes !== '' ? $notes : null,
                     ':raw_source' => $rawSource !== '' ? $rawSource : null,
@@ -694,10 +709,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'company' => $company,
                 'phone' => $phone,
                 'email' => $email,
-                'address' => '',
-                'city' => '',
-                'state' => '',
-                'zip' => '',
+                'address' => (string) ($prospect['address'] ?? ''),
+                'city' => (string) ($prospect['city'] ?? ''),
+                'state' => (string) ($prospect['state'] ?? ''),
+                'zip' => (string) ($prospect['zip'] ?? ''),
                 'country' => 'USA',
                 'password_hash' => password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT),
                 'last_updated' => null,
@@ -834,6 +849,9 @@ foreach ($prospects as $prospect) {
         'email' => (string) ($prospect['email'] ?? ''),
         'website' => (string) ($prospect['website'] ?? ''),
         'address' => (string) ($prospect['address'] ?? ''),
+        'city' => (string) ($prospect['city'] ?? ''),
+        'state' => (string) ($prospect['state'] ?? ''),
+        'zip' => (string) ($prospect['zip'] ?? ''),
         'status' => (string) ($prospect['status'] ?? 'new'),
         'last_called_at' => (string) ($prospect['last_called_at'] ?? ''),
         'last_called_at_display' => prospectFormatDisplayDateTime((string) ($prospect['last_called_at'] ?? '')),
@@ -1310,6 +1328,11 @@ require_once __DIR__ . '/templates/header.php';
                     <input class="field" type="datetime-local" name="form_last_called_at" id="form_last_called_at">
                 </div>
                 <div class="md:col-span-2"><label class="label">Address</label><input class="field" type="text" name="address" id="form_address" maxlength="255" placeholder="Street address"></div>
+                <div><label class="label">City</label><input class="field" type="text" name="city" id="form_city" maxlength="100" placeholder="City"></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="label">State</label><input class="field" type="text" name="state" id="form_state" maxlength="50" placeholder="State"></div>
+                    <div><label class="label">ZIP</label><input class="field" type="text" name="zip" id="form_zip" maxlength="20" placeholder="ZIP"></div>
+                </div>
             </div>
             <div>
                 <label class="label">Notes</label>
@@ -1355,6 +1378,11 @@ require_once __DIR__ . '/templates/header.php';
                     </select>
                 </div>
                 <div class="md:col-span-2"><label class="label">Address</label><input class="field" type="text" id="preview_address" placeholder="Street address"></div>
+                <div><label class="label">City</label><input class="field" type="text" id="preview_city" placeholder="City"></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="label">State</label><input class="field" type="text" id="preview_state" placeholder="State"></div>
+                    <div><label class="label">ZIP</label><input class="field" type="text" id="preview_zip" placeholder="ZIP"></div>
+                </div>
             </div>
             <div>
                 <label class="label">Notes (editable before apply)</label>
@@ -1502,6 +1530,9 @@ function openEditModal(prospect) {
     document.getElementById('form_email').value = prospect.email || '';
     document.getElementById('form_website').value = prospect.website || '';
     document.getElementById('form_address').value = prospect.address || '';
+    document.getElementById('form_city').value = prospect.city || '';
+    document.getElementById('form_state').value = prospect.state || '';
+    document.getElementById('form_zip').value = prospect.zip || '';
     document.getElementById('form_status').value = prospect.status || 'no_answer';
     document.getElementById('form_last_called_at').value = prospect.last_called_at ? prospect.last_called_at.replace(' ', 'T').substring(0, 16) : getLaNow();
     document.getElementById('form_notes').value = prospect.notes || '';
@@ -1623,6 +1654,9 @@ async function parseTextDump() {
         document.getElementById('preview_email').value = data.parsed_fields.email || '';
         document.getElementById('preview_website').value = data.parsed_fields.website || '';
         document.getElementById('preview_address').value = data.parsed_fields.address || '';
+        document.getElementById('preview_city').value = data.parsed_fields.city || '';
+        document.getElementById('preview_state').value = data.parsed_fields.state || '';
+        document.getElementById('preview_zip').value = data.parsed_fields.zip || '';
         document.getElementById('preview_status').value = data.parsed_fields.status || 'new';
         document.getElementById('preview_notes').value = data.parsed_fields.notes || '';
         document.getElementById('parsePreviewMeta').textContent = `Provider: ${data.provider || 'ai'} · Confidence: ${data.confidence || 0}%`;
@@ -1692,6 +1726,9 @@ function duplicateUpdateExisting() {
     if (f.email)         document.getElementById('form_email').value = f.email;
     if (f.website)       document.getElementById('form_website').value = f.website;
     if (f.address)       document.getElementById('form_address').value = f.address;
+    if (f.city)          document.getElementById('form_city').value = f.city;
+    if (f.state)         document.getElementById('form_state').value = f.state;
+    if (f.zip)           document.getElementById('form_zip').value = f.zip;
     if (f.notes)         document.getElementById('form_notes').value = f.notes;
     document.getElementById('form_parse_provider').value = latestParseResult.provider || '';
     document.getElementById('form_parse_confidence').value = latestParseResult.confidence || '';
@@ -1714,6 +1751,9 @@ function applyPreviewToForm() {
     document.getElementById('form_email').value = document.getElementById('preview_email').value;
     document.getElementById('form_website').value = document.getElementById('preview_website').value;
     document.getElementById('form_address').value = document.getElementById('preview_address').value;
+    document.getElementById('form_city').value = document.getElementById('preview_city').value;
+    document.getElementById('form_state').value = document.getElementById('preview_state').value;
+    document.getElementById('form_zip').value = document.getElementById('preview_zip').value;
     document.getElementById('form_status').value = document.getElementById('preview_status').value;
     document.getElementById('form_notes').value = document.getElementById('preview_notes').value;
 
