@@ -1290,7 +1290,10 @@ require_once __DIR__ . '/templates/header.php';
     <div class="modal-box">
         <div class="p-5 border-b border-zinc-800 flex items-center justify-between">
             <h2 id="prospectModalTitle" class="text-lg font-semibold text-white">Prospect</h2>
-            <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeProspectModal()">Close</button>
+            <div class="flex items-center gap-2">
+                <button type="button" id="sendToPhoneFormBtn" class="rounded-md border border-green-700/60 bg-green-950/20 px-3 py-1 text-xs text-green-300 hover:border-green-500/60" onclick="sendFormToPhone()">📞 Send to Phone</button>
+                <button type="button" class="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300" onclick="closeProspectModal()">Close</button>
+            </div>
         </div>
         <form method="POST" action="prospects.php" id="prospectForm" class="p-5 space-y-4">
             <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
@@ -1597,13 +1600,9 @@ function closeDetailsModal() {
     document.body.classList.remove('modal-open');
 }
 
-function sendToPhone() {
-    const raw = document.getElementById('details_phone').textContent.trim();
-    if (!raw || raw === '—') return;
+function sendNumberToPhone(raw, company, btn) {
+    if (!raw || raw === '—' || !btn) return;
 
-    const company = document.getElementById('details_company').textContent.trim();
-
-    const btn = document.getElementById('sendToPhoneBtn');
     const orig = btn.textContent;
     btn.textContent = '⏳ Sending…';
     btn.disabled = true;
@@ -1627,6 +1626,22 @@ function sendToPhone() {
                 btn.disabled = false;
             }, 2000);
         });
+}
+
+function sendToPhone() {
+    sendNumberToPhone(
+        document.getElementById('details_phone').textContent.trim(),
+        document.getElementById('details_company').textContent.trim(),
+        document.getElementById('sendToPhoneBtn')
+    );
+}
+
+function sendFormToPhone() {
+    sendNumberToPhone(
+        document.getElementById('form_phone').value.trim(),
+        document.getElementById('form_company').value.trim(),
+        document.getElementById('sendToPhoneFormBtn')
+    );
 }
 
 function getCurrentLosAngelesDateTimeLocal() {
