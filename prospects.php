@@ -196,6 +196,18 @@ function prospectGetCustomerColumns(PDO $pdo): array
     }
 }
 
+function prospectBuildListUrl(?string $categorySlug, string $statusFilter, string $search, int $page): string
+{
+    $query = http_build_query(array_filter([
+        'category' => $categorySlug,
+        'status' => $statusFilter !== 'all' ? $statusFilter : null,
+        'q' => $search !== '' ? $search : null,
+        'page' => $page > 1 ? $page : null,
+    ], static fn($value) => $value !== null && $value !== ''));
+
+    return 'prospects.php' . ($query !== '' ? '?' . $query : '');
+}
+
 $categoryRows = $pdo->query("
     SELECT id, name, slug
     FROM prospect_categories
@@ -269,11 +281,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $queryStatus = trim((string) ($_POST['status_filter'] ?? 'all'));
     $querySearch = trim((string) ($_POST['q'] ?? ''));
     $queryCategory = trim((string) ($_POST['category'] ?? ''));
+    $queryPage = max(1, (int) ($_POST['page'] ?? 1));
     $redirectQs = http_build_query(array_filter([
         'category' => $queryCategory,
         'status' => $queryStatus,
         'q' => $querySearch,
-    ], static fn($value) => $value !== ''));
+        'page' => $queryPage > 1 ? $queryPage : null,
+    ], static fn($value) => $value !== '' && $value !== null));
 
     if ($postCsrf === '' || !hash_equals($csrf, $postCsrf)) {
         $_SESSION['prospects_flash_error'] = 'Invalid security token.';
@@ -315,7 +329,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'category' => $categorySlug,
                 'status' => $queryStatus,
                 'q' => $querySearch,
-            ], static fn($value) => $value !== ''));
+                'page' => $queryPage > 1 ? $queryPage : null,
+            ], static fn($value) => $value !== '' && $value !== null));
         } elseif ($action === 'add_category_keyword') {
             if ($activeCategory === null) {
                 throw new RuntimeException('Select a category before managing keywords.');
@@ -438,7 +453,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $redirectQs = http_build_query(array_filter([
                 'status' => $queryStatus,
                 'q' => $querySearch,
-            ], static fn($value) => $value !== ''));
+                'page' => $queryPage > 1 ? $queryPage : null,
+            ], static fn($value) => $value !== '' && $value !== null));
         } elseif ($action === 'save_prospect') {
             $prospectId = (int) ($_POST['prospect_id'] ?? 0);
             $company = prospectSanitizeField((string) ($_POST['company'] ?? ''));
@@ -792,6 +808,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $statusFilter = trim((string) ($_GET['status'] ?? 'all'));
 $search = trim((string) ($_GET['q'] ?? ''));
+$prospectsPerPage = 20;
+$currentPage = max(1, (int) ($_GET['page'] ?? 1));
 
 $where = ['is_archived = 0'];
 $params = [];
@@ -810,9 +828,22 @@ if ($search !== '') {
     $params[':q'] = '%' . $search . '%';
 }
 
-$sql = 'SELECT * FROM prospects WHERE ' . implode(' AND ', $where) . ' ORDER BY created_at DESC';
+$countSql = 'SELECT COUNT(*) FROM prospects WHERE ' . implode(' AND ', $where);
+$countStmt = $pdo->prepare($countSql);
+$countStmt->execute($params);
+$totalProspects = (int) $countStmt->fetchColumn();
+$totalPages = $totalProspects > 0 ? (int) ceil($totalProspects / $prospectsPerPage) : 1;
+$currentPage = min($currentPage, $totalPages);
+$offset = ($currentPage - 1) * $prospectsPerPage;
+
+$sql = 'SELECT * FROM prospects WHERE ' . implode(' AND ', $where) . ' ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset';
 $prospectStmt = $pdo->prepare($sql);
-$prospectStmt->execute($params);
+foreach ($params as $key => $value) {
+    $prospectStmt->bindValue($key, $value);
+}
+$prospectStmt->bindValue(':limit', $prospectsPerPage, PDO::PARAM_INT);
+$prospectStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+$prospectStmt->execute();
 $prospects = $prospectStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $prospectIds = array_map(static fn(array $p): int => (int) ($p['id'] ?? 0), $prospects);
@@ -867,6 +898,24 @@ foreach ($prospects as $prospect) {
 $isCategoryFocused = $activeCategory !== null;
 $currentCategoryName = $isCategoryFocused ? (string) $activeCategory['name'] : 'All Prospects';
 $currentCategorySlug = $isCategoryFocused ? (string) $activeCategory['slug'] : '';
+$paginationWindow = 2;
+$paginationPages = [];
+if ($totalPages <= 7) {
+    $paginationPages = range(1, $totalPages);
+} else {
+    $paginationPages = array_values(array_unique(array_filter([
+        1,
+        2,
+        $currentPage - $paginationWindow,
+        $currentPage - 1,
+        $currentPage,
+        $currentPage + 1,
+        $currentPage + $paginationWindow,
+        $totalPages - 1,
+        $totalPages,
+    ], static fn(int $page): bool => $page >= 1 && $page <= $totalPages)));
+    sort($paginationPages);
+}
 $badgeBaseClasses = 'inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-sm text-zinc-200';
 $badgeLinkClasses = 'transition-colors hover:text-cyan-300';
 $activeBadgeLinkClasses = 'text-cyan-200';
@@ -982,6 +1031,7 @@ require_once __DIR__ . '/templates/header.php';
                                     <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="page" value="<?= $currentPage ?>">
                                     <input type="hidden" name="keyword" value="<?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>">
                                     <button type="submit" class="<?= htmlspecialchars($badgeRemoveButtonClasses, ENT_QUOTES, 'UTF-8') ?>" aria-label="Remove keyword <?= htmlspecialchars((string) $keyword, ENT_QUOTES, 'UTF-8') ?>">&times;</button>
                                 </form>
@@ -1071,6 +1121,7 @@ require_once __DIR__ . '/templates/header.php';
                                                 <input type="hidden" name="category" value="<?= htmlspecialchars($isCategoryFocused ? $currentCategorySlug : '', ENT_QUOTES, 'UTF-8') ?>">
                                                 <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                                                 <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                                                <input type="hidden" name="page" value="<?= $currentPage ?>">
                                                 <button type="submit" class="rounded-md border border-emerald-700/60 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-500/60">Convert to Customer</button>
                                             </form>
                                         <?php endif; ?>
@@ -1082,6 +1133,7 @@ require_once __DIR__ . '/templates/header.php';
                                             <input type="hidden" name="category" value="<?= htmlspecialchars($isCategoryFocused ? $currentCategorySlug : '', ENT_QUOTES, 'UTF-8') ?>">
                                             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                                             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="page" value="<?= $currentPage ?>">
                                             <button type="submit" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 hover:text-red-400">Archive</button>
                                         </form>
                                     </div>
@@ -1091,6 +1143,37 @@ require_once __DIR__ . '/templates/header.php';
                         </tbody>
                     </table>
                 </div>
+                <?php if ($totalPages > 1): ?>
+                    <div class="mt-4 flex flex-col gap-3 border-t border-zinc-800 pt-4 text-sm text-zinc-400 md:flex-row md:items-center md:justify-between">
+                        <p>Showing page <?= $currentPage ?> of <?= $totalPages ?> (<?= $totalProspects ?> prospects)</p>
+                        <nav class="flex flex-wrap items-center justify-end gap-2" aria-label="Prospects pagination">
+                            <?php if ($currentPage > 1): ?>
+                                <a href="<?= htmlspecialchars(prospectBuildListUrl($currentCategorySlug !== '' ? $currentCategorySlug : null, $statusFilter, $search, $currentPage - 1), ENT_QUOTES, 'UTF-8') ?>" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-zinc-300 hover:border-cyan-500/50 hover:text-cyan-300">Previous</a>
+                            <?php else: ?>
+                                <span class="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-zinc-600">Previous</span>
+                            <?php endif; ?>
+
+                            <?php $lastRenderedPage = 0; ?>
+                            <?php foreach ($paginationPages as $pageNumber): ?>
+                                <?php if ($lastRenderedPage > 0 && $pageNumber > ($lastRenderedPage + 1)): ?>
+                                    <span class="px-1 text-zinc-600">…</span>
+                                <?php endif; ?>
+                                <?php if ($pageNumber === $currentPage): ?>
+                                    <span class="rounded-md border border-cyan-500/60 bg-cyan-500 px-3 py-1.5 font-semibold text-zinc-950"><?= $pageNumber ?></span>
+                                <?php else: ?>
+                                    <a href="<?= htmlspecialchars(prospectBuildListUrl($currentCategorySlug !== '' ? $currentCategorySlug : null, $statusFilter, $search, $pageNumber), ENT_QUOTES, 'UTF-8') ?>" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-zinc-300 hover:border-cyan-500/50 hover:text-cyan-300"><?= $pageNumber ?></a>
+                                <?php endif; ?>
+                                <?php $lastRenderedPage = $pageNumber; ?>
+                            <?php endforeach; ?>
+
+                            <?php if ($currentPage < $totalPages): ?>
+                                <a href="<?= htmlspecialchars(prospectBuildListUrl($currentCategorySlug !== '' ? $currentCategorySlug : null, $statusFilter, $search, $currentPage + 1), ENT_QUOTES, 'UTF-8') ?>" class="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-zinc-300 hover:border-cyan-500/50 hover:text-cyan-300">Next</a>
+                            <?php else: ?>
+                                <span class="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-zinc-600">Next</span>
+                            <?php endif; ?>
+                        </nav>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </section>
     </div>
@@ -1132,6 +1215,7 @@ require_once __DIR__ . '/templates/header.php';
                 <input type="hidden" name="category" value="<?= htmlspecialchars($isCategoryFocused ? $currentCategorySlug : '', ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="page" value="<?= $currentPage ?>">
                 <div class="flex gap-2 items-center">
                     <select name="interaction_type" class="field" style="width:auto;">
                         <option value="call">Call</option>
@@ -1195,6 +1279,7 @@ require_once __DIR__ . '/templates/header.php';
             <input type="hidden" name="action" value="add_category">
             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="page" value="<?= $currentPage ?>">
             <div class="grid gap-4 md:grid-cols-2">
                 <div>
                     <label class="label">Category Name</label>
@@ -1224,6 +1309,7 @@ require_once __DIR__ . '/templates/header.php';
             <input type="hidden" name="action" value="bulk_add_categories">
             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="page" value="<?= $currentPage ?>">
             <div>
                 <label class="label">Category Names (one per line)</label>
                 <textarea name="bulk_category_names" rows="8" class="field" maxlength="20000" placeholder="Paste one category name per line"></textarea>
@@ -1249,6 +1335,7 @@ require_once __DIR__ . '/templates/header.php';
             <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="page" value="<?= $currentPage ?>">
             <div>
                 <label class="label">Keyword</label>
                 <input type="text" name="keyword" class="field" maxlength="255" placeholder="e.g. channel letters" required>
@@ -1273,6 +1360,7 @@ require_once __DIR__ . '/templates/header.php';
             <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="page" value="<?= $currentPage ?>">
             <div>
                 <label class="label">Keywords</label>
                 <textarea name="bulk_keywords" rows="8" class="field" maxlength="20000" placeholder="Paste one keyword per line"></textarea>
@@ -1302,6 +1390,7 @@ require_once __DIR__ . '/templates/header.php';
             <input type="hidden" name="category" value="<?= htmlspecialchars($isCategoryFocused ? $currentCategorySlug : '', ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="page" value="<?= $currentPage ?>">
             <input type="hidden" name="parse_provider" id="form_parse_provider" value="">
             <input type="hidden" name="parse_confidence" id="form_parse_confidence" value="">
             <input type="hidden" name="parse_errors" id="form_parse_errors" value="">
@@ -1979,6 +2068,9 @@ document.addEventListener('keydown', (e) => {
     <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" name="action" value="delete_category">
     <input type="hidden" name="category_id" id="deleteCategoryId" value="">
+    <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" name="page" value="<?= $currentPage ?>">
 </form>
 
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
