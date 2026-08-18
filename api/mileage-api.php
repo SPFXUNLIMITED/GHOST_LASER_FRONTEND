@@ -124,6 +124,24 @@ function generatedPurposeForServiceRequest(PDO $pdo, int $serviceRequestId): ?st
     return $purpose !== '' ? $purpose : null;
 }
 
+function parseNullableInt($value): ?int
+{
+    if ($value === null || $value === '') {
+        return null;
+    }
+    if (is_int($value)) {
+        return $value;
+    }
+    if (is_string($value) && ctype_digit($value)) {
+        return (int) $value;
+    }
+    if (is_numeric($value) && (int) $value == (float) $value) {
+        return (int) $value;
+    }
+
+    return null;
+}
+
 // ── Helper: validate coordinate ───────────────────────────────────────────────
 function validCoord(?string $v): ?float
 {
@@ -131,27 +149,11 @@ function validCoord(?string $v): ?float
         return null;
     }
 
-    function parseNullableInt($value): ?int
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
-        if (is_int($value)) {
-            return $value;
-        }
-        if (is_string($value) && ctype_digit($value)) {
-            return (int) $value;
-        }
-        if (is_numeric($value) && (int) $value == (float) $value) {
-            return (int) $value;
-        }
-
-        return null;
-    }
     $f = filter_var($v, FILTER_VALIDATE_FLOAT);
     return $f === false ? null : $f;
 }
 
+try {
 // ═════════════════════════════════════════════════════════════════════════════
 // Action: on_my_way
 // ═════════════════════════════════════════════════════════════════════════════
@@ -446,3 +448,7 @@ if ($action === 'update') {
 // ── Unknown action ────────────────────────────────────────────────────────────
 http_response_code(400);
 echo json_encode(['success' => false, 'error' => 'Unknown action']);
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'error' => 'Internal server error']);
+}
