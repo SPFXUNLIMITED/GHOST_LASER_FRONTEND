@@ -59,6 +59,7 @@ function prospectsEnsureSchema(PDO $pdo): void
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             slug VARCHAR(255) NOT NULL,
+            is_blocked TINYINT(1) NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY uniq_prospect_categories_slug (slug),
@@ -155,6 +156,9 @@ function prospectsEnsureSchema(PDO $pdo): void
     }
     if (!prospectsColumnExists($pdo, 'prospects', 'category_id')) {
         $pdo->exec("ALTER TABLE prospects ADD COLUMN category_id INT UNSIGNED NULL AFTER updated_by");
+    }
+    if (!prospectsColumnExists($pdo, 'prospect_categories', 'is_blocked')) {
+        $pdo->exec("ALTER TABLE prospect_categories ADD COLUMN is_blocked TINYINT(1) NOT NULL DEFAULT 0 AFTER slug");
     }
     if (!prospectsIndexExists($pdo, 'prospects', 'idx_prospects_category_id')) {
         $pdo->exec("ALTER TABLE prospects ADD INDEX idx_prospects_category_id (category_id)");
