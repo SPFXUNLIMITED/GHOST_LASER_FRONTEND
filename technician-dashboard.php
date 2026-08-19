@@ -1156,7 +1156,32 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
                 body: JSON.stringify(payload)
             });
         }).then(function (res) {
-            return res.json();
+            return res.text().then(function (text) {
+                var data = null;
+                if (text) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        if (!res.ok) {
+                            throw new Error('Server error (' + res.status + ')');
+                        }
+                        throw new Error('Invalid server response');
+                    }
+                }
+
+                if (!res.ok) {
+                    var errorMsg = (data && data.error)
+                        ? data.error
+                        : ('Server error (' + res.status + ')');
+                    throw new Error(errorMsg);
+                }
+
+                if (!data) {
+                    throw new Error('Empty server response');
+                }
+
+                return data;
+            });
         }).then(function (data) {
             if (!data.success) {
                 setStatus(jobId, '✗ ' + (data.error || 'Error saving'), 'err');
