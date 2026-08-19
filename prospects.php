@@ -209,7 +209,7 @@ function prospectBuildListUrl(?string $categorySlug, string $statusFilter, strin
 }
 
 $categoryRows = $pdo->query("
-    SELECT id, name, slug
+    SELECT id, name, slug, is_blocked
     FROM prospect_categories
     ORDER BY name ASC, id ASC
 ")->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -230,6 +230,7 @@ foreach ($categoryRows as $categoryRow) {
         'id' => $categoryId,
         'name' => $categoryName,
         'slug' => $categorySlug,
+        'is_blocked' => (int) ($categoryRow['is_blocked'] ?? 0) === 1,
     ];
     $categoriesById[$categoryId] = $normalizedCategory;
     if ($categorySlug !== '') {
@@ -274,6 +275,7 @@ if ($activeCategory !== null) {
     ]);
     $categoryKeywords = $keywordStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
 }
+$isActiveCategoryBlocked = $activeCategory !== null && !empty($activeCategory['is_blocked']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postCsrf = trim((string) ($_POST['csrf'] ?? ''));
@@ -455,8 +457,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'q' => $querySearch,
                 'page' => $queryPage > 1 ? $queryPage : null,
             ], static fn($value) => $value !== '' && $value !== null));
+        } elseif ($action === 'toggle_category_block') {
+            if ($activeCategory === null) {
+                throw new RuntimeException('Select a category first.');
+            }
+            $requestedState = trim((string) ($_POST['blocked'] ?? ''));
+            if (!in_array($requestedState, ['0', '1'], true)) {
+                throw new RuntimeException('Invalid block state.');
+            }
+            $isBlocked = $requestedState === '1' ? 1 : 0;
+            $stmt = $pdo->prepare("
+                UPDATE prospect_categories
+                SET is_blocked = :is_blocked
+                WHERE id = :category_id
+                LIMIT 1
+            ");
+            $stmt->execute([
+                ':is_blocked' => $isBlocked,
+                ':category_id' => (int) $activeCategory['id'],
+            ]);
+            $_SESSION['prospects_flash_success'] = $isBlocked === 1
+                ? 'Category blocked.'
+                : 'Category unblocked.';
         } elseif ($action === 'save_prospect') {
             $prospectId = (int) ($_POST['prospect_id'] ?? 0);
+            if ($prospectId <= 0 && $isActiveCategoryBlocked) {
+                throw new RuntimeException('This category is paused. New prospects cannot be added.');
+            }
             $company = prospectSanitizeField((string) ($_POST['company'] ?? ''));
             $contactName = prospectSanitizeField((string) ($_POST['contact_name'] ?? ''));
             $phone = prospectSanitizeField((string) ($_POST['phone'] ?? ''), 100);
@@ -1001,8 +1028,42 @@ require_once __DIR__ . '/templates/header.php';
         <?php if ($flashError !== ''): ?>
             <div class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400"><?= htmlspecialchars($flashError, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
+        <?php if ($isCategoryFocused && $isActiveCategoryBlocked): ?>
+            <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                This category has been paused. We are no longer adding new prospects to <?= htmlspecialchars($currentCategoryName, ENT_QUOTES, 'UTF-8') ?>.
+            </div>
+        <?php endif; ?>
 
         <?php if ($isCategoryFocused): ?>
+            <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-semibold text-white">Category Intake Controls</p>
+                        <p class="mt-1 text-sm text-zinc-400">
+                            <?= $isActiveCategoryBlocked
+                                ? 'This category is currently paused for new prospects.'
+                                : 'New prospects can currently be added to this category.' ?>
+                        </p>
+                    </div>
+                    <form method="POST" action="prospects.php">
+                        <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="action" value="toggle_category_block">
+                        <input type="hidden" name="category" value="<?= htmlspecialchars($currentCategorySlug, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="status_filter" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="q" value="<?= htmlspecialchars($search, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="page" value="<?= $currentPage ?>">
+                        <input type="hidden" name="blocked" value="<?= $isActiveCategoryBlocked ? '0' : '1' ?>">
+                        <button
+                            type="submit"
+                            class="<?= $isActiveCategoryBlocked
+                                ? 'rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20'
+                                : 'rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-300 hover:bg-amber-500/20' ?>"
+                        >
+                            <?= $isActiveCategoryBlocked ? 'Unblock This Category' : 'Block This Category' ?>
+                        </button>
+                    </form>
+                </div>
+            </section>
             <section class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4">
                 <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -1063,7 +1124,11 @@ require_once __DIR__ . '/templates/header.php';
                 </form>
                 <div class="flex flex-wrap items-center gap-2 ml-auto">
                     <a href="prospect_notifications.php" class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 hover:border-cyan-500/50 hover:text-cyan-300 whitespace-nowrap">Prospect Templates</a>
-                    <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-semibold text-zinc-950 btn-glow whitespace-nowrap">Add New Prospect</button>
+                    <?php if ($isCategoryFocused && $isActiveCategoryBlocked): ?>
+                        <button type="button" disabled class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm font-semibold text-zinc-500 whitespace-nowrap cursor-not-allowed">Add New Prospect</button>
+                    <?php else: ?>
+                        <button type="button" onclick="openCreateModal()" class="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-semibold text-zinc-950 btn-glow whitespace-nowrap">Add New Prospect</button>
+                    <?php endif; ?>
                 </div>
             </div>
         </section>
