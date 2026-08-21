@@ -472,36 +472,62 @@ require_once __DIR__ . '/templates/header.php';
     </div>
 </main>
 
-<?php if ($questions !== []): ?>
 <script>
 (() => {
     const csrfToken = <?= json_encode($csrfToken) ?>;
     const searchInput = document.getElementById('customer_name');
     const customerIdInput = document.getElementById('customer_id');
-    const saveCustomerIdInput = document.getElementById('save_customer_id');
     const suggestions = document.getElementById('customerSuggestions');
     const banner = document.getElementById('selectedCustomerBanner');
+
+    const STORAGE_KEY = 'qual_selected_customer';
 
     let debounceTimer = null;
     let activeIndex = -1;
 
     const clearSelection = () => {
         customerIdInput.value = '';
-        saveCustomerIdInput.value = '';
+        const saveInput = document.getElementById('save_customer_id');
+        if (saveInput) saveInput.value = '';
         banner.classList.add('hidden');
         banner.textContent = '';
+        sessionStorage.removeItem(STORAGE_KEY);
     };
 
     const selectCustomer = (item) => {
         customerIdInput.value = String(item.id || '');
-        saveCustomerIdInput.value = String(item.id || '');
+        const saveInput = document.getElementById('save_customer_id');
+        if (saveInput) saveInput.value = String(item.id || '');
         searchInput.value = item.customer_name || '';
         const parts = [item.customer_name || 'Customer', item.company_name || '', item.phone || '', item.email || ''].filter(Boolean);
         banner.textContent = 'Selected: ' + parts.join(' • ');
         banner.classList.remove('hidden');
         suggestions.classList.add('hidden');
         suggestions.innerHTML = '';
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(item));
     };
+
+    // Restore previously selected customer after a page navigation (e.g. Load Questionnaire)
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (stored) {
+        try {
+            const item = JSON.parse(stored);
+            if (item && item.id) {
+                selectCustomer(item);
+            }
+        } catch (_) {
+            sessionStorage.removeItem(STORAGE_KEY);
+        }
+    }
+
+    // Intercept the "Load Questionnaire" GET form so the customer survives the navigation
+    const loadForm = document.querySelector('form[method="get"]');
+    if (loadForm) {
+        loadForm.addEventListener('submit', () => {
+            // sessionStorage is already kept up-to-date by selectCustomer/clearSelection
+            // Nothing extra needed here; the restore block above handles it on reload
+        });
+    }
 
     const renderSuggestions = (items) => {
         if (!Array.isArray(items) || items.length === 0) {
@@ -589,6 +615,13 @@ require_once __DIR__ . '/templates/header.php';
             suggestions.classList.add('hidden');
         }
     });
+})();
+</script>
+
+<?php if ($questions !== []): ?>
+<script>
+(() => {
+    const customerIdInput = document.getElementById('customer_id');
 
     const questions = <?= json_encode($questions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
     const branches = <?= json_encode($branches, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
@@ -732,7 +765,8 @@ require_once __DIR__ . '/templates/header.php';
             alert('Please complete the questionnaire first.');
             return;
         }
-        saveCustomerIdInput.value = customerIdInput.value;
+        const saveCustomerIdInput = document.getElementById('save_customer_id');
+        if (saveCustomerIdInput) saveCustomerIdInput.value = customerIdInput.value;
     });
 })();
 </script>
