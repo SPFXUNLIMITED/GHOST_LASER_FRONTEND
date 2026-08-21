@@ -69,14 +69,14 @@ WHERE NOT EXISTS (
 
 -- New Machine - Never Worked Right follow-ups
 INSERT INTO qualification_questions (questionnaire_id, question_text, question_type)
-SELECT q.id, 'Have mirror alignment and focus calibration been checked yet?', 'single_choice'
+SELECT q.id, 'Have mirror alignment and focus calibration been checked yet? (Yes / No)', 'single_choice'
 FROM qualification_questionnaires q
 WHERE q.name = 'New Machine - Never Worked Right'
   AND NOT EXISTS (
     SELECT 1
     FROM qualification_questions qq
     WHERE qq.questionnaire_id = q.id
-      AND qq.question_text = 'Have mirror alignment and focus calibration been checked yet?'
+      AND qq.question_text = 'Have mirror alignment and focus calibration been checked yet? (Yes / No)'
 );
 
 INSERT INTO qualification_questions (questionnaire_id, question_text, question_type)
@@ -126,14 +126,14 @@ WHERE q.name = 'Poor Cut Quality'
 );
 
 INSERT INTO qualification_questions (questionnaire_id, question_text, question_type)
-SELECT q.id, 'Have lens, mirrors, and material settings been cleaned/verified recently?', 'single_choice'
+SELECT q.id, 'Have lens, mirrors, and material settings been cleaned/verified recently? (Yes / No)', 'single_choice'
 FROM qualification_questionnaires q
 WHERE q.name = 'Poor Cut Quality'
   AND NOT EXISTS (
     SELECT 1
     FROM qualification_questions qq
     WHERE qq.questionnaire_id = q.id
-      AND qq.question_text = 'Have lens, mirrors, and material settings been cleaned/verified recently?'
+      AND qq.question_text = 'Have lens, mirrors, and material settings been cleaned/verified recently? (Yes / No)'
 );
 
 -- Branching driven by "Has this machine ever cut properly" answer
@@ -147,7 +147,7 @@ FROM qualification_questionnaires qq
 JOIN qualification_questions q5 ON q5.questionnaire_id = qq.id
     AND q5.question_text = 'Has this machine ever cut properly since you got it? (Yes - it worked great before / No - it has never cut correctly)'
 JOIN qualification_questions q6 ON q6.questionnaire_id = qq.id
-    AND q6.question_text = 'Have mirror alignment and focus calibration been checked yet?'
+    AND q6.question_text = 'Have mirror alignment and focus calibration been checked yet? (Yes / No)'
 WHERE qq.name = 'New Machine - Never Worked Right'
   AND NOT EXISTS (
     SELECT 1

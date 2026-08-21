@@ -50,7 +50,7 @@ function defaultQualificationDefinitions(): array
             'name' => 'New Machine - Never Worked Right',
             'description' => 'For new installs that have never cut correctly.',
             'questions' => array_merge($coreQuestions, [
-                ['key' => 'alignment_checked', 'text' => 'Have mirror alignment and focus calibration been checked yet?', 'type' => 'single_choice'],
+                ['key' => 'alignment_checked', 'text' => 'Have mirror alignment and focus calibration been checked yet? (Yes / No)', 'type' => 'single_choice'],
                 ['key' => 'test_cut_result', 'text' => 'What happens during a standard test cut right now?', 'type' => 'text'],
             ]),
             'branches' => [
@@ -75,7 +75,7 @@ function defaultQualificationDefinitions(): array
             'description' => 'For machines that still cut but with poor cut results.',
             'questions' => array_merge($coreQuestions, [
                 ['key' => 'quality_symptom', 'text' => 'Which issue best matches the cut quality problem? (Not cutting through, excessive charring, inconsistent depth, rough edges)', 'type' => 'single_choice'],
-                ['key' => 'optics_verified', 'text' => 'Have lens, mirrors, and material settings been cleaned/verified recently?', 'type' => 'single_choice'],
+                ['key' => 'optics_verified', 'text' => 'Have lens, mirrors, and material settings been cleaned/verified recently? (Yes / No)', 'type' => 'single_choice'],
             ]),
             'branches' => [
                 ['from' => 'ever_cut_properly', 'answer' => 'Yes - it worked great before', 'to' => 'quality_symptom', 'terminal' => 0],
