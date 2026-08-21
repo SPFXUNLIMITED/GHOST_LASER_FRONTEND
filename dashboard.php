@@ -218,6 +218,12 @@ require_once __DIR__ . '/templates/header.php';
                         >
                             Customer Status
                         </a>
+                        <a
+                            href="qualification_questionnaires.php"
+                            class="inline-flex w-full items-center gap-2 rounded-md border border-indigo-700/60 bg-indigo-950/30 hover:border-indigo-500/60 hover:bg-indigo-950/50 text-indigo-300 font-medium text-sm px-4 py-2.5 transition-all"
+                        >
+                            Qualification Questionnaires
+                        </a>
 
                         <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 pt-3">Tracking &amp; Compliance</p>
                         <a
