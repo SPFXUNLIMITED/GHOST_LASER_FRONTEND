@@ -370,12 +370,12 @@ require_once __DIR__ . '/templates/header.php';
                             </a>
                             <button
                                 type="button"
-                                onclick="openEditQuestionnaire(<?= (int) $q['id'] ?>, <?= json_encode($q['name']) ?>, <?= json_encode((string) ($q['description'] ?? '')) ?>)"
+                                onclick="openEditQuestionnaire(<?= (int) $q['id'] ?>, <?= h((string) json_encode($q['name'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>, <?= h((string) json_encode((string) ($q['description'] ?? ''), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>)"
                                 class="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 transition-colors"
                             >Rename</button>
                             <button
                                 type="button"
-                                onclick="openDeleteQuestionnaire(<?= (int) $q['id'] ?>, <?= json_encode($q['name']) ?>)"
+                                onclick="openDeleteQuestionnaire(<?= (int) $q['id'] ?>, <?= h((string) json_encode($q['name'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>)"
                                 class="rounded-md border border-red-800/60 bg-red-950/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-950/60 transition-colors"
                             >Delete</button>
                         </div>
@@ -422,12 +422,12 @@ require_once __DIR__ . '/templates/header.php';
                             <div class="flex items-center gap-2 flex-shrink-0">
                                 <button
                                     type="button"
-                                    onclick="openEditQuestion(<?= $qId ?>, <?= json_encode($qText) ?>, <?= json_encode($qType) ?>)"
+                                    onclick="openEditQuestion(<?= $qId ?>, <?= h((string) json_encode($qText, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>, <?= h((string) json_encode($qType, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>)"
                                     class="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 transition-colors"
                                 >Edit</button>
                                 <button
                                     type="button"
-                                    onclick="openDeleteQuestion(<?= $qId ?>, <?= json_encode(mb_strimwidth($qText, 0, 60, '…')) ?>)"
+                                    onclick="openDeleteQuestion(<?= $qId ?>, <?= h((string) json_encode(mb_strimwidth($qText, 0, 60, '…'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>)"
                                     class="rounded-md border border-red-800/60 bg-red-950/30 px-3 py-1.5 text-xs text-red-300 hover:bg-red-950/60 transition-colors"
                                 >Delete</button>
                             </div>
@@ -464,7 +464,7 @@ require_once __DIR__ . '/templates/header.php';
                                             <div class="flex items-center gap-2 flex-shrink-0">
                                                 <button
                                                     type="button"
-                                                    onclick="openEditBranch(<?= (int) $br['id'] ?>, <?= $qId ?>, <?= json_encode($br['answer_value']) ?>, <?= $br['next_question_id'] !== null ? (int) $br['next_question_id'] : 'null' ?>, <?= (int) $br['is_terminal'] ?>)"
+                                                    onclick="openEditBranch(<?= (int) $br['id'] ?>, <?= $qId ?>, <?= h((string) json_encode($br['answer_value'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>, <?= $br['next_question_id'] !== null ? (int) $br['next_question_id'] : 'null' ?>, <?= (int) $br['is_terminal'] ?>)"
                                                     class="rounded border border-zinc-700 px-2 py-0.5 text-[11px] text-zinc-300 hover:bg-zinc-800 transition-colors"
                                                 >Edit</button>
                                                 <form method="post" action="qualification_builder.php?questionnaire_id=<?= $selectedQid ?>" class="inline">
