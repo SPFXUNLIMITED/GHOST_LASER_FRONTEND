@@ -27,7 +27,8 @@
  * pre-render any customer/interaction JS data payloads.
  */
 
-require_once __DIR__ . '/../functions.php';
+//require_once __DIR__ . '/../functions.php';
+// Host pages must load functions.php before requiring this module.
 
 /**
  * Check whether a column exists on a given table (information_schema based,
