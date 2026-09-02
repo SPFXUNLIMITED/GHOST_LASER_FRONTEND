@@ -74,27 +74,24 @@ function customerInteractionEnsureSchema(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 
-    if (!customerInteractionColumnExists($pdo, 'customers', 'notes')) {
-        try {
-            $pdo->exec("ALTER TABLE customers ADD COLUMN notes TEXT NULL");
-        } catch (Throwable $e) {
-            // Ignore if another concurrent request already added it.
+    $customerColumns = [
+        'notes' => 'notes TEXT NULL',
+        'last_called_at' => 'last_called_at DATETIME NULL',
+        'last_emailed_at' => 'last_emailed_at DATETIME NULL',
+    ];
+    $missingCustomerColumns = [];
+
+    foreach ($customerColumns as $column => $definition) {
+        if (!customerInteractionColumnExists($pdo, 'customers', $column)) {
+            $missingCustomerColumns[] = $definition;
         }
     }
 
-    if (!customerInteractionColumnExists($pdo, 'customers', 'last_called_at')) {
+    if ($missingCustomerColumns) {
         try {
-            $pdo->exec("ALTER TABLE customers ADD COLUMN last_called_at DATETIME NULL");
+            $pdo->exec('ALTER TABLE customers ADD COLUMN ' . implode(', ADD COLUMN ', $missingCustomerColumns));
         } catch (Throwable $e) {
-            // Ignore.
-        }
-    }
-
-    if (!customerInteractionColumnExists($pdo, 'customers', 'last_emailed_at')) {
-        try {
-            $pdo->exec("ALTER TABLE customers ADD COLUMN last_emailed_at DATETIME NULL");
-        } catch (Throwable $e) {
-            // Ignore.
+            // Ignore if another concurrent request already added a missing column.
         }
     }
 

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS customer_interactions (
         FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS notes TEXT NULL;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS last_called_at DATETIME NULL;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS last_emailed_at DATETIME NULL;
+ALTER TABLE customers
+    ADD COLUMN notes TEXT NULL,
+    ADD COLUMN last_called_at DATETIME NULL,
+    ADD COLUMN last_emailed_at DATETIME NULL;
