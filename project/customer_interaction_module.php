@@ -46,7 +46,7 @@ function customerInteractionColumnExists(PDO $pdo, string $table, string $column
     return (int) $stmt->fetchColumn() > 0;
 }
 
-function ensure_customer_status_table(PDO $pdo): void
+function customerInteractionEnsureCustomerStatusTable(PDO $pdo): void
 {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS customer_status (
@@ -117,7 +117,7 @@ function customerInteractionEnsureSchema(PDO $pdo): void
     }
 
     // customer_status backs the optional "status" the interaction log can set.
-    ensure_customer_status_table($pdo);
+    customerInteractionEnsureCustomerStatusTable($pdo);
 }
 
 /**
