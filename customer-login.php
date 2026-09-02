@@ -2,6 +2,9 @@
 session_start();
 
 require_once __DIR__ . '/project/db.php';
+require_once __DIR__ . '/functions.php';
+
+ensure_customer_status_table($pdo);
 
 $customerPrefillSessionKey = 'book_a_repair_customer_prefill';
 
@@ -9,13 +12,13 @@ function buildCustomerBookingProfile(array $customer): array
 {
     return [
         'first_name' => trim((string) ($customer['first_name'] ?? '')),
-        'last_name' => trim((string) ($customer['last_name'] ?? '')),
-        'email' => trim((string) ($customer['email'] ?? '')),
-        'phone' => trim((string) ($customer['phone'] ?? '')),
-        'address' => trim((string) ($customer['address'] ?? '')),
-        'city' => trim((string) ($customer['city'] ?? '')),
-        'state' => strtoupper(trim((string) ($customer['state'] ?? ''))),
-        'zip' => trim((string) ($customer['zip'] ?? '')),
+        'last_name'  => trim((string) ($customer['last_name'] ?? '')),
+        'email'      => trim((string) ($customer['email'] ?? '')),
+        'phone'      => trim((string) ($customer['phone'] ?? '')),
+        'address'    => trim((string) ($customer['address'] ?? '')),
+        'city'       => trim((string) ($customer['city'] ?? '')),
+        'state'      => strtoupper(trim((string) ($customer['state'] ?? ''))),
+        'zip'        => trim((string) ($customer['zip'] ?? '')),
     ];
 }
 
@@ -35,18 +38,18 @@ function storeCustomerBookingSession(array $customer, string $customerPrefillSes
     $_SESSION[$customerPrefillSessionKey] = $customerProfile;
 }
 
+function customerLoginRedirectTarget(): string
+{
+    $target = trim((string) ($_GET['redirect'] ?? ''));
+    if ($target === '' || str_starts_with($target, '//') || preg_match('#^https?://#i', $target)) {
+        return 'customer-portal.php';
+    }
+    return $target;
+}
+
 // Redirect already-logged-in customers
 if (!empty($_SESSION['customer_id'])) {
-    $stmt = $pdo->prepare(
-        'SELECT id, first_name, last_name, email, phone, address, city, state, zip FROM customers WHERE id = ? LIMIT 1'
-    );
-    $stmt->execute([(int) $_SESSION['customer_id']]);
-    $customer = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($customer) {
-        storeCustomerBookingSession($customer, $customerPrefillSessionKey);
-    }
-    $dest = 'book_a_technician.php?step=2';
-    header('Location: ' . $dest);
+    header('Location: ' . customerLoginRedirectTarget());
     exit;
 }
 
@@ -71,8 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $mode === 'login') {
         if ($customer && !empty($customer['password_hash']) && password_verify($password, $customer['password_hash'])) {
             session_regenerate_id(true);
             storeCustomerBookingSession($customer, $customerPrefillSessionKey);
-            $dest = 'book_a_technician.php?step=2';
-            header('Location: ' . $dest);
+            header('Location: ' . customerLoginRedirectTarget());
             exit;
         } else {
             $error = 'Invalid email or password. Please try again.';
@@ -137,11 +139,11 @@ require_once __DIR__ . '/templates/header.php';
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
                     </svg>
-                    New Customer — Register &amp; Book
+                    New Customer — Register & Book
                 </a>
 
                 <!-- Login -->
-                <a href="customer-login.php?step=1&amp;mode=login"
+                <a href="customer-login.php?step=1&mode=login"
                    class="w-full inline-flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold text-sm px-4 py-3 rounded-md transition-all">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -176,7 +178,7 @@ require_once __DIR__ . '/templates/header.php';
             </div>
             <?php endif; ?>
 
-            <form method="POST" action="customer-login.php?step=1&amp;mode=login">
+            <form method="POST" action="customer-login.php?step=1&mode=login">
                 <div class="flex flex-col gap-5">
                     <!-- Email -->
                     <div>
