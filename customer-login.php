@@ -2,9 +2,6 @@
 session_start();
 
 require_once __DIR__ . '/project/db.php';
-require_once __DIR__ . '/functions.php';
-
-ensure_customer_status_table($pdo);
 
 $customerPrefillSessionKey = 'book_a_repair_customer_prefill';
 
@@ -12,13 +9,13 @@ function buildCustomerBookingProfile(array $customer): array
 {
     return [
         'first_name' => trim((string) ($customer['first_name'] ?? '')),
-        'last_name'  => trim((string) ($customer['last_name'] ?? '')),
-        'email'      => trim((string) ($customer['email'] ?? '')),
-        'phone'      => trim((string) ($customer['phone'] ?? '')),
-        'address'    => trim((string) ($customer['address'] ?? '')),
-        'city'       => trim((string) ($customer['city'] ?? '')),
-        'state'      => strtoupper(trim((string) ($customer['state'] ?? ''))),
-        'zip'        => trim((string) ($customer['zip'] ?? '')),
+        'last_name' => trim((string) ($customer['last_name'] ?? '')),
+        'email' => trim((string) ($customer['email'] ?? '')),
+        'phone' => trim((string) ($customer['phone'] ?? '')),
+        'address' => trim((string) ($customer['address'] ?? '')),
+        'city' => trim((string) ($customer['city'] ?? '')),
+        'state' => strtoupper(trim((string) ($customer['state'] ?? ''))),
+        'zip' => trim((string) ($customer['zip'] ?? '')),
     ];
 }
 
@@ -38,18 +35,18 @@ function storeCustomerBookingSession(array $customer, string $customerPrefillSes
     $_SESSION[$customerPrefillSessionKey] = $customerProfile;
 }
 
-function customerLoginRedirectTarget(): string
-{
-    $target = trim((string) ($_GET['redirect'] ?? ''));
-    if ($target === '' || str_starts_with($target, '//') || preg_match('#^https?://#i', $target)) {
-        return 'customer-portal.php';
-    }
-    return $target;
-}
-
 // Redirect already-logged-in customers
 if (!empty($_SESSION['customer_id'])) {
-    header('Location: ' . customerLoginRedirectTarget());
+    $stmt = $pdo->prepare(
+        'SELECT id, first_name, last_name, email, phone, address, city, state, zip FROM customers WHERE id = ? LIMIT 1'
+    );
+    $stmt->execute([(int) $_SESSION['customer_id']]);
+    $customer = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($customer) {
+        storeCustomerBookingSession($customer, $customerPrefillSessionKey);
+    }
+    $dest = 'book_a_technician.php?step=2';
+    header('Location: ' . $dest);
     exit;
 }
 
@@ -74,7 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $mode === 'login') {
         if ($customer && !empty($customer['password_hash']) && password_verify($password, $customer['password_hash'])) {
             session_regenerate_id(true);
             storeCustomerBookingSession($customer, $customerPrefillSessionKey);
-            header('Location: ' . customerLoginRedirectTarget());
+            $dest = 'book_a_technician.php?step=2';
+            header('Location: ' . $dest);
             exit;
         } else {
             $error = 'Invalid email or password. Please try again.';
@@ -247,11 +245,11 @@ require_once __DIR__ . '/templates/header.php';
 <script>
     const toggleBtn     = document.getElementById('toggle-password');
     const passwordInput = document.getElementById('password');
-    if (toggleBtn && passwordInput) {
-        toggleBtn.addEventListener('click', () => {
-            const isPassword = passwordInput.type === 'password';
-            passwordInput.type = isPassword ? 'text' : 'password';
-            toggleBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+    if ($toggleBtn && $passwordInput) {
+        $toggleBtn.addEventListener('click', () => {
+            const isPassword = $passwordInput.type === 'password';
+            $passwordInput.type = isPassword ? 'text' : 'password';
+            $toggleBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
         });
     }
 </script>
