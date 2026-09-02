@@ -788,6 +788,7 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/../project/db.php';
+require_once __DIR__ . '/../project/customer_interaction_module.php';
 require_once __DIR__ . '/../scheduling_settings.php';
 require_once __DIR__ . '/../smtp_config.php';
 require_once __DIR__ . '/../lib/PHPMailer/src/Exception.php';
@@ -798,6 +799,7 @@ use PHPMailer\PHPMailer\Exception as MailerException;
 use PHPMailer\PHPMailer\PHPMailer;
 
 ensureClusterSchedulingTables($pdo);
+customerInteractionEnsureSchema($pdo);
 $schedulingSettings = getSchedulingSettings($pdo);
 $dailyTechnicianCapacity = calculateTechnicianDailyCapacity($schedulingSettings);
 
@@ -1411,6 +1413,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $jobs = $pdo->query("
     SELECT 
         sr.id,
+        sr.customer_id,
         COALESCE(c.first_name, sr.task_contact, '') AS first_name,
         COALESCE(c.last_name,  '') AS last_name,
         COALESCE(c.city, sr.destination_city) AS city,
@@ -1496,6 +1499,7 @@ $scheduledJobsStmt = $pdo->prepare("
         sr.created_at,
         sr.latitude AS job_latitude,
         sr.longitude AS job_longitude,
+        c.id AS customer_id,
         COALESCE(c.first_name, sr.task_contact, '') AS first_name,
         COALESCE(c.last_name,  '') AS last_name,
         COALESCE(c.email,  '') AS email,
@@ -1798,6 +1802,7 @@ require_once __DIR__ . '/../templates/header.php';
                                             <?php
                                             $clusterModalJobs = array_map(static function (array $clusterJob): array {
                                                 return [
+                                                    'customer_id' => $clusterJob['customer_id'] ?? null,
                                                     'customer_name' => $clusterJob['customer_name'] ?? 'Unknown Customer',
                                                     'time_window_label' => $clusterJob['time_window_label'] ?? 'Not assigned',
                                                 ];
@@ -1834,6 +1839,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                     <?php foreach ($scheduledCluster['jobs'] as $scheduledJob): ?>
                                                         <?php
                                                         $modalPayload = [
+                                                            'customer_id' => $scheduledJob['customer_id'] ?? null,
                                                             'customer_name' => $scheduledJob['customer_name'],
                                                             'service_address' => $scheduledJob['service_address'],
                                                             'city' => $scheduledJob['city'] ?? 'N/A',
@@ -1850,13 +1856,18 @@ require_once __DIR__ . '/../templates/header.php';
                                                         $modalPayload['status_badge_label'] = $modalStatusBadge['label'];
                                                         $modalPayload['status_badge_classes'] = $modalStatusBadge['classes'];
                                                         ?>
-                                                        <button
-                                                            type="button"
-                                                            class="scheduled-job-trigger block w-full text-left text-[11px] text-zinc-100 transition hover:text-cyan-100"
+                                                        <div
+                                                            class="scheduled-job-trigger block w-full text-left text-[11px] text-zinc-100 transition hover:text-cyan-100 cursor-pointer"
+                                                            role="button"
+                                                            tabindex="0"
                                                             data-job-details="<?= htmlspecialchars(json_encode($modalPayload, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
                                                         >
                                                             <span class="flex items-baseline justify-between gap-1">
-                                                                <span class="truncate"><?= htmlspecialchars($scheduledJob['customer_name']) ?></span>
+                                                                <?php if (!empty($scheduledJob['customer_id'])): ?>
+                                                                    <button type="button" class="customer-name-link truncate text-left hover:underline hover:text-cyan-100" data-customer-id="<?= (int) $scheduledJob['customer_id'] ?>"><?= htmlspecialchars($scheduledJob['customer_name']) ?></button>
+                                                                <?php else: ?>
+                                                                    <span class="truncate"><?= htmlspecialchars($scheduledJob['customer_name']) ?></span>
+                                                                <?php endif; ?>
                                                                 <?php if ($scheduledJob['distance_from_center_miles'] !== null): ?>
                                                                     <span class="shrink-0 text-zinc-400">+<?= number_format((float) $scheduledJob['distance_from_center_miles'], 1) ?>mi</span>
                                                                 <?php endif; ?>
@@ -1864,7 +1875,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                             <?php if ($scheduledJob['time_window_label'] !== null): ?>
                                                                 <span class="block text-cyan-400/80"><?= htmlspecialchars($scheduledJob['time_window_label']) ?></span>
                                                             <?php endif; ?>
-                                                        </button>
+                                                        </div>
                                                     <?php endforeach; ?>
                                                 </div>
                                             </div>
@@ -2088,7 +2099,13 @@ require_once __DIR__ . '/../templates/header.php';
                             <?php else: ?>
                                 <?php foreach ($jobs as $job): ?>
                                 <tr class="hover:bg-zinc-800">
-                                    <td class="p-6"><?= htmlspecialchars($job['first_name'] . ' ' . $job['last_name']) ?></td>
+                                    <td class="p-6">
+                                        <?php if (!empty($job['customer_id'])): ?>
+                                            <button type="button" class="customer-name-link text-left text-cyan-300 hover:text-cyan-100 hover:underline" onclick="openCustomerDetailsModal(<?= (int) $job['customer_id'] ?>)"><?= htmlspecialchars($job['first_name'] . ' ' . $job['last_name']) ?></button>
+                                        <?php else: ?>
+                                            <?= htmlspecialchars($job['first_name'] . ' ' . $job['last_name']) ?>
+                                        <?php endif; ?>
+                                    </td>
                                     <td class="p-6"><?= htmlspecialchars($job['city'] ?? 'N/A') ?></td>
                                     <td class="p-6 font-mono text-sm text-cyan-400">
                                         <?= hasValidCoordinates($job['latitude'] ?? null, $job['longitude'] ?? null) ? number_format((float) $job['latitude'], 4) . ', ' . number_format((float) $job['longitude'], 4) : 'N/A' ?>
@@ -2200,7 +2217,7 @@ require_once __DIR__ . '/../templates/header.php';
         <div class="flex items-start justify-between gap-4">
             <div>
                 <p class="text-sm uppercase tracking-[0.2em] text-cyan-300">Scheduled Job</p>
-                <h3 id="modal-customer-name" class="mt-2 text-2xl font-semibold text-white">Customer</h3>
+                <button type="button" id="modal-customer-name" class="mt-2 block text-2xl font-semibold text-white hover:text-cyan-300 hover:underline text-left" onclick="openScheduledJobModalCustomer()">Customer</button>
             </div>
             <button type="button" id="modal-close-button" class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-800 hover:text-white" aria-label="Close modal">&times;</button>
         </div>
@@ -2317,8 +2334,9 @@ require_once __DIR__ . '/../templates/header.php';
     const modalOverlay = scheduledJobModal.querySelector('.modal-overlay');
     const modalCloseButton = document.getElementById('modal-close-button');
     const modalStatusBadge = document.getElementById('modal-status-badge');
+    const modalCustomerNameBtn = document.getElementById('modal-customer-name');
+    let currentScheduledJobCustomerId = null;
     const modalFields = {
-        customer_name: document.getElementById('modal-customer-name'),
         service_address: document.getElementById('modal-address'),
         city: document.getElementById('modal-city'),
         email: document.getElementById('modal-email'),
@@ -2331,6 +2349,12 @@ require_once __DIR__ . '/../templates/header.php';
         problem_summary: document.getElementById('modal-problem-summary')
     };
 
+    window.openScheduledJobModalCustomer = function () {
+        if (currentScheduledJobCustomerId && typeof window.openCustomerDetailsModal === 'function') {
+            window.openCustomerDetailsModal(currentScheduledJobCustomerId);
+        }
+    };
+
     function closeScheduledJobModal() {
         scheduledJobModal.classList.add('hidden');
         scheduledJobModal.classList.remove('flex');
@@ -2340,6 +2364,11 @@ require_once __DIR__ . '/../templates/header.php';
         Object.entries(modalFields).forEach(([key, element]) => {
             element.textContent = payload[key] || 'N/A';
         });
+
+        modalCustomerNameBtn.textContent = payload.customer_name || 'Customer';
+        currentScheduledJobCustomerId = payload.customer_id || null;
+        modalCustomerNameBtn.classList.toggle('cursor-pointer', Boolean(currentScheduledJobCustomerId));
+        modalCustomerNameBtn.title = currentScheduledJobCustomerId ? 'View customer details' : '';
 
         if (modalStatusBadge) {
             const label = payload.status_badge_label || '';
@@ -2385,8 +2414,16 @@ require_once __DIR__ . '/../templates/header.php';
         jobs.forEach((job) => {
             const item = document.createElement('li');
             item.className = 'flex items-start justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2';
-            const customerName = document.createElement('span');
-            customerName.className = 'text-sm font-medium text-zinc-100';
+            let customerName;
+            if (job.customer_id) {
+                customerName = document.createElement('button');
+                customerName.type = 'button';
+                customerName.className = 'customer-name-link text-sm font-medium text-zinc-100 hover:text-cyan-300 hover:underline text-left';
+                customerName.dataset.customerId = job.customer_id;
+            } else {
+                customerName = document.createElement('span');
+                customerName.className = 'text-sm font-medium text-zinc-100';
+            }
             customerName.textContent = job.customer_name || 'Unknown Customer';
             const timeWindow = document.createElement('span');
             timeWindow.className = 'shrink-0 text-xs font-medium text-cyan-300';
@@ -2401,6 +2438,17 @@ require_once __DIR__ . '/../templates/header.php';
     }
 
     document.addEventListener('click', function (event) {
+        const customerNameLink = event.target.closest('.customer-name-link');
+        if (customerNameLink) {
+            event.preventDefault();
+            event.stopPropagation();
+            const customerId = customerNameLink.dataset.customerId;
+            if (customerId && typeof window.openCustomerDetailsModal === 'function') {
+                window.openCustomerDetailsModal(customerId);
+            }
+            return;
+        }
+
         const clusterTrigger = event.target.closest('.cluster-header-trigger');
         if (clusterTrigger) {
             try {
@@ -2421,6 +2469,18 @@ require_once __DIR__ . '/../templates/header.php';
         } catch (error) {
             console.error('Unable to open scheduled job modal.', error);
         }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        const trigger = event.target.closest('.scheduled-job-trigger');
+        if (!trigger || event.target.closest('.customer-name-link')) {
+            return;
+        }
+        event.preventDefault();
+        trigger.click();
     });
 
     modalOverlay.addEventListener('click', closeScheduledJobModal);
@@ -2505,4 +2565,5 @@ require_once __DIR__ . '/../templates/header.php';
         runClusteringForm.submit();
     });
 </script>
+<?php customerInteractionRenderModal(); ?>
 <?php require_once __DIR__ . '/../templates/footer.php'; ?>
