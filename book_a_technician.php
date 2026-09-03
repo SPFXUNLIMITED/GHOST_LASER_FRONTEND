@@ -1440,7 +1440,7 @@ require_once __DIR__ . '/templates/header.php';
                 booking_source: stepTwoForm.booking_source.value,
                 services: bookingPayload.services || [],
                 other_service: bookingPayload.other_service || '',
-                service_speed: selectedSpeed,
+                speed: selectedSpeed,
                 service_total: bookingPayload.service_total,
                 travel_fee: bookingPayload.travel_fee,
                 grand_total: bookingPayload.total_price,

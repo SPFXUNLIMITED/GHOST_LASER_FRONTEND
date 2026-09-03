@@ -351,7 +351,7 @@ $is_task = ($booking_source === 'Internal' && !empty($body['is_task']));
 $services_raw   = isset($body['services']) && is_array($body['services']) ? $body['services'] : [];
 $services_input = array_values(array_filter(array_map('strval', $services_raw)));
 $other_service  = str_field($body, 'other_service');
-$service_speed  = str_field($body, 'service_speed');
+$service_speed  = str_field($body, 'speed') ?: str_field($body, 'service_speed');
 if (!in_array($service_speed, ['standard', 'rush', 'emergency'], true)) {
     $service_speed = 'standard';
 }
@@ -570,6 +570,7 @@ foreach ([
     'services'             => "JSON         NULL COMMENT 'Selected service IDs as JSON array'",
     'other_service'        => "TEXT         NULL COMMENT 'Other service description when \"Other\" is selected'",
     'service_speed'        => "VARCHAR(50)  NULL COMMENT 'Service speed/tier key'",
+    'speed'               => "VARCHAR(50)  NULL COMMENT 'Booking speed/tier key'",
     'service_total'       => "DECIMAL(10,2) NULL COMMENT 'Calculated service total'",
     'travel_fee'          => "DECIMAL(10,2) NULL COMMENT 'Calculated travel fee'",
     'grand_total'         => "DECIMAL(10,2) NULL COMMENT 'Calculated booking total'",
@@ -663,7 +664,7 @@ try {
                    problem_summary = ?, problem_details = ?, priority_level = ?, source = ?,
                    request_status = 'new', latitude = ?, longitude = ?, geocode_status = ?,
                    preferred_date_start = ?, preferred_date_end = ?,
-                   services = ?, other_service = ?, service_speed = ?,
+                   services = ?, other_service = ?, service_speed = ?, speed = ?,
                    service_total = ?, travel_fee = ?, grand_total = ?
              WHERE id = ?
                AND customer_id = ?
@@ -686,6 +687,7 @@ try {
             $last_suggested_date,
             $servicePayloadJson,
             $other_service !== '' ? $other_service : null,
+            $service_speed,
             $service_speed,
             $service_total,
             $travel_fee,
@@ -711,7 +713,7 @@ try {
                 problem_summary, problem_details, priority_level, source,
                 request_status, latitude, longitude, geocode_status,
                 preferred_date_start, preferred_date_end,
-                services, other_service, service_speed, service_total, travel_fee, grand_total,
+                services, other_service, service_speed, speed, service_total, travel_fee, grand_total,
                 task_contact, destination_street, destination_city, destination_state, destination_zip,
                 duration_minutes
             ) VALUES (
@@ -719,7 +721,7 @@ try {
                 ?, ?, ?, ?,
                 'new', ?, ?, ?,
                 ?, ?,
-                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?
             )
@@ -741,6 +743,7 @@ try {
             $last_suggested_date,
             $servicePayloadJson,
             $other_service !== '' ? $other_service : null,
+            $service_speed,
             $service_speed,
             $service_total,
             $travel_fee,
