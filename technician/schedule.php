@@ -2589,6 +2589,8 @@ require_once __DIR__ . '/../templates/header.php';
         heading.className = 'text-xs uppercase tracking-wider text-zinc-500';
         heading.textContent = 'Booking Details';
         section.appendChild(heading);
+        const fields = document.createElement('div');
+        fields.className = 'grid gap-2 md:grid-cols-2';
         entries.forEach(([label, value]) => {
             const line = document.createElement('div');
             line.className = 'text-sm text-zinc-200';
@@ -2597,8 +2599,9 @@ require_once __DIR__ . '/../templates/header.php';
             labelElement.textContent = label + ': ';
             line.appendChild(labelElement);
             line.appendChild(document.createTextNode(value));
-            section.appendChild(line);
+            fields.appendChild(line);
         });
+        section.appendChild(fields);
         body.insertBefore(section, body.firstChild);
     }
 
