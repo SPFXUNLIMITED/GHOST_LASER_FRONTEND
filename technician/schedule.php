@@ -565,9 +565,13 @@ function getJobStatusBadge(?string $windowEndDate, array $settings): array
  */
 function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
 {
-    // Collect every unique service ID referenced across all jobs.
-    // Task bookings leave services NULL and store duration directly in
-    // duration_minutes; skip the service-lookup path for those jobs.
+    // Collect every unique service ID referenced across all jobs. Entries in
+    // the services JSON column must be numeric services.id values — there is
+    // no name-matching fallback here. Legacy rows whose services column still
+    // contains service_name strings must be fixed by running
+    // repairServiceRequestsServiceNames() first. Task bookings leave services
+    // NULL and store duration directly in duration_minutes; skip the
+    // service-lookup path for those jobs.
     $allServiceIds = [];
     foreach ($jobs as $job) {
         $servicesJson = trim((string) ($job['services'] ?? ''));
@@ -581,15 +585,22 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
                 (int) $job['id']
             );
         }
-        $ids = json_decode($servicesJson, true);
-        if (!is_array($ids) || $ids === []) {
+        $entries = json_decode($servicesJson, true);
+        if (!is_array($entries) || $entries === []) {
             return sprintf(
                 'Service request #%d has no services assigned. Duration cannot be calculated.',
                 (int) $job['id']
             );
         }
-        foreach ($ids as $id) {
-            $allServiceIds[(int) $id] = true;
+        foreach ($entries as $entry) {
+            if (!is_numeric($entry)) {
+                return sprintf(
+                    'Service request #%d references "%s", which is not a numeric service id. Run the service data repair before scheduling.',
+                    (int) $job['id'],
+                    (string) $entry
+                );
+            }
+            $allServiceIds[(int) $entry] = true;
         }
     }
 
@@ -642,6 +653,73 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
         $job['duration_minutes'] = $resolved[(int) $job['id']];
     }
     unset($job);
+
+    return null;
+}
+
+/**
+ * One-time data repair for legacy service_requests rows whose `services`
+ * JSON column stores service_name strings (e.g. "Advanced Diagnosis")
+ * instead of numeric services.id values. Each affected row is rewritten so
+ * every entry is replaced with its matching services.id. This is safe to
+ * run repeatedly: rows that already contain only numeric IDs are left
+ * untouched.
+ *
+ * No fallbacks: if any name cannot be matched to a row in the services
+ * table, the repair stops and returns a clear error naming the unmatched
+ * service instead of silently skipping it.
+ *
+ * @param PDO $pdo
+ *
+ * @return string|null  null on success, error message on failure.
+ */
+function repairServiceRequestsServiceNames(PDO $pdo): ?string
+{
+    $serviceRows = $pdo->query('SELECT id, service_name FROM services')->fetchAll(PDO::FETCH_ASSOC);
+    $idByName    = [];
+    foreach ($serviceRows as $row) {
+        $idByName[strtolower(trim((string) $row['service_name']))] = (int) $row['id'];
+    }
+
+    $requestRows = $pdo->query(
+        "SELECT id, services FROM service_requests WHERE services IS NOT NULL AND services <> ''"
+    )->fetchAll(PDO::FETCH_ASSOC);
+
+    $updateStmt = $pdo->prepare('UPDATE service_requests SET services = :services WHERE id = :id');
+
+    foreach ($requestRows as $request) {
+        $entries = json_decode((string) $request['services'], true);
+        if (!is_array($entries) || $entries === []) {
+            continue;
+        }
+
+        $needsRepair = false;
+        $resolvedIds = [];
+        foreach ($entries as $entry) {
+            if (is_numeric($entry)) {
+                $resolvedIds[] = (int) $entry;
+                continue;
+            }
+
+            $needsRepair = true;
+            $name        = strtolower(trim((string) $entry));
+            if (!array_key_exists($name, $idByName)) {
+                return sprintf(
+                    'Service request #%d references "%s", which does not match any service in the services table. Repair aborted.',
+                    (int) $request['id'],
+                    (string) $entry
+                );
+            }
+            $resolvedIds[] = $idByName[$name];
+        }
+
+        if ($needsRepair) {
+            $updateStmt->execute([
+                ':services' => json_encode(array_values($resolvedIds)),
+                ':id'       => $request['id'],
+            ]);
+        }
+    }
 
     return null;
 }
@@ -1082,6 +1160,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 ensureClusterSchedulingTables($pdo);
 
+                $repairError = repairServiceRequestsServiceNames($pdo);
+                if ($repairError !== null) {
+                    $clusterAssignError = $repairError;
+                } else {
+
                 $placeholders = implode(',', array_fill(0, count($clusterJobIds), '?'));
                 $validJobsStmt = $pdo->prepare("
                     SELECT id, latitude, longitude, services, duration_minutes
@@ -1172,6 +1255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                     } // end if no duration error
                 }
+                } // end if no repair error
             } catch (Throwable $e) {
                 if ($pdo->inTransaction()) {
                     $pdo->rollBack();
