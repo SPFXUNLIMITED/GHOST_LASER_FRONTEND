@@ -75,50 +75,6 @@ function fmtVehicle(array $row): string
     return $parts !== [] ? implode(' • ', $parts) : '—';
 }
 
-/**
- * Build an IRS-style business purpose string for a mileage log row.
- * Format: "{Brand} {Model} | Services: {Services} | Problem: {Problem}"
- * Any missing piece is simply omitted.
- */
-function buildPurpose(array $row): string
-{
-    static $serviceLabels = [
-        'maintenance_alignment' => 'Maintenance & Alignment',
-        'tube_change'           => 'Tube Change',
-        'diagnosis'             => 'Diagnosis',
-        'training'              => 'Training',
-        'other'                 => 'Other',
-    ];
-
-    $parts = [];
-
-    $brand   = trim((string) ($row['laser_brand']  ?? ''));
-    $model   = trim((string) ($row['laser_model']  ?? ''));
-    $machine = trim("$brand $model");
-    if ($machine !== '') {
-        $parts[] = $machine;
-    }
-
-    $servicesRaw = $row['services'] ?? null;
-    if ($servicesRaw !== null && $servicesRaw !== '') {
-        $keys = json_decode((string) $servicesRaw, true);
-        if (is_array($keys) && $keys !== []) {
-            $labels = array_map(
-                static fn($k) => $serviceLabels[$k] ?? ucwords(str_replace('_', ' ', (string) $k)),
-                $keys
-            );
-            $parts[] = 'Services: ' . implode(', ', $labels);
-        }
-    }
-
-    $problem = trim((string) ($row['problem'] ?? ''));
-    if ($problem !== '') {
-        $parts[] = 'Problem: ' . $problem;
-    }
-
-    return $parts !== [] ? implode(' | ', $parts) : '—';
-}
-
 $adminUsername = trim((string) ($_SESSION['admin_username'] ?? 'Admin'));
 if ($adminUsername === '') {
     $adminUsername = 'Admin';
@@ -203,11 +159,9 @@ try {
     $stmt->execute($params);
     $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Pre-compute the IRS business purpose for each row so it is available
-    // both in the HTML table and in the JSON data fed to the detail modal.
-    // Admin-entered notes override the auto-generated purpose string.
+    // Use entered notes as the sole business-purpose source for each row.
     foreach ($logs as &$log) {
-        $log['purpose'] = !empty($log['notes']) ? $log['notes'] : buildPurpose($log);
+        $log['purpose'] = $log['notes'] ?? '';
     }
     unset($log);
 } catch (PDOException $e) {
@@ -278,7 +232,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             $row['client_name'],
             fmtVehicle($row),
             $row['address'],
-            $row['purpose'] ?? buildPurpose($row),
+            $row['purpose'],
             fmtDateTime($row['start_time']),
             fmtDateTime($row['end_time']),
             $row['start_mileage'] ?? '',
