@@ -350,7 +350,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             font-weight: 700;
             letter-spacing: 0.1em;
             text-transform: uppercase;
-            padding: 0.65rem 0.85rem;
+            padding: 4px 6px;
             text-align: left;
             border-bottom: 1px solid rgba(63,63,70,0.8);
             white-space: nowrap;
@@ -368,7 +368,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         }
 
         tbody td {
-            padding: 0.65rem 0.85rem;
+            padding: 4px 6px;
             color: #d4d4d8;
             vertical-align: top;
         }
