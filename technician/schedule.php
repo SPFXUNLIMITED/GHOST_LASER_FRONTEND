@@ -673,10 +673,13 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
  * stored service_name and the value found in the services column.
  *
  * Debug output is written via error_log(), prefixed with
- * "[REPAIR_SERVICE_NAMES]": a summary of how many rows were scanned and
- * rewritten, plus the exact before/after value of request #223's
- * services column (useful for diagnosing why that row was or wasn't
- * repaired).
+ * "[REPAIR_SERVICE_NAMES]". For every scanned row the log shows the raw
+ * JSON string, the json_decode() result, each normalized entry, whether
+ * that entry matched the services map, the exact UPDATE statement being
+ * executed (with its bound values), and the affected row count reported
+ * by PDOStatement::rowCount(). A summary of how many rows were scanned
+ * and rewritten is logged at the end, plus the exact before/after value
+ * of request #223's services column.
  *
  * @param PDO $pdo
  *
@@ -711,7 +714,18 @@ function repairServiceRequestsServiceNames(PDO $pdo): ?string
         $beforeValue  = (string) $request['services'];
         $isTargetRow  = $requestId === 223;
 
+        error_log(sprintf(
+            '[REPAIR_SERVICE_NAMES] Request #%d raw services JSON: %s',
+            $requestId,
+            $beforeValue
+        ));
+
         $entries = json_decode($beforeValue, true);
+        error_log(sprintf(
+            '[REPAIR_SERVICE_NAMES] Request #%d json_decode result: %s',
+            $requestId,
+            var_export($entries, true)
+        ));
         if (!is_array($entries) || $entries === []) {
             if ($isTargetRow) {
                 error_log(sprintf(
@@ -726,13 +740,27 @@ function repairServiceRequestsServiceNames(PDO $pdo): ?string
         $resolvedIds = [];
         foreach ($entries as $entry) {
             if (is_numeric($entry)) {
+                error_log(sprintf(
+                    '[REPAIR_SERVICE_NAMES] Request #%d entry %s is already numeric; no name lookup needed.',
+                    $requestId,
+                    var_export($entry, true)
+                ));
                 $resolvedIds[] = (int) $entry;
                 continue;
             }
 
             $needsRepair = true;
             $name        = $normalizeName((string) $entry);
-            if (!array_key_exists($name, $idByName)) {
+            $nameMatched = array_key_exists($name, $idByName);
+            error_log(sprintf(
+                '[REPAIR_SERVICE_NAMES] Request #%d entry %s normalized to %s; services map match: %s%s',
+                $requestId,
+                var_export((string) $entry, true),
+                var_export($name, true),
+                $nameMatched ? 'YES' : 'NO',
+                $nameMatched ? sprintf(' (id %d)', $idByName[$name]) : ''
+            ));
+            if (!$nameMatched) {
                 return sprintf(
                     'Service request #%d references "%s", which does not match any service in the services table. Repair aborted.',
                     $requestId,
@@ -744,11 +772,30 @@ function repairServiceRequestsServiceNames(PDO $pdo): ?string
 
         if ($needsRepair) {
             $afterValue = json_encode(array_values($resolvedIds));
+            error_log(sprintf(
+                '[REPAIR_SERVICE_NAMES] Request #%d executing SQL: UPDATE service_requests SET services = %s WHERE id = %d',
+                $requestId,
+                var_export($afterValue, true),
+                $requestId
+            ));
             $updateStmt->execute([
                 ':services' => $afterValue,
                 ':id'       => $requestId,
             ]);
+            $affectedRows = $updateStmt->rowCount();
             $rewrittenCount++;
+
+            error_log(sprintf(
+                '[REPAIR_SERVICE_NAMES] Request #%d UPDATE affected row count: %d',
+                $requestId,
+                $affectedRows
+            ));
+            if ($affectedRows === 0) {
+                error_log(sprintf(
+                    '[REPAIR_SERVICE_NAMES] WARNING: Request #%d UPDATE ran but affected 0 rows — the stored value did not change.',
+                    $requestId
+                ));
+            }
 
             if ($isTargetRow) {
                 error_log(sprintf(
