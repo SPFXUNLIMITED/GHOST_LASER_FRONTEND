@@ -547,6 +547,56 @@ function getJobStatusBadge(?string $windowEndDate, array $settings): array
 }
 
 /**
+ * Normalize a services.service_name value for case/whitespace-insensitive
+ * matching. Used consistently everywhere a service name is looked up by
+ * name (the repair function and the name-fallback in
+ * resolveJobDurationsFromServices()) so the two never disagree on what
+ * counts as a match.
+ */
+function normalizeServiceName(string $name): string
+{
+    return mb_strtolower(trim($name));
+}
+
+/**
+ * Build a normalized service_name => id map from the services table.
+ *
+ * The services table has no uniqueness constraint on service_name (admins
+ * can create two rows whose names normalize identically, e.g. "Diagnosis"
+ * and " diagnosis "). Silently letting the later row win would let a
+ * name-based lookup resolve to the wrong service id — numeric, so it would
+ * pass downstream is_numeric() checks, but wrong. Instead this fails loudly
+ * as soon as a collision is detected.
+ *
+ * @return array{map: array<string,int>, error: string|null}
+ */
+function buildServiceNameIdMap(PDO $pdo): array
+{
+    $serviceRows = $pdo->query('SELECT id, service_name FROM services')->fetchAll(PDO::FETCH_ASSOC);
+    $idByName    = [];
+    $nameById    = [];
+    foreach ($serviceRows as $row) {
+        $id   = (int) $row['id'];
+        $name = normalizeServiceName((string) $row['service_name']);
+        if (array_key_exists($name, $idByName)) {
+            return [
+                'map'   => [],
+                'error' => sprintf(
+                    'Services #%d and #%d both normalize to the service name "%s". Rename one of them in Service Settings before scheduling.',
+                    $nameById[$name],
+                    $id,
+                    $name
+                ),
+            ];
+        }
+        $idByName[$name] = $id;
+        $nameById[$name] = $id;
+    }
+
+    return ['map' => $idByName, 'error' => null];
+}
+
+/**
  * Resolve per-job duration by summing the `duration_minutes` of every service
  * referenced in the job's `services` JSON column.
  *
@@ -566,14 +616,41 @@ function getJobStatusBadge(?string $windowEndDate, array $settings): array
 function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
 {
     // Collect every unique service ID referenced across all jobs. Entries in
-    // the services JSON column must be numeric services.id values — there is
-    // no name-matching fallback here. Legacy rows whose services column still
-    // contains service_name strings must be fixed by running
-    // repairServiceRequestsServiceNames() first. Task bookings leave services
-    // NULL and store duration directly in duration_minutes; skip the
-    // service-lookup path for those jobs.
-    $allServiceIds = [];
+    // the services JSON column are normally numeric services.id values, but
+    // legacy rows whose services column still contains service_name strings
+    // (predating a repair via repairServiceRequestsServiceNames()) are
+    // resolved here too, through the same normalized name => id map the
+    // repair function uses, so the two never disagree. Task bookings leave
+    // services NULL and store duration directly in duration_minutes; skip
+    // the service-lookup path for those jobs.
+    $nameIdMap      = null; // Lazily built; only needed if a name is encountered.
+    $resolveByName  = function (string $entry, int $jobId) use ($pdo, &$nameIdMap): array {
+        if ($nameIdMap === null) {
+            $built = buildServiceNameIdMap($pdo);
+            if ($built['error'] !== null) {
+                return ['id' => null, 'error' => $built['error']];
+            }
+            $nameIdMap = $built['map'];
+        }
+        $normalized = normalizeServiceName($entry);
+        if (!array_key_exists($normalized, $nameIdMap)) {
+            return [
+                'id' => null,
+                'error' => sprintf(
+                    'Service request #%d references "%s", which does not match any service in the services table. Run the service data repair before scheduling.',
+                    $jobId,
+                    $entry
+                ),
+            ];
+        }
+
+        return ['id' => $nameIdMap[$normalized], 'error' => null];
+    };
+
+    $allServiceIds  = [];
+    $resolvedEntries = []; // job id => list of resolved numeric service ids, in order.
     foreach ($jobs as $job) {
+        $jobId        = (int) $job['id'];
         $servicesJson = trim((string) ($job['services'] ?? ''));
         if ($servicesJson === '') {
             // Task booking: duration_minutes must already be set.
@@ -582,25 +659,31 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
             }
             return sprintf(
                 'Service request #%d has no services assigned. Duration cannot be calculated.',
-                (int) $job['id']
+                $jobId
             );
         }
         $entries = json_decode($servicesJson, true);
         if (!is_array($entries) || $entries === []) {
             return sprintf(
                 'Service request #%d has no services assigned. Duration cannot be calculated.',
-                (int) $job['id']
+                $jobId
             );
         }
+        $ids = [];
         foreach ($entries as $entry) {
-            if (!is_numeric($entry)) {
-                return sprintf(
-                    'Service request #%d references "%s", which is not a numeric service id. Run the service data repair before scheduling.',
-                    (int) $job['id'],
-                    (string) $entry
-                );
+            if (is_numeric($entry)) {
+                $ids[] = (int) $entry;
+                continue;
             }
-            $allServiceIds[(int) $entry] = true;
+            $resolved = $resolveByName((string) $entry, $jobId);
+            if ($resolved['error'] !== null) {
+                return $resolved['error'];
+            }
+            $ids[] = $resolved['id'];
+        }
+        $resolvedEntries[$jobId] = $ids;
+        foreach ($ids as $id) {
+            $allServiceIds[$id] = true;
         }
     }
 
@@ -619,21 +702,20 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
     // Resolve each job's total duration.
     $resolved = [];
     foreach ($jobs as $job) {
+        $jobId        = (int) $job['id'];
         $servicesJson = trim((string) ($job['services'] ?? ''));
         if ($servicesJson === '') {
             // Task booking: duration_minutes is already set; preserve it.
-            $resolved[(int) $job['id']] = (int) $job['duration_minutes'];
+            $resolved[$jobId] = (int) $job['duration_minutes'];
             continue;
         }
-        $ids   = json_decode($servicesJson, true);
         $total = 0;
-        foreach ($ids as $id) {
-            $id = (int) $id;
+        foreach ($resolvedEntries[$jobId] as $id) {
             if (!array_key_exists($id, $serviceRows)) {
                 return sprintf(
                     'Service #%d used by request #%d was not found in the services table.',
                     $id,
-                    (int) $job['id']
+                    $jobId
                 );
             }
             $mins = (int) $serviceRows[$id]['duration_minutes'];
@@ -645,7 +727,7 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
             }
             $total += $mins;
         }
-        $resolved[(int) $job['id']] = $total;
+        $resolved[$jobId] = $total;
     }
 
     // Write resolved durations back into the jobs array.
@@ -687,18 +769,17 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
  */
 function repairServiceRequestsServiceNames(PDO $pdo): ?string
 {
-    // Normalize service names the same way on both sides of the lookup:
-    // trim leading/trailing whitespace and lower-case (multi-byte safe) so
-    // matches are case-insensitive regardless of how the name was stored.
-    $normalizeName = static function (string $name): string {
-        return mb_strtolower(trim($name));
-    };
+    // Normalize service names the same way on both sides of the lookup, and
+    // reuse the same normalized name => id map (and its duplicate-name
+    // detection) that resolveJobDurationsFromServices() uses, so the two
+    // functions can never disagree about how a name resolves.
+    $normalizeName = 'normalizeServiceName';
 
-    $serviceRows = $pdo->query('SELECT id, service_name FROM services')->fetchAll(PDO::FETCH_ASSOC);
-    $idByName    = [];
-    foreach ($serviceRows as $row) {
-        $idByName[$normalizeName((string) $row['service_name'])] = (int) $row['id'];
+    $nameMap = buildServiceNameIdMap($pdo);
+    if ($nameMap['error'] !== null) {
+        return $nameMap['error'];
     }
+    $idByName = $nameMap['map'];
 
     $requestRows = $pdo->query(
         "SELECT id, services FROM service_requests WHERE services IS NOT NULL AND services <> ''"
