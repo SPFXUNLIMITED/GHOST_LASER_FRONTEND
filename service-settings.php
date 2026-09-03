@@ -62,6 +62,34 @@ function seedServicesIfEmpty(PDO $pdo): void
     }
 }
 
+/**
+ * Normalized (trim + mb_strtolower) service_name -> id map, matching the
+ * normalization used by technician/schedule.php's
+ * normalizeServiceCatalogName()/buildServiceNameIdMap(). Used to warn admins
+ * before they create a duplicate that would collide with legacy-name
+ * resolution.
+ */
+function findDuplicateServiceNameId(PDO $pdo, string $name, ?int $excludeId = null): ?int
+{
+    $normalized = mb_strtolower(trim($name));
+    if ($normalized === '') {
+        return null;
+    }
+
+    $rows = $pdo->query('SELECT id, service_name FROM services')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $row) {
+        $id = (int) $row['id'];
+        if ($excludeId !== null && $id === $excludeId) {
+            continue;
+        }
+        if (mb_strtolower(trim((string) $row['service_name'])) === $normalized) {
+            return $id;
+        }
+    }
+
+    return null;
+}
+
 function getServices(PDO $pdo): array
 {
     return $pdo->query("SELECT id, service_name, base_price, duration_minutes FROM services ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
@@ -104,6 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price    = trim((string) ($_POST['base_price'] ?? ''));
         $duration = trim((string) ($_POST['duration_minutes'] ?? ''));
 
+        $duplicateId = findDuplicateServiceNameId($pdo, $name);
+
         if ($name === '') {
             $errorMessage = 'Service name is required.';
         } elseif (!is_numeric($price) || (float) $price < 0) {
@@ -123,6 +153,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name     = trim((string) ($_POST['service_name'] ?? ''));
         $price    = trim((string) ($_POST['base_price'] ?? ''));
         $duration = trim((string) ($_POST['duration_minutes'] ?? ''));
+
+        $duplicateId = findDuplicateServiceNameId($pdo, $name, $id > 0 ? $id : null);
 
         if ($id <= 0) {
             $errorMessage = 'Invalid service ID.';
