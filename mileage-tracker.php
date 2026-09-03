@@ -738,14 +738,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <table>
                 <thead>
                     <tr>
-                        <th>Date</th>
                         <th>Client Name</th>
                         <th>Vehicle</th>
                         <th>Address</th>
                         <th>Purpose</th>
                         <th>Time</th>
                         <th>Odometer</th>
-                        <th>Job ID</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -754,11 +752,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     <?php foreach ($logs as $row): ?>
                         <?php $tripMiles = mileageFromOdometer($row['start_mileage'] ?? null, $row['end_mileage'] ?? null); ?>
                         <tr class="log-row" data-log-id="<?= (int) $row['id'] ?>" tabindex="0" role="button" aria-label="Open full trip details for record #<?= (int) $row['id'] ?>">
-                            <td class="text-zinc-200 font-medium whitespace-nowrap">
-                                <?= htmlspecialchars(fmtDate($row['trip_date']), ENT_QUOTES, 'UTF-8') ?>
-                            </td>
                             <td class="text-zinc-200">
                                 <?= htmlspecialchars($row['client_name'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
+                                <div class="text-xs text-zinc-400 font-mono">Job #<?= (int) $row['service_request_id'] ?></div>
                             </td>
                             <td class="max-w-xs text-zinc-300" style="min-width:200px;">
                                 <?= htmlspecialchars(fmtVehicle($row), ENT_QUOTES, 'UTF-8') ?>
@@ -777,9 +773,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <div class="text-xs text-zinc-400">Starting: <?= htmlspecialchars(fmtOdometer($row['start_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
                                 <div class="text-xs text-zinc-400">Ending: <?= htmlspecialchars(fmtOdometer($row['end_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
                                 <div class="text-xs text-zinc-400">Total: <?= htmlspecialchars(fmtMiles($tripMiles), ENT_QUOTES, 'UTF-8') ?></div>
-                            </td>
-                            <td class="text-zinc-400 font-mono text-xs whitespace-nowrap">
-                                #<?= (int) $row['service_request_id'] ?>
                             </td>
                             <td>
                                 <?php if ($row['status'] === 'complete'): ?>
