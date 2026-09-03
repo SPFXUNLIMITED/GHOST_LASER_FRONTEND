@@ -547,6 +547,53 @@ function getJobStatusBadge(?string $windowEndDate, array $settings): array
 }
 
 /**
+ * Normalize a services.service_name value the same way everywhere it is
+ * looked up: trim leading/trailing whitespace and lower-case (multi-byte
+ * safe) so matches are case-insensitive regardless of how the name was
+ * stored. Shared by repairServiceRequestsServiceNames() and
+ * resolveJobDurationsFromServices() so both sides of every lookup agree.
+ */
+function normalizeServiceCatalogName(string $name): string
+{
+    return mb_strtolower(trim($name));
+}
+
+/**
+ * Build a normalized service_name -> id map from the services table.
+ *
+ * service-settings.php does not enforce uniqueness on service_name, so two
+ * catalog rows can normalize to the same key (e.g. "Diagnosis" and
+ * " diagnosis "). Silently letting the second row overwrite the first in
+ * the map risks resolving legacy name references to the wrong service id.
+ * Instead, this throws so every caller fails loudly instead of guessing.
+ *
+ * @throws RuntimeException if two services normalize to the same name.
+ */
+function buildServiceNameIdMap(PDO $pdo): array
+{
+    $serviceRows = $pdo->query('SELECT id, service_name FROM services')->fetchAll(PDO::FETCH_ASSOC);
+
+    $idByName = [];
+    foreach ($serviceRows as $row) {
+        $normalized = normalizeServiceCatalogName((string) $row['service_name']);
+        $id         = (int) $row['id'];
+
+        if (array_key_exists($normalized, $idByName)) {
+            throw new RuntimeException(sprintf(
+                'Duplicate service name detected: services #%d and #%d both normalize to "%s". Fix the duplicate in Service Settings before scheduling.',
+                $idByName[$normalized],
+                $id,
+                $normalized
+            ));
+        }
+
+        $idByName[$normalized] = $id;
+    }
+
+    return $idByName;
+}
+
+/**
  * Resolve per-job duration by summing the `duration_minutes` of every service
  * referenced in the job's `services` JSON column.
  *
@@ -566,14 +613,20 @@ function getJobStatusBadge(?string $windowEndDate, array $settings): array
 function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
 {
     // Collect every unique service ID referenced across all jobs. Entries in
-    // the services JSON column must be numeric services.id values — there is
-    // no name-matching fallback here. Legacy rows whose services column still
-    // contains service_name strings must be fixed by running
-    // repairServiceRequestsServiceNames() first. Task bookings leave services
-    // NULL and store duration directly in duration_minutes; skip the
-    // service-lookup path for those jobs.
-    $allServiceIds = [];
+    // the services JSON column are normally numeric services.id values, but
+    // legacy rows whose services column still contains service_name strings
+    // (residue from a prior version of the booking form) are resolved here
+    // via the same normalized name -> id map used by
+    // repairServiceRequestsServiceNames(), instead of hard-failing. Task
+    // bookings leave services NULL and store duration directly in
+    // duration_minutes; skip the service-lookup path for those jobs.
+    $idByName               = null; // lazily built; only queried if a name entry is encountered.
+    $numericEntriesByJobId  = [];
+    $jobIdsResolvedFromName = [];
+    $allServiceIds          = [];
+
     foreach ($jobs as $job) {
+        $jobId        = (int) $job['id'];
         $servicesJson = trim((string) ($job['services'] ?? ''));
         if ($servicesJson === '') {
             // Task booking: duration_minutes must already be set.
@@ -582,25 +635,55 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
             }
             return sprintf(
                 'Service request #%d has no services assigned. Duration cannot be calculated.',
-                (int) $job['id']
+                $jobId
             );
         }
         $entries = json_decode($servicesJson, true);
         if (!is_array($entries) || $entries === []) {
             return sprintf(
                 'Service request #%d has no services assigned. Duration cannot be calculated.',
-                (int) $job['id']
+                $jobId
             );
         }
+
+        $numericEntries = [];
         foreach ($entries as $entry) {
-            if (!is_numeric($entry)) {
+            if (is_numeric($entry)) {
+                $numericEntries[] = (int) $entry;
+                continue;
+            }
+
+            if ($idByName === null) {
+                try {
+                    $idByName = buildServiceNameIdMap($pdo);
+                } catch (RuntimeException $e) {
+                    return $e->getMessage();
+                }
+            }
+
+            $normalized = normalizeServiceCatalogName((string) $entry);
+            if (!array_key_exists($normalized, $idByName)) {
                 return sprintf(
-                    'Service request #%d references "%s", which is not a numeric service id. Run the service data repair before scheduling.',
-                    (int) $job['id'],
+                    'Service request #%d references "%s", which is not a numeric service id and does not match any service in the services table. Run the service data repair before scheduling.',
+                    $jobId,
                     (string) $entry
                 );
             }
-            $allServiceIds[(int) $entry] = true;
+
+            $resolvedId = $idByName[$normalized];
+            error_log(sprintf(
+                '[RESOLVE_JOB_DURATIONS] Service request #%d references legacy service name "%s"; resolved via name lookup to service id %d. This row should be repaired (run repairServiceRequestsServiceNames()).',
+                $jobId,
+                (string) $entry,
+                $resolvedId
+            ));
+            $numericEntries[]                 = $resolvedId;
+            $jobIdsResolvedFromName[$jobId]   = true;
+        }
+
+        $numericEntriesByJobId[$jobId] = $numericEntries;
+        foreach ($numericEntries as $id) {
+            $allServiceIds[$id] = true;
         }
     }
 
@@ -619,21 +702,19 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
     // Resolve each job's total duration.
     $resolved = [];
     foreach ($jobs as $job) {
-        $servicesJson = trim((string) ($job['services'] ?? ''));
-        if ($servicesJson === '') {
+        $jobId = (int) $job['id'];
+        if (!array_key_exists($jobId, $numericEntriesByJobId)) {
             // Task booking: duration_minutes is already set; preserve it.
-            $resolved[(int) $job['id']] = (int) $job['duration_minutes'];
+            $resolved[$jobId] = (int) $job['duration_minutes'];
             continue;
         }
-        $ids   = json_decode($servicesJson, true);
         $total = 0;
-        foreach ($ids as $id) {
-            $id = (int) $id;
+        foreach ($numericEntriesByJobId[$jobId] as $id) {
             if (!array_key_exists($id, $serviceRows)) {
                 return sprintf(
                     'Service #%d used by request #%d was not found in the services table.',
                     $id,
-                    (int) $job['id']
+                    $jobId
                 );
             }
             $mins = (int) $serviceRows[$id]['duration_minutes'];
@@ -645,7 +726,7 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
             }
             $total += $mins;
         }
-        $resolved[(int) $job['id']] = $total;
+        $resolved[$jobId] = $total;
     }
 
     // Write resolved durations back into the jobs array.
@@ -653,6 +734,29 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
         $job['duration_minutes'] = $resolved[(int) $job['id']];
     }
     unset($job);
+
+    // Opportunistically converge the rows that needed name resolution onto
+    // numeric ids so data at rest matches what a repair run would write.
+    // Best-effort only: failure here must never fail the scheduling
+    // operation that triggered this resolution. Running
+    // repairServiceRequestsServiceNames() as a periodic/cron job is still
+    // recommended as the authoritative fix.
+    if ($jobIdsResolvedFromName !== []) {
+        try {
+            $updateStmt = $pdo->prepare('UPDATE service_requests SET services = :services WHERE id = :id');
+            foreach (array_keys($jobIdsResolvedFromName) as $jobId) {
+                $updateStmt->execute([
+                    ':services' => json_encode(array_values($numericEntriesByJobId[$jobId])),
+                    ':id'       => $jobId,
+                ]);
+            }
+        } catch (Throwable $e) {
+            error_log(sprintf(
+                '[RESOLVE_JOB_DURATIONS] Best-effort persistence of resolved service ids failed: %s',
+                $e->getMessage()
+            ));
+        }
+    }
 
     return null;
 }
@@ -665,12 +769,24 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
  * run repeatedly: rows that already contain only numeric IDs are left
  * untouched.
  *
- * No fallbacks: if any name cannot be matched to a row in the services
- * table, the repair stops and returns a clear error naming the unmatched
- * service instead of silently skipping it.
+ * Rows whose name cannot be matched to a row in the services table are
+ * skipped and reported (not silently dropped) rather than aborting the
+ * whole batch — one bad legacy row no longer blocks the repair of every
+ * other request. Detail of every skipped row is included in the returned
+ * error string and logged. A duplicate normalized service name in the
+ * catalog itself (e.g. "Diagnosis" and " diagnosis ") is a distinct,
+ * higher-severity failure: it aborts the entire repair immediately because
+ * any resolution made against an ambiguous map could silently pick the
+ * wrong id.
+ *
+ * The read of service_requests and every UPDATE are wrapped in a single
+ * transaction (started here unless one is already open) so the repair is
+ * atomic and safe to re-run concurrently with other writers.
  *
  * Name matching is case-insensitive and trims whitespace on both the
- * stored service_name and the value found in the services column.
+ * stored service_name and the value found in the services column, using
+ * the same normalizeServiceCatalogName()/buildServiceNameIdMap() helpers
+ * that resolveJobDurationsFromServices() uses for its own name fallback.
  *
  * Debug output is written via error_log(), prefixed with
  * "[REPAIR_SERVICE_NAMES]". For every scanned row the log shows the raw
@@ -683,142 +799,175 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
  *
  * @param PDO $pdo
  *
- * @return string|null  null on success, error message on failure.
+ * @return string|null  null on success (including when unmatched rows were
+ *                       skipped and reported), error message when the
+ *                       catalog itself is ambiguous or the repair failed.
  */
 function repairServiceRequestsServiceNames(PDO $pdo): ?string
 {
-    // Normalize service names the same way on both sides of the lookup:
-    // trim leading/trailing whitespace and lower-case (multi-byte safe) so
-    // matches are case-insensitive regardless of how the name was stored.
-    $normalizeName = static function (string $name): string {
-        return mb_strtolower(trim($name));
-    };
-
-    $serviceRows = $pdo->query('SELECT id, service_name FROM services')->fetchAll(PDO::FETCH_ASSOC);
-    $idByName    = [];
-    foreach ($serviceRows as $row) {
-        $idByName[$normalizeName((string) $row['service_name'])] = (int) $row['id'];
+    try {
+        $idByName = buildServiceNameIdMap($pdo);
+    } catch (RuntimeException $e) {
+        error_log('[REPAIR_SERVICE_NAMES] ' . $e->getMessage());
+        return $e->getMessage();
     }
 
-    $requestRows = $pdo->query(
-        "SELECT id, services FROM service_requests WHERE services IS NOT NULL AND services <> ''"
-    )->fetchAll(PDO::FETCH_ASSOC);
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
 
-    $updateStmt = $pdo->prepare('UPDATE service_requests SET services = :services WHERE id = :id');
+    try {
+        $requestRows = $pdo->query(
+            "SELECT id, services FROM service_requests WHERE services IS NOT NULL AND services <> ''"
+        )->fetchAll(PDO::FETCH_ASSOC);
 
-    $scannedCount  = count($requestRows);
-    $rewrittenCount = 0;
+        $updateStmt = $pdo->prepare('UPDATE service_requests SET services = :services WHERE id = :id');
 
-    foreach ($requestRows as $request) {
-        $requestId    = (int) $request['id'];
-        $beforeValue  = (string) $request['services'];
-        $isTargetRow  = $requestId === 223;
+        $scannedCount   = count($requestRows);
+        $rewrittenCount = 0;
+        $unmatchedByRequestId = []; // requestId => [unmatched name, ...] — skipped, not aborted.
 
-        error_log(sprintf(
-            '[REPAIR_SERVICE_NAMES] Request #%d raw services JSON: %s',
-            $requestId,
-            $beforeValue
-        ));
+        foreach ($requestRows as $request) {
+            $requestId   = (int) $request['id'];
+            $beforeValue = (string) $request['services'];
+            $isTargetRow = $requestId === 223;
 
-        $entries = json_decode($beforeValue, true);
-        error_log(sprintf(
-            '[REPAIR_SERVICE_NAMES] Request #%d json_decode result: %s',
-            $requestId,
-            var_export($entries, true)
-        ));
-        if (!is_array($entries) || $entries === []) {
-            if ($isTargetRow) {
-                error_log(sprintf(
-                    '[REPAIR_SERVICE_NAMES] Request #223 skipped (services column is not a non-empty JSON array). Before: %s',
-                    $beforeValue
-                ));
-            }
-            continue;
-        }
+            error_log(sprintf(
+                '[REPAIR_SERVICE_NAMES] Request #%d raw services JSON: %s',
+                $requestId,
+                $beforeValue
+            ));
 
-        $needsRepair = false;
-        $resolvedIds = [];
-        foreach ($entries as $entry) {
-            if (is_numeric($entry)) {
-                error_log(sprintf(
-                    '[REPAIR_SERVICE_NAMES] Request #%d entry %s is already numeric; no name lookup needed.',
-                    $requestId,
-                    var_export($entry, true)
-                ));
-                $resolvedIds[] = (int) $entry;
+            $entries = json_decode($beforeValue, true);
+            error_log(sprintf(
+                '[REPAIR_SERVICE_NAMES] Request #%d json_decode result: %s',
+                $requestId,
+                var_export($entries, true)
+            ));
+            if (!is_array($entries) || $entries === []) {
+                if ($isTargetRow) {
+                    error_log(sprintf(
+                        '[REPAIR_SERVICE_NAMES] Request #223 skipped (services column is not a non-empty JSON array). Before: %s',
+                        $beforeValue
+                    ));
+                }
                 continue;
             }
 
-            $needsRepair = true;
-            $name        = $normalizeName((string) $entry);
-            $nameMatched = array_key_exists($name, $idByName);
-            error_log(sprintf(
-                '[REPAIR_SERVICE_NAMES] Request #%d entry %s normalized to %s; services map match: %s%s',
-                $requestId,
-                var_export((string) $entry, true),
-                var_export($name, true),
-                $nameMatched ? 'YES' : 'NO',
-                $nameMatched ? sprintf(' (id %d)', $idByName[$name]) : ''
-            ));
-            if (!$nameMatched) {
-                return sprintf(
-                    'Service request #%d references "%s", which does not match any service in the services table. Repair aborted.',
-                    $requestId,
-                    (string) $entry
-                );
-            }
-            $resolvedIds[] = $idByName[$name];
-        }
+            $needsRepair = false;
+            $resolvedIds = [];
+            foreach ($entries as $entry) {
+                if (is_numeric($entry)) {
+                    error_log(sprintf(
+                        '[REPAIR_SERVICE_NAMES] Request #%d entry %s is already numeric; no name lookup needed.',
+                        $requestId,
+                        var_export($entry, true)
+                    ));
+                    $resolvedIds[] = (int) $entry;
+                    continue;
+                }
 
-        if ($needsRepair) {
-            $afterValue = json_encode(array_values($resolvedIds));
-            error_log(sprintf(
-                '[REPAIR_SERVICE_NAMES] Request #%d executing SQL: UPDATE service_requests SET services = %s WHERE id = %d',
-                $requestId,
-                var_export($afterValue, true),
-                $requestId
-            ));
-            $updateStmt->execute([
-                ':services' => $afterValue,
-                ':id'       => $requestId,
-            ]);
-            $affectedRows = $updateStmt->rowCount();
-            $rewrittenCount++;
-
-            error_log(sprintf(
-                '[REPAIR_SERVICE_NAMES] Request #%d UPDATE affected row count: %d',
-                $requestId,
-                $affectedRows
-            ));
-            if ($affectedRows === 0) {
+                $needsRepair = true;
+                $name        = normalizeServiceCatalogName((string) $entry);
+                $nameMatched = array_key_exists($name, $idByName);
                 error_log(sprintf(
-                    '[REPAIR_SERVICE_NAMES] WARNING: Request #%d UPDATE ran but affected 0 rows — the stored value did not change.',
+                    '[REPAIR_SERVICE_NAMES] Request #%d entry %s normalized to %s; services map match: %s%s',
+                    $requestId,
+                    var_export((string) $entry, true),
+                    var_export($name, true),
+                    $nameMatched ? 'YES' : 'NO',
+                    $nameMatched ? sprintf(' (id %d)', $idByName[$name]) : ''
+                ));
+                if (!$nameMatched) {
+                    $unmatchedByRequestId[$requestId][] = (string) $entry;
+                    continue;
+                }
+                $resolvedIds[] = $idByName[$name];
+            }
+
+            if (isset($unmatchedByRequestId[$requestId])) {
+                error_log(sprintf(
+                    '[REPAIR_SERVICE_NAMES] Request #%d skipped: unmatched name(s) not found in services table: %s. Row left unchanged; fix or add the missing service and re-run the repair.',
+                    $requestId,
+                    implode(', ', $unmatchedByRequestId[$requestId])
+                ));
+                continue;
+            }
+
+            if ($needsRepair) {
+                $afterValue = json_encode(array_values($resolvedIds));
+                error_log(sprintf(
+                    '[REPAIR_SERVICE_NAMES] Request #%d executing SQL: UPDATE service_requests SET services = %s WHERE id = %d',
+                    $requestId,
+                    var_export($afterValue, true),
                     $requestId
                 ));
-            }
+                $updateStmt->execute([
+                    ':services' => $afterValue,
+                    ':id'       => $requestId,
+                ]);
+                $affectedRows = $updateStmt->rowCount();
+                $rewrittenCount++;
 
-            if ($isTargetRow) {
                 error_log(sprintf(
-                    '[REPAIR_SERVICE_NAMES] Request #223 rewritten. Before: %s | After: %s',
-                    $beforeValue,
-                    $afterValue
+                    '[REPAIR_SERVICE_NAMES] Request #%d UPDATE affected row count: %d',
+                    $requestId,
+                    $affectedRows
+                ));
+                if ($affectedRows === 0) {
+                    error_log(sprintf(
+                        '[REPAIR_SERVICE_NAMES] WARNING: Request #%d UPDATE ran but affected 0 rows — the stored value did not change.',
+                        $requestId
+                    ));
+                }
+
+                if ($isTargetRow) {
+                    error_log(sprintf(
+                        '[REPAIR_SERVICE_NAMES] Request #223 rewritten. Before: %s | After: %s',
+                        $beforeValue,
+                        $afterValue
+                    ));
+                }
+            } elseif ($isTargetRow) {
+                error_log(sprintf(
+                    '[REPAIR_SERVICE_NAMES] Request #223 already numeric, no rewrite needed. Value: %s',
+                    $beforeValue
                 ));
             }
-        } elseif ($isTargetRow) {
+        }
+
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+
+        error_log(sprintf(
+            '[REPAIR_SERVICE_NAMES] Scanned %d row(s), rewrote %d row(s), %d row(s) skipped as unmatched.',
+            $scannedCount,
+            $rewrittenCount,
+            count($unmatchedByRequestId)
+        ));
+
+        if ($unmatchedByRequestId !== []) {
+            $details = [];
+            foreach ($unmatchedByRequestId as $requestId => $names) {
+                $details[] = sprintf('#%d (%s)', $requestId, implode(', ', $names));
+            }
             error_log(sprintf(
-                '[REPAIR_SERVICE_NAMES] Request #223 already numeric, no rewrite needed. Value: %s',
-                $beforeValue
+                '[REPAIR_SERVICE_NAMES] %d row(s) skipped, unmatched by request: %s',
+                count($unmatchedByRequestId),
+                implode('; ', $details)
             ));
         }
+
+        return null;
+    } catch (Throwable $e) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('[REPAIR_SERVICE_NAMES] Repair failed: ' . $e->getMessage());
+        return 'Service data repair failed: ' . $e->getMessage();
     }
-
-    error_log(sprintf(
-        '[REPAIR_SERVICE_NAMES] Scanned %d row(s), rewrote %d row(s).',
-        $scannedCount,
-        $rewrittenCount
-    ));
-
-    return null;
 }
 
 /**

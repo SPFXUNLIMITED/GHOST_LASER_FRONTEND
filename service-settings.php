@@ -43,10 +43,15 @@ function seedServicesIfEmpty(PDO $pdo): void
     if ($count > 0) {
         return;
     }
+    // This list must match the live catalog (see service-settings admin
+    // page) so a fresh install / disaster-recovery reseed does not diverge
+    // from what has been manually added in production (e.g. "Advanced
+    // Diagnosis"). Seeding only ever runs once, against an empty table.
     $defaults = [
         ['Maintenance & Alignment', 150.00, 90],
         ['Tube Change',             320.00, 120],
         ['Diagnosis',               120.00, 60],
+        ['Advanced Diagnosis',      180.00, 90],
         ['Training',                180.00, 120],
         ['Other',                   100.00, 60],
     ];
@@ -54,6 +59,34 @@ function seedServicesIfEmpty(PDO $pdo): void
     foreach ($defaults as [$name, $price, $duration]) {
         $stmt->execute([':name' => $name, ':price' => $price, ':duration' => $duration]);
     }
+}
+
+/**
+ * Normalized (trim + mb_strtolower) service_name -> id map, matching the
+ * normalization used by technician/schedule.php's
+ * normalizeServiceCatalogName()/buildServiceNameIdMap(). Used to warn admins
+ * before they create a duplicate that would collide with legacy-name
+ * resolution.
+ */
+function findDuplicateServiceNameId(PDO $pdo, string $name, ?int $excludeId = null): ?int
+{
+    $normalized = mb_strtolower(trim($name));
+    if ($normalized === '') {
+        return null;
+    }
+
+    $rows = $pdo->query('SELECT id, service_name FROM services')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $row) {
+        $id = (int) $row['id'];
+        if ($excludeId !== null && $id === $excludeId) {
+            continue;
+        }
+        if (mb_strtolower(trim((string) $row['service_name'])) === $normalized) {
+            return $id;
+        }
+    }
+
+    return null;
 }
 
 function getServices(PDO $pdo): array
@@ -78,12 +111,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price    = trim((string) ($_POST['base_price'] ?? ''));
         $duration = trim((string) ($_POST['duration_minutes'] ?? ''));
 
+        $duplicateId = findDuplicateServiceNameId($pdo, $name);
+
         if ($name === '') {
             $errorMessage = 'Service name is required.';
         } elseif (!is_numeric($price) || (float) $price < 0) {
             $errorMessage = 'Base price must be a valid non-negative number.';
         } elseif (!ctype_digit($duration) || (int) $duration < 1) {
             $errorMessage = 'Duration must be a whole number of minutes (minimum 1).';
+        } elseif ($duplicateId !== null) {
+            $errorMessage = sprintf(
+                'A service that normalizes to the same name already exists (id #%d). Choose a distinct name to avoid ambiguous legacy-data lookups.',
+                $duplicateId
+            );
         } else {
             $stmt = $pdo->prepare("INSERT INTO services (service_name, base_price, duration_minutes) VALUES (:name, :price, :duration)");
             $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration]);
@@ -96,6 +136,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price    = trim((string) ($_POST['base_price'] ?? ''));
         $duration = trim((string) ($_POST['duration_minutes'] ?? ''));
 
+        $duplicateId = findDuplicateServiceNameId($pdo, $name, $id > 0 ? $id : null);
+
         if ($id <= 0) {
             $errorMessage = 'Invalid service ID.';
         } elseif ($name === '') {
@@ -104,6 +146,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errorMessage = 'Base price must be a valid non-negative number.';
         } elseif (!ctype_digit($duration) || (int) $duration < 1) {
             $errorMessage = 'Duration must be a whole number of minutes (minimum 1).';
+        } elseif ($duplicateId !== null) {
+            $errorMessage = sprintf(
+                'A service that normalizes to the same name already exists (id #%d). Choose a distinct name to avoid ambiguous legacy-data lookups.',
+                $duplicateId
+            );
         } else {
             $stmt = $pdo->prepare("UPDATE services SET service_name = :name, base_price = :price, duration_minutes = :duration WHERE id = :id");
             $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration, ':id' => $id]);
