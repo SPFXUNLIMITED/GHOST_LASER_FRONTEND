@@ -43,12 +43,18 @@ function seedServicesIfEmpty(PDO $pdo): void
     if ($count > 0) {
         return;
     }
+    // Keep this list in sync with the live catalog. It only runs once, against
+    // an empty table (fresh install, staging, or a schema-only disaster-recovery
+    // restore) — any service added later through this page must be reflected
+    // here too, or a re-seed will silently omit it.
     $defaults = [
-        ['Maintenance & Alignment', 150.00, 90],
-        ['Tube Change',             320.00, 120],
-        ['Diagnosis',               120.00, 60],
-        ['Training',                180.00, 120],
-        ['Other',                   100.00, 60],
+        ['Maintenance & Alignment',                    150.00, 90],
+        ['Tube Change',                                 320.00, 120],
+        ['Diagnosis',                                    120.00, 60],
+        ['Advanced Diagnosis',                          180.00, 90],
+        ['Tube Change, Maintenance & Alignment',        420.00, 150],
+        ['Training',                                     180.00, 120],
+        ['Other',                                         100.00, 60],
     ];
     $stmt = $pdo->prepare("INSERT INTO services (service_name, base_price, duration_minutes) VALUES (:name, :price, :duration)");
     foreach ($defaults as [$name, $price, $duration]) {
@@ -59,6 +65,26 @@ function seedServicesIfEmpty(PDO $pdo): void
 function getServices(PDO $pdo): array
 {
     return $pdo->query("SELECT id, service_name, base_price, duration_minutes FROM services ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Check whether another service already has the same name once normalized
+ * (trimmed, case-insensitive). Prevents creating duplicate normalized names
+ * that would collide in repairServiceRequestsServiceNames()'s and
+ * resolveJobDurationsFromServices()'s name => id lookup maps.
+ */
+function serviceNameExists(PDO $pdo, string $name, ?int $excludeId = null): bool
+{
+    $sql = 'SELECT COUNT(*) FROM services WHERE LOWER(TRIM(service_name)) = LOWER(TRIM(:name))';
+    $params = [':name' => $name];
+    if ($excludeId !== null) {
+        $sql .= ' AND id <> :exclude_id';
+        $params[':exclude_id'] = $excludeId;
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    return (int) $stmt->fetchColumn() > 0;
 }
 
 ensureServicesTable($pdo);
@@ -84,6 +110,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errorMessage = 'Base price must be a valid non-negative number.';
         } elseif (!ctype_digit($duration) || (int) $duration < 1) {
             $errorMessage = 'Duration must be a whole number of minutes (minimum 1).';
+        } elseif (serviceNameExists($pdo, $name)) {
+            $errorMessage = 'A service with that name (ignoring case/whitespace) already exists.';
         } else {
             $stmt = $pdo->prepare("INSERT INTO services (service_name, base_price, duration_minutes) VALUES (:name, :price, :duration)");
             $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration]);
@@ -104,6 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errorMessage = 'Base price must be a valid non-negative number.';
         } elseif (!ctype_digit($duration) || (int) $duration < 1) {
             $errorMessage = 'Duration must be a whole number of minutes (minimum 1).';
+        } elseif (serviceNameExists($pdo, $name, $id)) {
+            $errorMessage = 'A service with that name (ignoring case/whitespace) already exists.';
         } else {
             $stmt = $pdo->prepare("UPDATE services SET service_name = :name, base_price = :price, duration_minutes = :duration WHERE id = :id");
             $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration, ':id' => $id]);
