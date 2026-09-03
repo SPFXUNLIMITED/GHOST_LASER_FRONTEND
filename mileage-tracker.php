@@ -77,7 +77,7 @@ function fmtVehicle(array $row): string
 
 /**
  * Build an IRS-style business purpose string for a mileage log row.
- * Format: "{Brand} {Model} — {Services} — {Problem}"
+ * Format: "{Brand} {Model} | Services: {Services} | Problem: {Problem}"
  * Any missing piece is simply omitted.
  */
 function buildPurpose(array $row): string
@@ -107,16 +107,16 @@ function buildPurpose(array $row): string
                 static fn($k) => $serviceLabels[$k] ?? ucwords(str_replace('_', ' ', (string) $k)),
                 $keys
             );
-            $parts[] = implode(', ', $labels);
+            $parts[] = 'Services: ' . implode(', ', $labels);
         }
     }
 
-    $problem = trim((string) ($row['problem_summary'] ?? ''));
+    $problem = trim((string) ($row['problem'] ?? ''));
     if ($problem !== '') {
-        $parts[] = $problem;
+        $parts[] = 'Problem: ' . $problem;
     }
 
-    return $parts !== [] ? implode(' — ', $parts) : '—';
+    return $parts !== [] ? implode(' | ', $parts) : '—';
 }
 
 $adminUsername = trim((string) ($_SESSION['admin_username'] ?? 'Admin'));
@@ -192,7 +192,7 @@ try {
                v.license_plate AS vehicle_license_plate,
                sr.laser_brand,
                sr.laser_model,
-               sr.problem_summary,
+               sr.problem,
                sr.services
          FROM mileage_logs ml
          LEFT JOIN vehicles v ON v.id = ml.vehicle_id
@@ -960,7 +960,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         </div>
                         <div class="edit-form-group full-width">
                             <label class="edit-form-label" for="edit-notes">Business Purpose <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#52525b;">(leave blank to auto-generate from job details)</span></label>
-                            <textarea id="edit-notes" class="edit-form-input edit-form-textarea" name="notes" placeholder="e.g. Epilog Fusion Pro 48 — Maintenance & Alignment — Beam misalignment after tube change"></textarea>
+                            <textarea id="edit-notes" class="edit-form-input edit-form-textarea" name="notes" placeholder="e.g. Epilog Fusion Pro 48 | Services: Maintenance & Alignment | Problem: Beam misalignment after tube change"></textarea>
                         </div>
                     </div>
                     <div id="edit-error" class="edit-error-msg" style="display:none;"></div>
@@ -1015,7 +1015,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 
                 // Skip the pre-computed 'purpose' key and raw service-request fields that
                 // are already captured in the purpose string; show everything else.
-                const skipKeys = new Set(['purpose', 'laser_brand', 'laser_model', 'problem_summary', 'services']);
+                const skipKeys = new Set(['purpose', 'laser_brand', 'laser_model', 'problem', 'problem_summary', 'services']);
                 const fields = Object.entries(record).filter(([key]) => !skipKeys.has(key));
                 const fieldsHtml = fields.map(([key, value]) => (
                     `<div class="detail-item">
