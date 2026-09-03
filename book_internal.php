@@ -1126,22 +1126,6 @@ require_once __DIR__ . '/templates/header.php';
             updateDisplayedTotal();
 
             const selectedSpeed      = bookingPayload.service_speed || 'standard';
-            const selectedSpeedLabel = speedOptions[selectedSpeed]?.label || 'Standard';
-            const selectedServices   = (bookingPayload.services || []).map(k => serviceLabels[k] || k);
-            const problemSections    = [
-                bookingPayload.problem,
-                '--- Booking Summary ---',
-                `Selected services: ${selectedServices.join(', ')}`,
-                bookingPayload.other_service ? `Other service details: ${bookingPayload.other_service}` : null,
-                `Service speed: ${selectedSpeedLabel}`,
-                `Service total: $${bookingPayload.service_total.toFixed(2)}`,
-                travelDistanceError
-                    ? `Travel fee: unable to calculate (${travelDistanceError}) — contact us for a quote`
-                    : `Travel fee (${travelMilesLabel} @ $${travelPricePerMile.toFixed(2)}/mile): $${bookingPayload.travel_fee.toFixed(2)}`,
-                `Grand total: $${bookingPayload.total_price.toFixed(2)}`,
-                '--- Internal Booking (phone-in) ---',
-            ].filter(Boolean);
-
             const requestBody = {
                 first_name:    bookingPayload.first_name,
                 last_name:     bookingPayload.last_name,
@@ -1157,7 +1141,7 @@ require_once __DIR__ . '/templates/header.php';
                 zip:           bookingPayload.zip,
                 latitude:      bookingPayload.latitude  || null,
                 longitude:     bookingPayload.longitude || null,
-                problem:       problemSections.join('\n\n'),
+                problem:       bookingPayload.problem,
 			// No password fields for internal bookings
 				password:      '',
 				confirm_password: '',
@@ -1167,7 +1151,9 @@ require_once __DIR__ . '/templates/header.php';
                 services:      bookingPayload.services || [],
                 other_service: bookingPayload.other_service || '',
                 service_speed: selectedSpeed,
-                total_price:   bookingPayload.total_price,
+                service_total: bookingPayload.service_total,
+                travel_fee:    bookingPayload.travel_fee,
+                grand_total:   bookingPayload.total_price,
             };
 
             try {
