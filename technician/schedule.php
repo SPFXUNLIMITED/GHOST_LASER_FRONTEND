@@ -1895,12 +1895,12 @@ require_once __DIR__ . '/../templates/header.php';
                                                             'customer_id' => $scheduledJob['customer_id'] ?? null,
                                                             'customer_name' => $scheduledJob['customer_name'],
                                                             'service_address' => $scheduledJob['service_address'],
-                                                            'city' => $scheduledJob['city'] ?? 'N/A',
-                                                            'email' => $scheduledJob['email'] ?? 'N/A',
-                                                            'phone' => $scheduledJob['phone'] ?? 'N/A',
-                                                            'priority' => $scheduledJob['priority_meta']['label'],
-                                                            'window_summary' => $scheduledJob['priority_meta']['window_summary'],
-                                                            'time_window_label' => $scheduledJob['time_window_label'] ?? 'Not assigned',
+                                                            'city' => $scheduledJob['city'] ?? null,
+                                                            'email' => $scheduledJob['email'] ?? null,
+                                                            'phone' => $scheduledJob['phone'] ?? null,
+                                                            'priority' => $scheduledJob['priority_meta']['label'] ?? null,
+                                                            'window_summary' => $scheduledJob['priority_meta']['window_summary'] ?? null,
+                                                            'time_window_label' => $scheduledJob['time_window_label'] ?? null,
                                                             'problem' => $scheduledJob['problem'] ?? '',
                                                             'services' => implode(', ', (array) json_decode((string) ($scheduledJob['services'] ?? ''), true)),
                                                             'service_speed' => $scheduledJob['service_speed'] ?? '',
@@ -2316,26 +2316,26 @@ require_once __DIR__ . '/../templates/header.php';
         </div>
 
         <div class="mt-6 grid gap-4 sm:grid-cols-2">
-            <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+            <div id="modal-address-row" class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
                 <div class="text-xs uppercase tracking-wide text-zinc-500">Service address</div>
-                <div id="modal-address" class="mt-2 text-sm leading-6 text-zinc-200">Address unavailable</div>
+                <div id="modal-address" class="mt-2 text-sm leading-6 text-zinc-200"></div>
             </div>
             <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
                 <div class="text-xs uppercase tracking-wide text-zinc-500">Contact</div>
                 <div class="mt-2 space-y-2 text-sm text-zinc-200">
-                    <div><span class="text-zinc-500">Phone:</span> <span id="modal-phone">N/A</span></div>
-                    <div><span class="text-zinc-500">Email:</span> <span id="modal-email">N/A</span></div>
-                    <div><span class="text-zinc-500">City:</span> <span id="modal-city">N/A</span></div>
+                    <div id="modal-phone-row"><span class="text-zinc-500">Phone:</span> <span id="modal-phone"></span></div>
+                    <div id="modal-email-row"><span class="text-zinc-500">Email:</span> <span id="modal-email"></span></div>
+                    <div id="modal-city-row"><span class="text-zinc-500">City:</span> <span id="modal-city"></span></div>
                 </div>
             </div>
             <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
                 <div class="text-xs uppercase tracking-wide text-zinc-500">Scheduling</div>
                 <div class="mt-2 space-y-2 text-sm text-zinc-200">
-                    <div><span class="text-zinc-500">Cluster:</span> <span id="modal-cluster-label">N/A</span></div>
-                    <div><span class="text-zinc-500">Scheduled date:</span> <span id="modal-scheduled-date">N/A</span></div>
-                    <div><span class="text-zinc-500">Priority:</span> <span id="modal-priority">N/A</span></div>
-                    <div><span class="text-zinc-500">Time window:</span> <span id="modal-time-window-label" class="font-medium text-cyan-300">N/A</span></div>
-                    <div><span class="text-zinc-500">Target window:</span> <span id="modal-window-summary">N/A</span></div>
+                    <div id="modal-cluster-row"><span class="text-zinc-500">Cluster:</span> <span id="modal-cluster-label"></span></div>
+                    <div id="modal-scheduled-date-row"><span class="text-zinc-500">Scheduled date:</span> <span id="modal-scheduled-date"></span></div>
+                    <div id="modal-priority-row"><span class="text-zinc-500">Priority:</span> <span id="modal-priority"></span></div>
+                    <div id="modal-time-window-row"><span class="text-zinc-500">Time window:</span> <span id="modal-time-window-label" class="font-medium text-cyan-300"></span></div>
+                    <div id="modal-window-summary-row"><span class="text-zinc-500">Target window:</span> <span id="modal-window-summary"></span></div>
                     <div><span class="text-zinc-500">Status:</span> <span id="modal-status-badge" class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold"></span></div>
                 </div>
             </div>
@@ -2437,21 +2437,24 @@ require_once __DIR__ . '/../templates/header.php';
     const modalCustomerNameBtn = document.getElementById('modal-customer-name');
     let currentScheduledJobCustomerId = null;
     const modalFields = {
-        service_address: document.getElementById('modal-address'),
-        city: document.getElementById('modal-city'),
-        email: document.getElementById('modal-email'),
-        phone: document.getElementById('modal-phone'),
-        cluster_label: document.getElementById('modal-cluster-label'),
-        scheduled_date: document.getElementById('modal-scheduled-date'),
-        priority: document.getElementById('modal-priority'),
-        time_window_label: document.getElementById('modal-time-window-label'),
-        window_summary: document.getElementById('modal-window-summary'),
         problem: document.getElementById('modal-problem'),
         services: document.getElementById('modal-services'),
         service_speed: document.getElementById('modal-service-speed'),
         service_total: document.getElementById('modal-service-total'),
         travel_fee: document.getElementById('modal-travel-fee'),
         grand_total: document.getElementById('modal-grand-total')
+    };
+
+    const modalRows = {
+        service_address: { row: document.getElementById('modal-address-row'), value: document.getElementById('modal-address') },
+        phone: { row: document.getElementById('modal-phone-row'), value: document.getElementById('modal-phone') },
+        email: { row: document.getElementById('modal-email-row'), value: document.getElementById('modal-email') },
+        city: { row: document.getElementById('modal-city-row'), value: document.getElementById('modal-city') },
+        cluster_label: { row: document.getElementById('modal-cluster-row'), value: document.getElementById('modal-cluster-label') },
+        scheduled_date: { row: document.getElementById('modal-scheduled-date-row'), value: document.getElementById('modal-scheduled-date') },
+        priority: { row: document.getElementById('modal-priority-row'), value: document.getElementById('modal-priority') },
+        time_window_label: { row: document.getElementById('modal-time-window-row'), value: document.getElementById('modal-time-window-label') },
+        window_summary: { row: document.getElementById('modal-window-summary-row'), value: document.getElementById('modal-window-summary') }
     };
 
     window.openScheduledJobModalCustomer = function () {
@@ -2479,6 +2482,15 @@ require_once __DIR__ . '/../templates/header.php';
             const value = payload[key] === null || payload[key] === undefined ? '' : String(payload[key]).trim();
             element.textContent = value === '' ? '' : detailLabels[key] + value;
             element.classList.toggle('hidden', value === '');
+        });
+
+        Object.entries(modalRows).forEach(([key, { row, value }]) => {
+            const raw = payload[key];
+            const text = raw === null || raw === undefined ? '' : String(raw).trim();
+            value.textContent = text;
+            if (row) {
+                row.classList.toggle('hidden', text === '');
+            }
         });
 
         modalCustomerNameBtn.textContent = payload.customer_name || 'Customer';
