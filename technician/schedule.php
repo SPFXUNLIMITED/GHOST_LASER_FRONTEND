@@ -2426,14 +2426,15 @@ require_once __DIR__ . '/../templates/header.php';
                                                 </div>
                                                 <div class="flex items-start gap-3">
                                                     <div class="text-sm lg:text-right text-zinc-300">
-                                                        <div class="font-medium text-white">
+                                                        <div class="truncate whitespace-nowrap font-medium text-white">
                                                             <?= htmlspecialchars($clusteredJob['first_name'] . ' ' . $clusteredJob['last_name']) ?>
-                                                            <span class="ml-2 text-sm font-normal text-zinc-400">&bull; <?= number_format((float) ($clusteredJob['distance_from_center_miles'] ?? 0), 1) ?> miles from center</span>
                                                         </div>
-                                                        <div class="mt-1 text-zinc-400">
-                                                            <?= htmlspecialchars($clusteredJob['city'] ?? 'N/A') ?>
+                                                        <div class="mt-0.5 whitespace-nowrap text-sm font-normal text-zinc-400">
+                                                            <?= number_format((float) ($clusteredJob['distance_from_center_miles'] ?? 0), 1) ?> miles from center
                                                         </div>
-                                                        <div class="mt-1"><?= htmlspecialchars($clusteredJob['priority_meta']['label']) ?></div>
+                                                        <div class="mt-1 whitespace-nowrap text-zinc-400">
+                                                            <?= htmlspecialchars($clusteredJob['city'] ?? 'N/A') ?> &middot; <?= htmlspecialchars($clusteredJob['priority_meta']['label']) ?>
+                                                        </div>
                                                     </div>
                                                     <button
                                                         type="button"
