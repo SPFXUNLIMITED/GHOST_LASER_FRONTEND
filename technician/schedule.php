@@ -742,12 +742,12 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
     // operation that triggered this resolution. Running
     // repairServiceRequestsServiceNames() as a periodic/cron job is still
     // recommended as the authoritative fix.
-    if ($jobIdsResolvedFromName !== []) {
+    if ($resolvedEntries !== []) {
         try {
             $updateStmt = $pdo->prepare('UPDATE service_requests SET services = :services WHERE id = :id');
-            foreach (array_keys($jobIdsResolvedFromName) as $jobId) {
+            foreach (array_keys($resolvedEntries) as $jobId) {
                 $updateStmt->execute([
-                    ':services' => json_encode(array_values($numericEntriesByJobId[$jobId])),
+                    ':services' => json_encode(array_values($resolvedEntries[$jobId])),
                     ':id'       => $jobId,
                 ]);
             }
@@ -786,7 +786,7 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
  *
  * Name matching is case-insensitive and trims whitespace on both the
  * stored service_name and the value found in the services column, using
- * the same normalizeServiceCatalogName()/buildServiceNameIdMap() helpers
+ * the same normalizeServiceName()/buildServiceNameIdMap() helpers
  * that resolveJobDurationsFromServices() uses for its own name fallback.
  *
  * Debug output is written via error_log(), prefixed with
@@ -810,13 +810,19 @@ function repairServiceRequestsServiceNames(PDO $pdo): ?string
     // reuse the same normalized name => id map (and its duplicate-name
     // detection) that resolveJobDurationsFromServices() uses, so the two
     // functions can never disagree about how a name resolves.
-    $normalizeName = 'normalizeServiceName';
-
     $nameMap = buildServiceNameIdMap($pdo);
     if ($nameMap['error'] !== null) {
         return $nameMap['error'];
     }
     $idByName = $nameMap['map'];
+
+    // The docblock above promises the read and every UPDATE are wrapped in a
+    // single transaction. Begin one here unless the caller already opened
+    // one; only a transaction we opened ourselves is committed/rolled back.
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
 
     try {
         $requestRows = $pdo->query(
@@ -870,7 +876,7 @@ function repairServiceRequestsServiceNames(PDO $pdo): ?string
                 }
 
                 $needsRepair = true;
-                $name        = normalizeServiceCatalogName((string) $entry);
+                $name        = normalizeServiceName((string) $entry);
                 $nameMatched = array_key_exists($name, $idByName);
                 error_log(sprintf(
                     '[REPAIR_SERVICE_NAMES] Request #%d entry %s normalized to %s; services map match: %s%s',
