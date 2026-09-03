@@ -10,8 +10,17 @@
  *   php migrations/20260903_migrate_legacy_booking_blobs.php --apply
  */
 
+function migrationError(string $message): void
+{
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDERR, $message);
+    } else {
+        echo $message;
+    }
+}
+
 if (PHP_SAPI !== 'cli') {
-    fwrite(STDERR, "This migration must be run from the command line.\n");
+    migrationError("This migration must be run from the command line.\n");
     exit(1);
 }
 
@@ -23,7 +32,7 @@ $targetTable = isset($options['copy-table']) ? (string) $options['copy-table'] :
 $isApply = isset($options['apply']);
 
 if (!$isApply && !isset($options['copy-table'])) {
-    fwrite(STDERR, "Refusing to modify service_requests without --apply or --copy-table.\n");
+    migrationError("Refusing to modify service_requests without --apply or --copy-table.\n");
     exit(1);
 }
 
