@@ -677,8 +677,8 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
                 (string) $entry,
                 $resolvedId
             ));
-            $numericEntries[]                 = $resolvedId;
-            $jobIdsResolvedFromName[$jobId]   = true;
+            $numericEntries[] = $resolvedId;
+            $jobIdsResolvedFromName[$jobId] = true;
         }
 
         $numericEntriesByJobId[$jobId] = $numericEntries;
