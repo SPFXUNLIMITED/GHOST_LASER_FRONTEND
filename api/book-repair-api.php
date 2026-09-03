@@ -351,10 +351,19 @@ $is_task = ($booking_source === 'Internal' && !empty($body['is_task']));
 $services_raw   = isset($body['services']) && is_array($body['services']) ? $body['services'] : [];
 $services_input = array_values(array_filter(array_map('strval', $services_raw)));
 $other_service  = str_field($body, 'other_service');
-$service_speed  = str_field($body, 'service_speed');
+$service_speed  = str_field($body, 'speed') ?: str_field($body, 'service_speed');
 if (!in_array($service_speed, ['standard', 'rush', 'emergency'], true)) {
     $service_speed = 'standard';
 }
+$service_total = isset($body['service_total']) && is_numeric($body['service_total'])
+    ? round((float) $body['service_total'], 2)
+    : null;
+$travel_fee = isset($body['travel_fee']) && is_numeric($body['travel_fee'])
+    ? round((float) $body['travel_fee'], 2)
+    : null;
+$grand_total = isset($body['grand_total']) && is_numeric($body['grand_total'])
+    ? round((float) $body['grand_total'], 2)
+    : null;
 $duration_minutes = isset($body['duration_minutes']) && is_numeric($body['duration_minutes']) && (int)$body['duration_minutes'] > 0
     ? (int)$body['duration_minutes']
     : null;
@@ -559,8 +568,13 @@ $problem_summary = mb_substr($problem, 0, 255);
 // ── Ensure service columns exist on service_requests ─────────────────────────
 foreach ([
     'services'             => "JSON         NULL COMMENT 'Selected service IDs as JSON array'",
+    'problem'              => "TEXT         NULL COMMENT 'Original customer problem description'",
     'other_service'        => "TEXT         NULL COMMENT 'Other service description when \"Other\" is selected'",
     'service_speed'        => "VARCHAR(50)  NULL COMMENT 'Service speed/tier key'",
+    'speed'               => "VARCHAR(50)  NULL COMMENT 'Booking speed/tier key'",
+    'service_total'       => "DECIMAL(10,2) NULL COMMENT 'Calculated service total'",
+    'travel_fee'          => "DECIMAL(10,2) NULL COMMENT 'Calculated travel fee'",
+    'grand_total'         => "DECIMAL(10,2) NULL COMMENT 'Calculated booking total'",
     'task_contact'         => "VARCHAR(255) NULL COMMENT 'Company or contact name for task-type service requests'",
     'destination_street'   => "VARCHAR(255) NULL COMMENT 'Destination street address for task-type service requests'",
     'destination_city'     => "VARCHAR(100) NULL COMMENT 'Destination city for task-type service requests'",
@@ -648,10 +662,11 @@ try {
         $update = $pdo->prepare("
             UPDATE service_requests
                SET customer_id = ?, laser_brand = ?, laser_model = ?, laser_watts = ?, laser_age = ?,
-                   problem_summary = ?, problem_details = ?, priority_level = ?, source = ?,
+                   problem = ?, problem_summary = ?, problem_details = ?, priority_level = ?, source = ?,
                    request_status = 'new', latitude = ?, longitude = ?, geocode_status = ?,
                    preferred_date_start = ?, preferred_date_end = ?,
-                   services = ?, other_service = ?, service_speed = ?
+                   services = ?, other_service = ?, service_speed = ?, speed = ?,
+                   service_total = ?, travel_fee = ?, grand_total = ?
              WHERE id = ?
                AND customer_id = ?
                AND request_status = 'abandoned'
@@ -662,6 +677,7 @@ try {
             $machine_model,
             $machine_watts ?: null,
             $machine_age ?: null,
+            $problem,
             $problem_summary,
             $problem,
             $priority,
@@ -674,6 +690,10 @@ try {
             $servicePayloadJson,
             $other_service !== '' ? $other_service : null,
             $service_speed,
+            $service_speed,
+            $service_total,
+            $travel_fee,
+            $grand_total,
             $service_request_id,
             $customer_id,
         ]);
@@ -692,18 +712,18 @@ try {
         $stmt = $pdo->prepare("
             INSERT INTO service_requests (
                 customer_id, laser_brand, laser_model, laser_watts, laser_age,
-                problem_summary, problem_details, priority_level, source,
+                problem, problem_summary, problem_details, priority_level, source,
                 request_status, latitude, longitude, geocode_status,
                 preferred_date_start, preferred_date_end,
-                services, other_service, service_speed,
+                services, other_service, service_speed, speed, service_total, travel_fee, grand_total,
                 task_contact, destination_street, destination_city, destination_state, destination_zip,
                 duration_minutes
             ) VALUES (
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
                 'new', ?, ?, ?,
                 ?, ?,
-                ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?
             )
@@ -714,6 +734,7 @@ try {
             $is_task ? 'General Task' : $machine_model,
             $machine_watts ?: null,
             $machine_age ?: null,
+            $problem,
             $problem_summary,
             $problem,
             $priority,
@@ -726,6 +747,10 @@ try {
             $servicePayloadJson,
             $other_service !== '' ? $other_service : null,
             $service_speed,
+            $service_speed,
+            $service_total,
+            $travel_fee,
+            $grand_total,
             $task_contact_value,
             $is_task ? $street : null,
             $is_task ? $city  : null,

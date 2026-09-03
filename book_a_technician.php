@@ -1419,21 +1419,6 @@ require_once __DIR__ . '/templates/header.php';
             updateDisplayedTotal();
 
             const selectedSpeed = bookingPayload.service_speed || 'standard';
-            const selectedSpeedLabel = speedOptions[selectedSpeed]?.label || 'Standard';
-            const selectedServices = (bookingPayload.services || []).map((serviceKey) => serviceLabels[serviceKey] || serviceKey);
-            const problemSections = [
-                bookingPayload.problem,
-                '--- Booking Summary ---',
-                `Selected services: ${selectedServices.join(', ')}`,
-                bookingPayload.other_service ? `Other service details: ${bookingPayload.other_service}` : null,
-                `Service speed: ${selectedSpeedLabel}`,
-                `Service total: $${bookingPayload.service_total.toFixed(2)}`,
-                travelDistanceError
-                    ? `Travel fee: unable to calculate (${travelDistanceError}) — contact us for a quote`
-                    : `Travel fee (${travelMilesLabel} @ $${travelPricePerMile.toFixed(2)}/mile): $${bookingPayload.travel_fee.toFixed(2)}`,
-                `Grand total: $${bookingPayload.total_price.toFixed(2)}`,
-            ].filter(Boolean);
-
             const requestBody = {
                 first_name: bookingPayload.first_name,
                 last_name: bookingPayload.last_name,
@@ -1447,7 +1432,7 @@ require_once __DIR__ . '/templates/header.php';
                 city: bookingPayload.city,
                 state: (bookingPayload.state || '').toUpperCase(),
                 zip: bookingPayload.zip,
-                problem: problemSections.join('\n\n'),
+                problem: bookingPayload.problem,
                 password: bookingPayload.password,
                 confirm_password: bookingPayload.confirm_password,
                 priority: speedPriorityMap[selectedSpeed] || 'standard',
@@ -1455,8 +1440,10 @@ require_once __DIR__ . '/templates/header.php';
                 booking_source: stepTwoForm.booking_source.value,
                 services: bookingPayload.services || [],
                 other_service: bookingPayload.other_service || '',
-                service_speed: selectedSpeed,
-                total_price: bookingPayload.total_price,
+                speed: selectedSpeed,
+                service_total: bookingPayload.service_total,
+                travel_fee: bookingPayload.travel_fee,
+                grand_total: bookingPayload.total_price,
                 service_request_id: Number(bookingPayload.service_request_id || 0),
             };
 
