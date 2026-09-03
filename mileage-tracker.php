@@ -339,7 +339,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         table {
             border-collapse: collapse;
             width: 100%;
-            min-width: 900px;
+            min-width: 1100px;
             font-size: 0.82rem;
         }
 
