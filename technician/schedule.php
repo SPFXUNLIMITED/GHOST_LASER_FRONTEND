@@ -2408,24 +2408,26 @@ require_once __DIR__ . '/../templates/header.php';
                                         <?php $previewTw = $previewTimeWindows[(int) $clusteredJob['id']] ?? null; ?>
                                         <div class="rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-3 cluster-job-card" data-job-id="<?= (int) $clusteredJob['id'] ?>">
                                             <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                                                <div>
-                                                    <div class="font-medium text-white">
-                                                        <?= htmlspecialchars($clusteredJob['first_name'] . ' ' . $clusteredJob['last_name']) ?>
-                                                        <span class="ml-2 text-sm font-normal text-zinc-400">&bull; <?= number_format((float) ($clusteredJob['distance_from_center_miles'] ?? 0), 1) ?> miles from center</span>
-                                                    </div>
-                                                    <div class="mt-1 text-sm text-zinc-400">
-                                                        <?= htmlspecialchars($clusteredJob['city'] ?? 'N/A') ?> &bull;
-                                                        <?= htmlspecialchars($clusteredJob['problem'] ?? '') ?>
+                                                <div class="min-w-0">
+                                                    <?php if ($previewTw !== null): ?>
+                                                        <div class="font-medium text-cyan-300">
+                                                            <?= htmlspecialchars($previewTw['time_window_label']) ?> &middot; <?= (int) $previewTw['drive_minutes_from_previous'] ?> min drive
+                                                        </div>
+                                                    <?php endif; ?>
+                                                    <div class="mt-0.5 text-xs text-zinc-500">
+                                                        <?= htmlspecialchars($clusteredJob['priority_meta']['window_summary']) ?>
                                                     </div>
                                                 </div>
                                                 <div class="flex items-start gap-3">
-                                                    <div class="text-sm text-right text-zinc-300">
-                                                        <div><?= htmlspecialchars($clusteredJob['priority_meta']['label']) ?></div>
-                                                        <?php if ($previewTw !== null): ?>
-                                                            <div class="mt-0.5 font-medium text-cyan-300"><?= htmlspecialchars($previewTw['time_window_label']) ?></div>
-                                                            <div class="text-xs text-zinc-500"><?= (int) $previewTw['drive_minutes_from_previous'] ?> min drive</div>
-                                                        <?php endif; ?>
-                                                        <div class="text-zinc-500"><?= htmlspecialchars($clusteredJob['priority_meta']['window_summary']) ?></div>
+                                                    <div class="text-sm lg:text-right text-zinc-300">
+                                                        <div class="font-medium text-white">
+                                                            <?= htmlspecialchars($clusteredJob['first_name'] . ' ' . $clusteredJob['last_name']) ?>
+                                                            <span class="ml-2 text-sm font-normal text-zinc-400">&bull; <?= number_format((float) ($clusteredJob['distance_from_center_miles'] ?? 0), 1) ?> miles from center</span>
+                                                        </div>
+                                                        <div class="mt-1 text-zinc-400">
+                                                            <?= htmlspecialchars($clusteredJob['city'] ?? 'N/A') ?>
+                                                        </div>
+                                                        <div class="mt-1"><?= htmlspecialchars($clusteredJob['priority_meta']['label']) ?></div>
                                                     </div>
                                                     <button
                                                         type="button"
@@ -2433,6 +2435,9 @@ require_once __DIR__ . '/../templates/header.php';
                                                         title="Remove from cluster"
                                                     >&times;</button>
                                                 </div>
+                                            </div>
+                                            <div class="mt-2 text-sm text-zinc-400">
+                                                <?= htmlspecialchars($clusteredJob['problem'] ?? '') ?>
                                             </div>
                                         </div>
                                     <?php endforeach; ?>
