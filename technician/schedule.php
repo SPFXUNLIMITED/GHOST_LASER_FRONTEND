@@ -669,16 +669,32 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
  * table, the repair stops and returns a clear error naming the unmatched
  * service instead of silently skipping it.
  *
+ * Name matching is case-insensitive and trims whitespace on both the
+ * stored service_name and the value found in the services column.
+ *
+ * Debug output is written via error_log(), prefixed with
+ * "[REPAIR_SERVICE_NAMES]": a summary of how many rows were scanned and
+ * rewritten, plus the exact before/after value of request #223's
+ * services column (useful for diagnosing why that row was or wasn't
+ * repaired).
+ *
  * @param PDO $pdo
  *
  * @return string|null  null on success, error message on failure.
  */
 function repairServiceRequestsServiceNames(PDO $pdo): ?string
 {
+    // Normalize service names the same way on both sides of the lookup:
+    // trim leading/trailing whitespace and lower-case (multi-byte safe) so
+    // matches are case-insensitive regardless of how the name was stored.
+    $normalizeName = static function (string $name): string {
+        return mb_strtolower(trim($name));
+    };
+
     $serviceRows = $pdo->query('SELECT id, service_name FROM services')->fetchAll(PDO::FETCH_ASSOC);
     $idByName    = [];
     foreach ($serviceRows as $row) {
-        $idByName[strtolower(trim((string) $row['service_name']))] = (int) $row['id'];
+        $idByName[$normalizeName((string) $row['service_name'])] = (int) $row['id'];
     }
 
     $requestRows = $pdo->query(
@@ -687,9 +703,22 @@ function repairServiceRequestsServiceNames(PDO $pdo): ?string
 
     $updateStmt = $pdo->prepare('UPDATE service_requests SET services = :services WHERE id = :id');
 
+    $scannedCount  = count($requestRows);
+    $rewrittenCount = 0;
+
     foreach ($requestRows as $request) {
-        $entries = json_decode((string) $request['services'], true);
+        $requestId    = (int) $request['id'];
+        $beforeValue  = (string) $request['services'];
+        $isTargetRow  = $requestId === 223;
+
+        $entries = json_decode($beforeValue, true);
         if (!is_array($entries) || $entries === []) {
+            if ($isTargetRow) {
+                error_log(sprintf(
+                    '[REPAIR_SERVICE_NAMES] Request #223 skipped (services column is not a non-empty JSON array). Before: %s',
+                    $beforeValue
+                ));
+            }
             continue;
         }
 
@@ -702,11 +731,11 @@ function repairServiceRequestsServiceNames(PDO $pdo): ?string
             }
 
             $needsRepair = true;
-            $name        = strtolower(trim((string) $entry));
+            $name        = $normalizeName((string) $entry);
             if (!array_key_exists($name, $idByName)) {
                 return sprintf(
                     'Service request #%d references "%s", which does not match any service in the services table. Repair aborted.',
-                    (int) $request['id'],
+                    $requestId,
                     (string) $entry
                 );
             }
@@ -714,12 +743,33 @@ function repairServiceRequestsServiceNames(PDO $pdo): ?string
         }
 
         if ($needsRepair) {
+            $afterValue = json_encode(array_values($resolvedIds));
             $updateStmt->execute([
-                ':services' => json_encode(array_values($resolvedIds)),
-                ':id'       => $request['id'],
+                ':services' => $afterValue,
+                ':id'       => $requestId,
             ]);
+            $rewrittenCount++;
+
+            if ($isTargetRow) {
+                error_log(sprintf(
+                    '[REPAIR_SERVICE_NAMES] Request #223 rewritten. Before: %s | After: %s',
+                    $beforeValue,
+                    $afterValue
+                ));
+            }
+        } elseif ($isTargetRow) {
+            error_log(sprintf(
+                '[REPAIR_SERVICE_NAMES] Request #223 already numeric, no rewrite needed. Value: %s',
+                $beforeValue
+            ));
         }
     }
+
+    error_log(sprintf(
+        '[REPAIR_SERVICE_NAMES] Scanned %d row(s), rewrote %d row(s).',
+        $scannedCount,
+        $rewrittenCount
+    ));
 
     return null;
 }
