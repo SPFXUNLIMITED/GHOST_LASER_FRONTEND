@@ -1420,6 +1420,10 @@ $jobs = $pdo->query("
         sr.latitude,
         sr.longitude,
         sr.priority_level,
+        sr.laser_brand,
+        sr.laser_model,
+        sr.laser_watts,
+        sr.laser_age,
         sr.problem,
         sr.service_speed,
         sr.service_total,
@@ -1428,6 +1432,10 @@ $jobs = $pdo->query("
         sr.services,
         sr.preferred_date_start,
         sr.preferred_date_end,
+        sr.destination_street,
+        sr.destination_city,
+        sr.destination_state,
+        sr.destination_zip,
         sr.duration_minutes,
         sr.created_at
     FROM service_requests sr
@@ -1455,6 +1463,12 @@ foreach ($jobs as &$job) {
         isset($job['duration_minutes']) ? (int) $job['duration_minutes'] : null,
         $submittedAt
     );
+    $job['booking_service_address'] = implode(', ', array_filter([
+        trim((string) ($job['destination_street'] ?? '')),
+        trim((string) ($job['destination_city'] ?? '')),
+        trim((string) ($job['destination_state'] ?? '')),
+        trim((string) ($job['destination_zip'] ?? '')),
+    ], static fn (string $part): bool => $part !== ''));
 }
 unset($job);
 
@@ -1497,6 +1511,10 @@ $scheduledJobsStmt = $pdo->prepare("
         scj.time_window_end,
         sr.id AS service_request_id,
         sr.priority_level,
+        sr.laser_brand,
+        sr.laser_model,
+        sr.laser_watts,
+        sr.laser_age,
         sr.problem,
         sr.service_speed,
         sr.service_total,
@@ -1505,6 +1523,10 @@ $scheduledJobsStmt = $pdo->prepare("
         sr.services,
         sr.preferred_date_start,
         sr.preferred_date_end,
+        sr.destination_street,
+        sr.destination_city,
+        sr.destination_state,
+        sr.destination_zip,
         sr.created_at,
         sr.latitude AS job_latitude,
         sr.longitude AS job_longitude,
@@ -1565,6 +1587,12 @@ foreach ($scheduledJobs as $scheduledJob) {
         $scheduledSubmittedAt
     );
     $scheduledJob['service_address'] = formatCustomerAddress($scheduledJob);
+    $scheduledJob['booking_service_address'] = implode(', ', array_filter([
+        trim((string) ($scheduledJob['destination_street'] ?? '')),
+        trim((string) ($scheduledJob['destination_city'] ?? '')),
+        trim((string) ($scheduledJob['destination_state'] ?? '')),
+        trim((string) ($scheduledJob['destination_zip'] ?? '')),
+    ], static fn (string $part): bool => $part !== ''));
     $scheduledJob['time_window_label'] = formatStoredTimeWindow(
         $scheduledJob['time_window_start'] ?? null,
         $scheduledJob['time_window_end'] ?? null
@@ -1814,6 +1842,22 @@ require_once __DIR__ . '/../templates/header.php';
                                                     'customer_id' => $clusterJob['customer_id'] ?? null,
                                                     'customer_name' => $clusterJob['customer_name'] ?? 'Unknown Customer',
                                                     'time_window_label' => $clusterJob['time_window_label'] ?? 'Not assigned',
+                                                    'booking_details' => [
+                                                        'laser_brand' => $clusterJob['laser_brand'] ?? '',
+                                                        'laser_model' => $clusterJob['laser_model'] ?? '',
+                                                        'laser_watts' => $clusterJob['laser_watts'] ?? '',
+                                                        'laser_age' => $clusterJob['laser_age'] ?? '',
+                                                        'problem' => $clusterJob['problem'] ?? '',
+                                                        'services' => implode(', ', (array) json_decode((string) ($clusterJob['services'] ?? ''), true)),
+                                                        'service_speed' => $clusterJob['service_speed'] ?? '',
+                                                        'service_total' => $clusterJob['service_total'] ?? '',
+                                                        'travel_fee' => $clusterJob['travel_fee'] ?? '',
+                                                        'grand_total' => $clusterJob['grand_total'] ?? '',
+                                                        'priority' => $clusterJob['priority_level'] ?? '',
+                                                        'preferred_date_start' => $clusterJob['preferred_date_start'] ?? '',
+                                                        'preferred_date_end' => $clusterJob['preferred_date_end'] ?? '',
+                                                        'service_address' => $clusterJob['booking_service_address'] ?? '',
+                                                    ],
                                                 ];
                                             }, $scheduledCluster['jobs']);
                                             $clusterModalPayload = [
@@ -1866,6 +1910,23 @@ require_once __DIR__ . '/../templates/header.php';
                                                             'scheduled_date' => $scheduledJob['scheduled_date'],
                                                             'cluster_label' => $scheduledJob['cluster_label'],
                                                         ];
+                                                        $bookingDetails = [
+                                                            'laser_brand' => $scheduledJob['laser_brand'] ?? '',
+                                                            'laser_model' => $scheduledJob['laser_model'] ?? '',
+                                                            'laser_watts' => $scheduledJob['laser_watts'] ?? '',
+                                                            'laser_age' => $scheduledJob['laser_age'] ?? '',
+                                                            'problem' => $scheduledJob['problem'] ?? '',
+                                                            'services' => implode(', ', (array) json_decode((string) ($scheduledJob['services'] ?? ''), true)),
+                                                            'service_speed' => $scheduledJob['service_speed'] ?? '',
+                                                            'service_total' => $scheduledJob['service_total'] ?? '',
+                                                            'travel_fee' => $scheduledJob['travel_fee'] ?? '',
+                                                            'grand_total' => $scheduledJob['grand_total'] ?? '',
+                                                            'priority' => $scheduledJob['priority_level'] ?? '',
+                                                            'preferred_date_start' => $scheduledJob['preferred_date_start'] ?? '',
+                                                            'preferred_date_end' => $scheduledJob['preferred_date_end'] ?? '',
+                                                            'service_address' => $scheduledJob['booking_service_address'] ?? '',
+                                                        ];
+                                                        $modalPayload['booking_details'] = $bookingDetails;
                                                         $modalStatusBadge = getJobStatusBadge($scheduledJob['preferred_date_end'] ?? null, $schedulingSettings);
                                                         $modalPayload['status_badge_label'] = $modalStatusBadge['label'];
                                                         $modalPayload['status_badge_classes'] = $modalStatusBadge['classes'];
@@ -1878,7 +1939,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                         >
                                                             <span class="flex items-baseline justify-between gap-1">
                                                                 <?php if (!empty($scheduledJob['customer_id'])): ?>
-                                                                    <button type="button" class="customer-name-link truncate text-left hover:underline hover:text-cyan-100" data-customer-id="<?= (int) $scheduledJob['customer_id'] ?>"><?= htmlspecialchars($scheduledJob['customer_name']) ?></button>
+                                                                    <button type="button" class="customer-name-link truncate text-left hover:underline hover:text-cyan-100" data-customer-id="<?= (int) $scheduledJob['customer_id'] ?>" data-booking-details="<?= htmlspecialchars(json_encode($bookingDetails, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($scheduledJob['customer_name']) ?></button>
                                                                 <?php else: ?>
                                                                     <span class="truncate"><?= htmlspecialchars($scheduledJob['customer_name']) ?></span>
                                                                 <?php endif; ?>
@@ -2115,7 +2176,25 @@ require_once __DIR__ . '/../templates/header.php';
                                 <tr class="hover:bg-zinc-800">
                                     <td class="p-6">
                                         <?php if (!empty($job['customer_id'])): ?>
-                                            <button type="button" class="customer-name-link text-left text-cyan-300 hover:text-cyan-100 hover:underline" onclick="openCustomerDetailsModal(<?= (int) $job['customer_id'] ?>)"><?= htmlspecialchars($job['first_name'] . ' ' . $job['last_name']) ?></button>
+                                            <?php
+                                            $bookingDetails = [
+                                                'laser_brand' => $job['laser_brand'] ?? '',
+                                                'laser_model' => $job['laser_model'] ?? '',
+                                                'laser_watts' => $job['laser_watts'] ?? '',
+                                                'laser_age' => $job['laser_age'] ?? '',
+                                                'problem' => $job['problem'] ?? '',
+                                                'services' => implode(', ', (array) json_decode((string) ($job['services'] ?? ''), true)),
+                                                'service_speed' => $job['service_speed'] ?? '',
+                                                'service_total' => $job['service_total'] ?? '',
+                                                'travel_fee' => $job['travel_fee'] ?? '',
+                                                'grand_total' => $job['grand_total'] ?? '',
+                                                'priority' => $job['priority_level'] ?? '',
+                                                'preferred_date_start' => $job['preferred_date_start'] ?? '',
+                                                'preferred_date_end' => $job['preferred_date_end'] ?? '',
+                                                'service_address' => $job['booking_service_address'] ?? '',
+                                            ];
+                                            ?>
+                                            <button type="button" class="customer-name-link text-left text-cyan-300 hover:text-cyan-100 hover:underline" data-customer-id="<?= (int) $job['customer_id'] ?>" data-booking-details="<?= htmlspecialchars(json_encode($bookingDetails, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($job['first_name'] . ' ' . $job['last_name']) ?></button>
                                         <?php else: ?>
                                             <?= htmlspecialchars($job['first_name'] . ' ' . $job['last_name']) ?>
                                         <?php endif; ?>
@@ -2457,6 +2536,7 @@ require_once __DIR__ . '/../templates/header.php';
                 customerName.type = 'button';
                 customerName.className = 'customer-name-link text-sm font-medium text-zinc-100 hover:text-cyan-300 hover:underline text-left';
                 customerName.dataset.customerId = job.customer_id;
+                customerName.dataset.bookingDetails = JSON.stringify(job.booking_details || {});
             } else {
                 customerName = document.createElement('span');
                 customerName.className = 'text-sm font-medium text-zinc-100';
@@ -2474,6 +2554,54 @@ require_once __DIR__ . '/../templates/header.php';
         clusterSummaryModal.classList.add('flex');
     }
 
+    function renderCustomerBookingDetails(details) {
+        const body = document.getElementById('customerDetailsBody');
+        if (!body) return;
+
+        const existing = document.getElementById('customer-booking-details');
+        if (existing) existing.remove();
+
+        const labels = {
+            laser_brand: 'Laser brand',
+            laser_model: 'Laser model',
+            laser_watts: 'Laser watts',
+            laser_age: 'Laser age',
+            problem: 'Problem',
+            services: 'Services',
+            service_speed: 'Service speed',
+            service_total: 'Service total',
+            travel_fee: 'Travel fee',
+            grand_total: 'Grand total',
+            priority: 'Priority',
+            preferred_date_start: 'Preferred date start',
+            preferred_date_end: 'Preferred date end',
+            service_address: 'Service address'
+        };
+        const entries = Object.entries(labels)
+            .map(([key, label]) => [label, details[key] === null || details[key] === undefined ? '' : String(details[key]).trim()])
+            .filter(([, value]) => value !== '');
+        if (entries.length === 0) return;
+
+        const section = document.createElement('div');
+        section.id = 'customer-booking-details';
+        section.className = 'space-y-2';
+        const heading = document.createElement('p');
+        heading.className = 'text-xs uppercase tracking-wider text-zinc-500';
+        heading.textContent = 'Booking Details';
+        section.appendChild(heading);
+        entries.forEach(([label, value]) => {
+            const line = document.createElement('div');
+            line.className = 'text-sm text-zinc-200';
+            const labelElement = document.createElement('span');
+            labelElement.className = 'text-zinc-500';
+            labelElement.textContent = label + ': ';
+            line.appendChild(labelElement);
+            line.appendChild(document.createTextNode(value));
+            section.appendChild(line);
+        });
+        body.insertBefore(section, body.firstChild);
+    }
+
     document.addEventListener('click', function (event) {
         const customerNameLink = event.target.closest('.customer-name-link');
         if (customerNameLink) {
@@ -2481,6 +2609,11 @@ require_once __DIR__ . '/../templates/header.php';
             event.stopPropagation();
             const customerId = customerNameLink.dataset.customerId;
             if (customerId && typeof window.openCustomerDetailsModal === 'function') {
+                try {
+                    renderCustomerBookingDetails(JSON.parse(customerNameLink.dataset.bookingDetails || '{}'));
+                } catch (error) {
+                    console.error('Unable to load booking details.', error);
+                }
                 window.openCustomerDetailsModal(customerId);
             }
             return;
