@@ -568,6 +568,7 @@ $problem_summary = mb_substr($problem, 0, 255);
 // ── Ensure service columns exist on service_requests ─────────────────────────
 foreach ([
     'services'             => "JSON         NULL COMMENT 'Selected service IDs as JSON array'",
+    'problem'              => "TEXT         NULL COMMENT 'Original customer problem description'",
     'other_service'        => "TEXT         NULL COMMENT 'Other service description when \"Other\" is selected'",
     'service_speed'        => "VARCHAR(50)  NULL COMMENT 'Service speed/tier key'",
     'speed'               => "VARCHAR(50)  NULL COMMENT 'Booking speed/tier key'",
@@ -661,7 +662,7 @@ try {
         $update = $pdo->prepare("
             UPDATE service_requests
                SET customer_id = ?, laser_brand = ?, laser_model = ?, laser_watts = ?, laser_age = ?,
-                   problem_summary = ?, problem_details = ?, priority_level = ?, source = ?,
+                   problem = ?, problem_summary = ?, problem_details = ?, priority_level = ?, source = ?,
                    request_status = 'new', latitude = ?, longitude = ?, geocode_status = ?,
                    preferred_date_start = ?, preferred_date_end = ?,
                    services = ?, other_service = ?, service_speed = ?, speed = ?,
@@ -676,6 +677,7 @@ try {
             $machine_model,
             $machine_watts ?: null,
             $machine_age ?: null,
+            $problem,
             $problem_summary,
             $problem,
             $priority,
@@ -710,7 +712,7 @@ try {
         $stmt = $pdo->prepare("
             INSERT INTO service_requests (
                 customer_id, laser_brand, laser_model, laser_watts, laser_age,
-                problem_summary, problem_details, priority_level, source,
+                problem, problem_summary, problem_details, priority_level, source,
                 request_status, latitude, longitude, geocode_status,
                 preferred_date_start, preferred_date_end,
                 services, other_service, service_speed, speed, service_total, travel_fee, grand_total,
@@ -718,7 +720,7 @@ try {
                 duration_minutes
             ) VALUES (
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
                 'new', ?, ?, ?,
                 ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
@@ -732,6 +734,7 @@ try {
             $is_task ? 'General Task' : $machine_model,
             $machine_watts ?: null,
             $machine_age ?: null,
+            $problem,
             $problem_summary,
             $problem,
             $priority,
