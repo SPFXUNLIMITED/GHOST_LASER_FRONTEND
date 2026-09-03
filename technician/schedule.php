@@ -1000,9 +1000,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $insertReq = $pdo->prepare("
             INSERT INTO service_requests
-                (customer_id, priority_level, problem_summary, preferred_date_start, preferred_date_end, request_status, latitude, longitude)
+                (customer_id, priority_level, problem, preferred_date_start, preferred_date_end, request_status, latitude, longitude)
             VALUES
-                (:customer_id, :priority_level, :problem_summary, :preferred_date_start, :preferred_date_end, 'new', :latitude, :longitude)
+                (:customer_id, :priority_level, :problem, :preferred_date_start, :preferred_date_end, 'new', :latitude, :longitude)
         ");
 
         $today    = new DateTimeImmutable('today');
@@ -1049,7 +1049,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insertReq->execute([
                 ':customer_id'          => $customerId,
                 ':priority_level'       => $cust['priority'],
-                ':problem_summary'      => $cust['problem'],
+                ':problem'              => $cust['problem'],
                 ':preferred_date_start' => $startDate,
                 ':preferred_date_end'   => $endDate,
                 ':latitude'             => round($cust['lat'] + $latJitter, 6),
@@ -1420,9 +1420,8 @@ $jobs = $pdo->query("
         sr.latitude,
         sr.longitude,
         sr.priority_level,
-        sr.problem_summary,
         sr.problem,
-        sr.speed,
+        sr.service_speed,
         sr.service_total,
         sr.travel_fee,
         sr.grand_total,
@@ -1498,9 +1497,8 @@ $scheduledJobsStmt = $pdo->prepare("
         scj.time_window_end,
         sr.id AS service_request_id,
         sr.priority_level,
-        sr.problem_summary,
         sr.problem,
-        sr.speed,
+        sr.service_speed,
         sr.service_total,
         sr.travel_fee,
         sr.grand_total,
@@ -1859,14 +1857,12 @@ require_once __DIR__ . '/../templates/header.php';
                                                             'priority' => $scheduledJob['priority_meta']['label'],
                                                             'window_summary' => $scheduledJob['priority_meta']['window_summary'],
                                                             'time_window_label' => $scheduledJob['time_window_label'] ?? 'Not assigned',
-                                                            'problem_summary' => $scheduledJob['problem'] ?? $scheduledJob['problem_summary'] ?? 'No summary provided',
-                                                            'booking_summary' => implode("\n", array_filter([
-                                                                !empty($scheduledJob['services']) ? 'Services: ' . implode(', ', (array) json_decode((string) $scheduledJob['services'], true)) : null,
-                                                                !empty($scheduledJob['speed']) ? 'Speed: ' . $scheduledJob['speed'] : null,
-                                                                $scheduledJob['service_total'] !== null ? 'Service total: $' . number_format((float) $scheduledJob['service_total'], 2) : null,
-                                                                $scheduledJob['travel_fee'] !== null ? 'Travel fee: $' . number_format((float) $scheduledJob['travel_fee'], 2) : null,
-                                                                $scheduledJob['grand_total'] !== null ? 'Grand total: $' . number_format((float) $scheduledJob['grand_total'], 2) : null,
-                                                            ])),
+                                                            'problem' => $scheduledJob['problem'] ?? '',
+                                                            'services' => implode(', ', (array) json_decode((string) ($scheduledJob['services'] ?? ''), true)),
+                                                            'service_speed' => $scheduledJob['service_speed'] ?? '',
+                                                            'service_total' => $scheduledJob['service_total'] ?? '',
+                                                            'travel_fee' => $scheduledJob['travel_fee'] ?? '',
+                                                            'grand_total' => $scheduledJob['grand_total'] ?? '',
                                                             'scheduled_date' => $scheduledJob['scheduled_date'],
                                                             'cluster_label' => $scheduledJob['cluster_label'],
                                                         ];
@@ -2027,7 +2023,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                     </div>
                                                     <div class="mt-1 text-sm text-zinc-400">
                                                         <?= htmlspecialchars($clusteredJob['city'] ?? 'N/A') ?> &bull;
-                                                        <?= htmlspecialchars($clusteredJob['problem_summary'] ?? 'No summary') ?>
+                                                        <?= htmlspecialchars($clusteredJob['problem'] ?? '') ?>
                                                     </div>
                                                 </div>
                                                 <div class="flex items-start gap-3">
@@ -2143,7 +2139,7 @@ require_once __DIR__ . '/../templates/header.php';
                                             <?= htmlspecialchars($tableStatusBadge['label'], ENT_QUOTES, 'UTF-8') ?>
                                         </span>
                                     </td>
-                                    <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job['problem_summary'] ?? 'No summary') ?></td>
+                                    <td class="p-6 text-sm text-zinc-400"><?= htmlspecialchars($job['problem'] ?? '') ?></td>
                                     <td class="p-6 text-sm text-zinc-400">
                                         <?= htmlspecialchars($job['preferred_date_start'] ?? 'N/A') ?>
                                         <?php if (!empty($job['preferred_date_end'])): ?>
@@ -2265,12 +2261,15 @@ require_once __DIR__ . '/../templates/header.php';
                 </div>
             </div>
             <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
-                <div class="text-xs uppercase tracking-wide text-zinc-500">Problem</div>
-                <div id="modal-problem-summary" class="mt-2 text-sm leading-6 text-zinc-200">No summary provided</div>
-            </div>
-            <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
-                <div class="text-xs uppercase tracking-wide text-zinc-500">Booking summary</div>
-                <div id="modal-booking-summary" class="mt-2 whitespace-pre-line text-sm leading-6 text-zinc-200">No booking summary</div>
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Job details</div>
+                <div class="mt-2 space-y-1 text-sm leading-6 text-zinc-200">
+                    <div id="modal-problem" class="hidden"></div>
+                    <div id="modal-services" class="hidden"></div>
+                    <div id="modal-service-speed" class="hidden"></div>
+                    <div id="modal-service-total" class="hidden"></div>
+                    <div id="modal-travel-fee" class="hidden"></div>
+                    <div id="modal-grand-total" class="hidden"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -2368,8 +2367,12 @@ require_once __DIR__ . '/../templates/header.php';
         priority: document.getElementById('modal-priority'),
         time_window_label: document.getElementById('modal-time-window-label'),
         window_summary: document.getElementById('modal-window-summary'),
-        problem_summary: document.getElementById('modal-problem-summary'),
-        booking_summary: document.getElementById('modal-booking-summary')
+        problem: document.getElementById('modal-problem'),
+        services: document.getElementById('modal-services'),
+        service_speed: document.getElementById('modal-service-speed'),
+        service_total: document.getElementById('modal-service-total'),
+        travel_fee: document.getElementById('modal-travel-fee'),
+        grand_total: document.getElementById('modal-grand-total')
     };
 
     window.openScheduledJobModalCustomer = function () {
@@ -2384,8 +2387,19 @@ require_once __DIR__ . '/../templates/header.php';
     }
 
     function openScheduledJobModal(payload) {
+        const detailLabels = {
+            problem: 'Problem: ',
+            services: 'Services: ',
+            service_speed: 'Speed: ',
+            service_total: 'Service total: $',
+            travel_fee: 'Travel fee: $',
+            grand_total: 'Grand total: $'
+        };
+
         Object.entries(modalFields).forEach(([key, element]) => {
-            element.textContent = payload[key] || 'N/A';
+            const value = payload[key] === null || payload[key] === undefined ? '' : String(payload[key]).trim();
+            element.textContent = value === '' ? '' : detailLabels[key] + value;
+            element.classList.toggle('hidden', value === '');
         });
 
         modalCustomerNameBtn.textContent = payload.customer_name || 'Customer';
