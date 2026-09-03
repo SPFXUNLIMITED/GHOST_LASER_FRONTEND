@@ -58,72 +58,6 @@ function laDateString(): string
     return nowLa()->format('Y-m-d');
 }
 
-function buildBusinessPurpose(array $row): string
-{
-    static $serviceLabels = [
-        'maintenance_alignment' => 'Maintenance & Alignment',
-        'tube_change'           => 'Tube Change',
-        'diagnosis'             => 'Diagnosis',
-        'training'              => 'Training',
-        'other'                 => 'Other',
-    ];
-
-    $parts = [];
-
-    $brand   = trim((string) ($row['laser_brand'] ?? ''));
-    $model   = trim((string) ($row['laser_model'] ?? ''));
-    $machine = trim("$brand $model");
-    if ($machine !== '') {
-        $parts[] = $machine;
-    }
-
-    $servicesRaw = $row['services'] ?? null;
-    if ($servicesRaw !== null && $servicesRaw !== '') {
-        $keys = json_decode((string) $servicesRaw, true);
-        if (is_array($keys) && $keys !== []) {
-            $labels = array_map(
-                static fn($k) => $serviceLabels[$k] ?? ucwords(str_replace('_', ' ', (string) $k)),
-                $keys
-            );
-            $parts[] = implode(', ', $labels);
-        }
-    }
-
-    $problem = trim((string) ($row['problem'] ?? $row['problem_summary'] ?? ''));
-    if ($problem !== '') {
-        $parts[] = $problem;
-    }
-
-    return $parts !== [] ? implode(' — ', $parts) : '';
-}
-
-function generatedPurposeForServiceRequest(PDO $pdo, int $serviceRequestId): ?string
-{
-    if ($serviceRequestId <= 0) {
-        return null;
-    }
-
-    try {
-        $stmt = $pdo->prepare(
-            "SELECT laser_brand, laser_model, problem, problem_summary, services
-             FROM service_requests
-             WHERE id = :id
-             LIMIT 1"
-        );
-        $stmt->execute([':id' => $serviceRequestId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
-        return null;
-    }
-
-    if (!$row) {
-        return null;
-    }
-
-    $purpose = trim(buildBusinessPurpose($row));
-    return $purpose !== '' ? $purpose : null;
-}
-
 function parseNullableInt($value): ?int
 {
     if ($value === null || $value === '') {
@@ -194,12 +128,10 @@ if ($action === 'on_my_way') {
 
     $startTime = laDateTimeString();
     $tripDate  = laDateString();
-    $autoPurpose = generatedPurposeForServiceRequest($pdo, $serviceRequestId);
-    $notesToPersist = $notes !== '' ? $notes : $autoPurpose;
 
     // Upsert: if a pending record already exists for this job today, update it
     $existing = $pdo->prepare(
-        "SELECT id, notes FROM mileage_logs
+        "SELECT id FROM mileage_logs
          WHERE service_request_id = :sri AND status = 'pending'
          ORDER BY id DESC LIMIT 1"
     );
@@ -220,10 +152,6 @@ if ($action === 'on_my_way') {
                  notes          = :notes
              WHERE id = :id"
         );
-        $existingNotes = trim((string) ($row['notes'] ?? ''));
-        if ($existingNotes !== '') {
-            $notesToPersist = $existingNotes;
-        }
         $stmt->execute([
             ':cn'   => $clientName,
             ':addr' => $address,
@@ -233,7 +161,7 @@ if ($action === 'on_my_way') {
             ':slng' => $startLng,
             ':sm'   => $startMileage,
             ':vehicle_id' => $vehicleId,
-            ':notes'=> $notesToPersist,
+            ':notes'=> $notes,
             ':id'   => $row['id'],
         ]);
         $logId = $row['id'];
@@ -253,7 +181,7 @@ if ($action === 'on_my_way') {
             ':slat' => $startLat,
             ':slng' => $startLng,
             ':sm'   => $startMileage,
-            ':notes'=> $notesToPersist,
+            ':notes'=> $notes,
             ':vehicle_id' => $vehicleId,
         ]);
         $logId = (int) $pdo->lastInsertId();
