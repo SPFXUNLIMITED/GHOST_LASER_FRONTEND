@@ -565,13 +565,14 @@ function getJobStatusBadge(?string $windowEndDate, array $settings): array
  */
 function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
 {
-    // Collect every unique service reference across all jobs. Entries may be
-    // numeric service IDs or, on legacy/unrepaired rows, service_name strings
-    // (e.g. "Advanced Diagnosis"). Task bookings leave services NULL and
-    // store duration directly in duration_minutes; skip the service-lookup
-    // path for those jobs.
-    $allServiceIds   = [];
-    $allServiceNames = [];
+    // Collect every unique service ID referenced across all jobs. Entries in
+    // the services JSON column must be numeric services.id values — there is
+    // no name-matching fallback here. Legacy rows whose services column still
+    // contains service_name strings must be fixed by running
+    // repairServiceRequestsServiceNames() first. Task bookings leave services
+    // NULL and store duration directly in duration_minutes; skip the
+    // service-lookup path for those jobs.
+    $allServiceIds = [];
     foreach ($jobs as $job) {
         $servicesJson = trim((string) ($job['services'] ?? ''));
         if ($servicesJson === '') {
@@ -592,40 +593,26 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
             );
         }
         foreach ($entries as $entry) {
-            if (is_numeric($entry)) {
-                $allServiceIds[(int) $entry] = true;
-            } else {
-                $allServiceNames[strtolower(trim((string) $entry))] = true;
+            if (!is_numeric($entry)) {
+                return sprintf(
+                    'Service request #%d references "%s", which is not a numeric service id. Run the service data repair before scheduling.',
+                    (int) $job['id'],
+                    (string) $entry
+                );
             }
+            $allServiceIds[(int) $entry] = true;
         }
     }
 
-    // Fetch duration_minutes and name for every referenced service in one query,
-    // building lookup maps keyed by both id and lowercase service_name.
-    $serviceRowsById   = [];
-    $serviceRowsByName = [];
-    if ($allServiceIds !== [] || $allServiceNames !== []) {
-        $conditions = [];
-        $params     = [];
-        if ($allServiceIds !== []) {
-            $uniqueIds    = array_keys($allServiceIds);
-            $placeholders = implode(',', array_fill(0, count($uniqueIds), '?'));
-            $conditions[] = "id IN ({$placeholders})";
-            array_push($params, ...$uniqueIds);
-        }
-        if ($allServiceNames !== []) {
-            $uniqueNames  = array_keys($allServiceNames);
-            $placeholders = implode(',', array_fill(0, count($uniqueNames), '?'));
-            $conditions[] = "LOWER(service_name) IN ({$placeholders})";
-            array_push($params, ...$uniqueNames);
-        }
-        $stmt = $pdo->prepare(
-            'SELECT id, service_name, duration_minutes FROM services WHERE ' . implode(' OR ', $conditions)
-        );
-        $stmt->execute($params);
+    // Fetch duration_minutes and name for every referenced service in one query.
+    $serviceRows = [];
+    if ($allServiceIds !== []) {
+        $uniqueIds    = array_keys($allServiceIds);
+        $placeholders = implode(',', array_fill(0, count($uniqueIds), '?'));
+        $stmt = $pdo->prepare("SELECT id, service_name, duration_minutes FROM services WHERE id IN ({$placeholders})");
+        $stmt->execute($uniqueIds);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $serviceRowsById[(int) $row['id']] = $row;
-            $serviceRowsByName[strtolower(trim((string) $row['service_name']))] = $row;
+            $serviceRows[(int) $row['id']] = $row;
         }
     }
 
@@ -638,35 +625,22 @@ function resolveJobDurationsFromServices(PDO $pdo, array &$jobs): ?string
             $resolved[(int) $job['id']] = (int) $job['duration_minutes'];
             continue;
         }
-        $entries = json_decode($servicesJson, true);
-        $total   = 0;
-        foreach ($entries as $entry) {
-            if (is_numeric($entry)) {
-                $id  = (int) $entry;
-                $row = $serviceRowsById[$id] ?? null;
-                if ($row === null) {
-                    return sprintf(
-                        'Service #%d used by request #%d was not found in the services table.',
-                        $id,
-                        (int) $job['id']
-                    );
-                }
-            } else {
-                $name = strtolower(trim((string) $entry));
-                $row  = $serviceRowsByName[$name] ?? null;
-                if ($row === null) {
-                    return sprintf(
-                        'Service "%s" used by request #%d was not found in the services table.',
-                        (string) $entry,
-                        (int) $job['id']
-                    );
-                }
+        $ids   = json_decode($servicesJson, true);
+        $total = 0;
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if (!array_key_exists($id, $serviceRows)) {
+                return sprintf(
+                    'Service #%d used by request #%d was not found in the services table.',
+                    $id,
+                    (int) $job['id']
+                );
             }
-            $mins = (int) $row['duration_minutes'];
+            $mins = (int) $serviceRows[$id]['duration_minutes'];
             if ($mins <= 0) {
                 return sprintf(
                     '"%s" has no duration set. Please set its duration in Service Settings before scheduling.',
-                    $row['service_name']
+                    $serviceRows[$id]['service_name']
                 );
             }
             $total += $mins;
