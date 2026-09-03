@@ -2602,7 +2602,7 @@ require_once __DIR__ . '/../templates/header.php';
             fields.appendChild(line);
         });
         section.appendChild(fields);
-        body.insertBefore(section, body.firstChild);
+        body.children[0].after(section);
     }
 
     document.addEventListener('click', function (event) {
