@@ -738,7 +738,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <table>
                 <thead>
                     <tr>
-                        <th>Date</th>
                         <th>Client Name</th>
                         <th>Vehicle</th>
                         <th>Address</th>
@@ -754,9 +753,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     <?php foreach ($logs as $row): ?>
                         <?php $tripMiles = mileageFromOdometer($row['start_mileage'] ?? null, $row['end_mileage'] ?? null); ?>
                         <tr class="log-row" data-log-id="<?= (int) $row['id'] ?>" tabindex="0" role="button" aria-label="Open full trip details for record #<?= (int) $row['id'] ?>">
-                            <td class="text-zinc-200 font-medium whitespace-nowrap">
-                                <?= htmlspecialchars(fmtDate($row['trip_date']), ENT_QUOTES, 'UTF-8') ?>
-                            </td>
                             <td class="text-zinc-200">
                                 <?= htmlspecialchars($row['client_name'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
                             </td>
