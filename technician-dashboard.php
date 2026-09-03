@@ -44,12 +44,24 @@ $scheduledJobsStmt = $pdo->prepare("
         scj.time_window_end,
         sr.id AS service_request_id,
         sr.priority_level,
+        sr.laser_brand,
+        sr.laser_model,
+        sr.laser_watts,
+        sr.laser_age,
         sr.problem_summary,
         sr.problem,
+        sr.services,
+        sr.service_speed,
         sr.speed,
         sr.service_total,
         sr.travel_fee,
         sr.grand_total,
+        sr.preferred_date_start,
+        sr.preferred_date_end,
+        sr.destination_street,
+        sr.destination_city,
+        sr.destination_state,
+        sr.destination_zip,
         sr.task_contact,
         COALESCE(c.first_name, '') AS first_name,
         COALESCE(c.last_name,  '') AS last_name,
@@ -155,6 +167,72 @@ function techDashFormatAddress(array $job): string
         trim((string) ($job['zip'] ?? '')),
     ]);
     return $parts ? implode(', ', $parts) : 'Address unavailable';
+}
+
+function techDashFormatBookingServiceAddress(array $job): string
+{
+    return implode(', ', array_filter([
+        trim((string) ($job['destination_street'] ?? '')),
+        trim((string) ($job['destination_city'] ?? '')),
+        trim((string) ($job['destination_state'] ?? '')),
+        trim((string) ($job['destination_zip'] ?? '')),
+    ], static fn (string $part): bool => $part !== ''));
+}
+
+function techDashFormatServices($services): string
+{
+    if ($services === null) {
+        return '';
+    }
+
+    $raw = trim((string) $services);
+    if ($raw === '') {
+        return '';
+    }
+
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) {
+        return implode(', ', array_filter(
+            array_map(static fn ($service): string => trim((string) $service), $decoded),
+            static fn (string $service): bool => $service !== ''
+        ));
+    }
+
+    return $raw;
+}
+
+function techDashBookingDetailEntries(array $job): array
+{
+    $preferredDates = implode(' – ', array_filter([
+        trim((string) ($job['preferred_date_start'] ?? '')),
+        trim((string) ($job['preferred_date_end'] ?? '')),
+    ], static fn (string $date): bool => $date !== ''));
+
+    $details = [
+        'Laser brand' => $job['laser_brand'] ?? '',
+        'Laser model' => $job['laser_model'] ?? '',
+        'Laser watts' => $job['laser_watts'] ?? '',
+        'Laser age' => $job['laser_age'] ?? '',
+        'Problem' => $job['problem'] ?? '',
+        'Services' => techDashFormatServices($job['services'] ?? null),
+        'Service speed' => $job['service_speed'] ?? '',
+        'Service total' => $job['service_total'] ?? '',
+        'Travel fee' => $job['travel_fee'] ?? '',
+        'Grand total' => $job['grand_total'] ?? '',
+        'Priority' => $job['priority_level'] ?? '',
+        'Preferred dates' => $preferredDates,
+        'Service address' => techDashFormatBookingServiceAddress($job),
+    ];
+
+    $entries = [];
+    foreach ($details as $label => $value) {
+        $text = trim((string) $value);
+        if ($text !== '') {
+            $entries[] = [$label, $text];
+        }
+    }
+
+    return $entries;
 }
 
 function techDashWazeUrl(array $job): string
@@ -783,6 +861,7 @@ require_once __DIR__ . '/templates/header.php';
                         $wazeUrl     = techDashWazeUrl($job);
                         $gmapsUrl    = techDashGoogleMapsUrl($job);
                         $timeWindow  = techDashTimeWindow($job['time_window_start'] ?? null, $job['time_window_end'] ?? null);
+                        $bookingDetailEntries = techDashBookingDetailEntries($job);
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
                         if ($customerName === '') {
                             // Fall back to task_contact (company or contact name) for task-type rows.
@@ -872,12 +951,16 @@ require_once __DIR__ . '/templates/header.php';
                                 </div>
                             </div>
 
-                            <!-- Row 4: problem summary (collapsed) -->
-                            <?php if (!empty($job['problem_summary'])): ?>
+                            <!-- Row 4: booking details -->
+                            <?php if ($bookingDetailEntries !== []): ?>
                                 <div class="mt-2 pt-2 border-t border-zinc-700/40">
-                                    <p class="text-xs text-zinc-400 leading-relaxed line-clamp-2">
-                                        <?= htmlspecialchars($job['problem'] ?? $job['problem_summary'], ENT_QUOTES, 'UTF-8') ?>
-                                    </p>
+                                    <div class="grid gap-2 md:grid-cols-2">
+                                        <?php foreach ($bookingDetailEntries as [$label, $value]): ?>
+                                            <div class="text-xs text-zinc-300 leading-relaxed">
+                                                <span class="text-zinc-500"><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>: </span><?= htmlspecialchars($value, ENT_QUOTES, 'UTF-8') ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
                                 </div>
                             <?php endif; ?>
 
