@@ -45,6 +45,11 @@ $scheduledJobsStmt = $pdo->prepare("
         sr.id AS service_request_id,
         sr.priority_level,
         sr.problem_summary,
+        sr.problem,
+        sr.speed,
+        sr.service_total,
+        sr.travel_fee,
+        sr.grand_total,
         sr.task_contact,
         COALESCE(c.first_name, '') AS first_name,
         COALESCE(c.last_name,  '') AS last_name,
@@ -871,7 +876,7 @@ require_once __DIR__ . '/templates/header.php';
                             <?php if (!empty($job['problem_summary'])): ?>
                                 <div class="mt-2 pt-2 border-t border-zinc-700/40">
                                     <p class="text-xs text-zinc-400 leading-relaxed line-clamp-2">
-                                        <?= htmlspecialchars($job['problem_summary'], ENT_QUOTES, 'UTF-8') ?>
+                                        <?= htmlspecialchars($job['problem'] ?? $job['problem_summary'], ENT_QUOTES, 'UTF-8') ?>
                                     </p>
                                 </div>
                             <?php endif; ?>

@@ -1421,9 +1421,14 @@ $jobs = $pdo->query("
         sr.longitude,
         sr.priority_level,
         sr.problem_summary,
+        sr.problem,
+        sr.speed,
+        sr.service_total,
+        sr.travel_fee,
+        sr.grand_total,
+        sr.services,
         sr.preferred_date_start,
         sr.preferred_date_end,
-        sr.services,
         sr.duration_minutes,
         sr.created_at
     FROM service_requests sr
@@ -1494,6 +1499,12 @@ $scheduledJobsStmt = $pdo->prepare("
         sr.id AS service_request_id,
         sr.priority_level,
         sr.problem_summary,
+        sr.problem,
+        sr.speed,
+        sr.service_total,
+        sr.travel_fee,
+        sr.grand_total,
+        sr.services,
         sr.preferred_date_start,
         sr.preferred_date_end,
         sr.created_at,
@@ -1848,7 +1859,14 @@ require_once __DIR__ . '/../templates/header.php';
                                                             'priority' => $scheduledJob['priority_meta']['label'],
                                                             'window_summary' => $scheduledJob['priority_meta']['window_summary'],
                                                             'time_window_label' => $scheduledJob['time_window_label'] ?? 'Not assigned',
-                                                            'problem_summary' => $scheduledJob['problem_summary'] ?? 'No summary provided',
+                                                            'problem_summary' => $scheduledJob['problem'] ?? $scheduledJob['problem_summary'] ?? 'No summary provided',
+                                                            'booking_summary' => implode("\n", array_filter([
+                                                                !empty($scheduledJob['services']) ? 'Services: ' . implode(', ', (array) json_decode((string) $scheduledJob['services'], true)) : null,
+                                                                !empty($scheduledJob['speed']) ? 'Speed: ' . $scheduledJob['speed'] : null,
+                                                                $scheduledJob['service_total'] !== null ? 'Service total: $' . number_format((float) $scheduledJob['service_total'], 2) : null,
+                                                                $scheduledJob['travel_fee'] !== null ? 'Travel fee: $' . number_format((float) $scheduledJob['travel_fee'], 2) : null,
+                                                                $scheduledJob['grand_total'] !== null ? 'Grand total: $' . number_format((float) $scheduledJob['grand_total'], 2) : null,
+                                                            ])),
                                                             'scheduled_date' => $scheduledJob['scheduled_date'],
                                                             'cluster_label' => $scheduledJob['cluster_label'],
                                                         ];
@@ -2247,8 +2265,12 @@ require_once __DIR__ . '/../templates/header.php';
                 </div>
             </div>
             <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
-                <div class="text-xs uppercase tracking-wide text-zinc-500">Problem summary</div>
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Problem</div>
                 <div id="modal-problem-summary" class="mt-2 text-sm leading-6 text-zinc-200">No summary provided</div>
+            </div>
+            <div class="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+                <div class="text-xs uppercase tracking-wide text-zinc-500">Booking summary</div>
+                <div id="modal-booking-summary" class="mt-2 whitespace-pre-line text-sm leading-6 text-zinc-200">No booking summary</div>
             </div>
         </div>
     </div>
@@ -2346,7 +2368,8 @@ require_once __DIR__ . '/../templates/header.php';
         priority: document.getElementById('modal-priority'),
         time_window_label: document.getElementById('modal-time-window-label'),
         window_summary: document.getElementById('modal-window-summary'),
-        problem_summary: document.getElementById('modal-problem-summary')
+        problem_summary: document.getElementById('modal-problem-summary'),
+        booking_summary: document.getElementById('modal-booking-summary')
     };
 
     window.openScheduledJobModalCustomer = function () {

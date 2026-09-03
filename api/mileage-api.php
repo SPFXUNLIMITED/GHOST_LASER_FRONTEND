@@ -89,7 +89,7 @@ function buildBusinessPurpose(array $row): string
         }
     }
 
-    $problem = trim((string) ($row['problem_summary'] ?? ''));
+    $problem = trim((string) ($row['problem'] ?? $row['problem_summary'] ?? ''));
     if ($problem !== '') {
         $parts[] = $problem;
     }
@@ -105,7 +105,7 @@ function generatedPurposeForServiceRequest(PDO $pdo, int $serviceRequestId): ?st
 
     try {
         $stmt = $pdo->prepare(
-            "SELECT laser_brand, laser_model, problem_summary, services
+            "SELECT laser_brand, laser_model, problem, problem_summary, services
              FROM service_requests
              WHERE id = :id
              LIMIT 1"

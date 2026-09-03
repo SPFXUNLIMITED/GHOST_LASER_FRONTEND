@@ -433,6 +433,12 @@ try {
             sr.laser_age,
             sr.problem_summary,
             sr.problem_details,
+            sr.problem,
+            sr.services,
+            sr.speed,
+            sr.service_total,
+            sr.travel_fee,
+            sr.grand_total,
             sr.priority_level,
             sr.source,
             sr.request_status,
@@ -1201,8 +1207,8 @@ function openViewModal(row) {
         '<div class="detail-item"><label>Submitted</label><p>' + esc(row.created_at) + '</p></div>',
         '<div class="detail-item"><label>Preferred Start</label><p>' + esc(row.preferred_date_start) + '</p></div>',
         '<div class="detail-item"><label>Preferred End</label><p>' + esc(row.preferred_date_end) + '</p></div>',
-        '<div class="detail-item" style="grid-column:1/-1"><label>Problem Summary</label><p>' + esc(row.problem_summary) + '</p></div>',
-        '<div class="detail-item" style="grid-column:1/-1"><label>Problem Details</label><p style="white-space:pre-wrap">' + esc(row.problem_details) + '</p></div>',
+        '<div class="detail-item" style="grid-column:1/-1"><label>Problem</label><p style="white-space:pre-wrap">' + esc(row.problem || row.problem_details || row.problem_summary) + '</p></div>',
+        '<div class="detail-item" style="grid-column:1/-1"><label>Booking Summary</label><p style="white-space:pre-wrap">' + esc(formatBookingSummary(row)) + '</p></div>',
         '</div>',
         '<p class="form-section-title">Geocoding</p>',
         '<div class="detail-grid">',
@@ -1212,6 +1218,21 @@ function openViewModal(row) {
         '</div>',
     ].join('');
     document.getElementById('viewModal').classList.add('open');
+}
+
+function formatBookingSummary(row) {
+    if (!row.problem && !row.services && !row.speed && row.service_total == null && row.travel_fee == null && row.grand_total == null) {
+        return row.problem_details || row.problem_summary || '';
+    }
+    let services = row.services;
+    try { services = Array.isArray(services) ? services.join(', ') : JSON.parse(services || '[]').join(', '); } catch (_) {}
+    return [
+        services ? 'Selected services: ' + services : null,
+        row.speed ? 'Speed: ' + row.speed : null,
+        row.service_total != null ? 'Service total: $' + Number(row.service_total).toFixed(2) : null,
+        row.travel_fee != null ? 'Travel fee: $' + Number(row.travel_fee).toFixed(2) : null,
+        row.grand_total != null ? 'Grand total: $' + Number(row.grand_total).toFixed(2) : null
+    ].filter(Boolean).join('\n');
 }
 
 function openEditModal(row) {
