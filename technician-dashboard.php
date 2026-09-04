@@ -15,6 +15,7 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/project/db.php';
+require_once __DIR__ . '/project/service_display.php';
 require_once __DIR__ . '/scheduling_settings.php';
 require_once __DIR__ . '/mileage_schema.php';
 
@@ -181,6 +182,8 @@ function techDashFormatBookingServiceAddress(array $job): string
 
 function techDashFormatServices($services): string
 {
+    global $pdo;
+
     if ($services === null) {
         return '';
     }
@@ -192,10 +195,9 @@ function techDashFormatServices($services): string
 
     $decoded = json_decode($raw, true);
     if (is_array($decoded)) {
-        return implode(', ', array_filter(
-            array_map(static fn ($service): string => trim((string) $service), $decoded),
-            static fn (string $service): bool => $service !== ''
-        ));
+        // Numeric service IDs are resolved to names via the shared display
+        // helper (cached per request); legacy name strings pass through.
+        return formatServicesListForDisplay($pdo, $raw);
     }
 
     return $raw;

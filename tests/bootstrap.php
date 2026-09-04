@@ -31,6 +31,15 @@ function ghostLaserLoadScheduleFunctions(): void
 
     $functionsOnly = substr($source, 0, $cutPosition);
 
+    // The extracted block require()s the shared display helpers via a path
+    // relative to technician/schedule.php; rewrite it to an absolute path so
+    // it resolves from the temp file too.
+    $functionsOnly = str_replace(
+        "require_once __DIR__ . '/../project/service_display.php';",
+        'require_once ' . var_export(__DIR__ . '/../project/service_display.php', true) . ';',
+        $functionsOnly
+    );
+
     $tmpFile = tempnam(sys_get_temp_dir(), 'schedule_functions_');
     file_put_contents($tmpFile, $functionsOnly);
     require $tmpFile;
