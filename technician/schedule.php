@@ -2176,7 +2176,7 @@ require_once __DIR__ . '/../templates/header.php';
                                     <div class="mt-2 space-y-2">
                                         <?php foreach ($calendarDay['clusters'] as $scheduledCluster): ?>
                                             <?php
-                                            $clusterModalJobs = array_map(function (array $clusterJob): array {
+                                            $clusterModalJobs = array_map(function (array $clusterJob) use ($pdo): array {
                                                 return [
                                                     'customer_id' => $clusterJob['customer_id'] ?? null,
                                                     'customer_name' => $clusterJob['customer_name'] ?? 'Unknown Customer',
