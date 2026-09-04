@@ -596,6 +596,8 @@ function buildServiceNameIdMap(PDO $pdo): array
     return ['map' => $idByName, 'error' => null];
 }
 
+require_once __DIR__ . '/../project/service_display.php';
+
 /**
  * Resolve per-job duration by summing the `duration_minutes` of every service
  * referenced in the job's `services` JSON column.
@@ -2185,7 +2187,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                         'laser_watts' => $clusterJob['laser_watts'] ?? '',
                                                         'laser_age' => $clusterJob['laser_age'] ?? '',
                                                         'problem' => $clusterJob['problem'] ?? '',
-                                                        'services' => implode(', ', (array) json_decode((string) ($clusterJob['services'] ?? ''), true)),
+                                                        'services' => formatServicesListForDisplay($pdo, (string) ($clusterJob['services'] ?? '')),
                                                         'service_speed' => $clusterJob['service_speed'] ?? '',
                                                         'service_total' => $clusterJob['service_total'] ?? '',
                                                         'travel_fee' => $clusterJob['travel_fee'] ?? '',
@@ -2239,7 +2241,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                             'window_summary' => $scheduledJob['priority_meta']['window_summary'] ?? null,
                                                             'time_window_label' => $scheduledJob['time_window_label'] ?? null,
                                                             'problem' => $scheduledJob['problem'] ?? '',
-                                                            'services' => implode(', ', (array) json_decode((string) ($scheduledJob['services'] ?? ''), true)),
+                                                            'services' => formatServicesListForDisplay($pdo, (string) ($scheduledJob['services'] ?? '')),
                                                             'service_speed' => $scheduledJob['service_speed'] ?? '',
                                                             'service_total' => $scheduledJob['service_total'] ?? '',
                                                             'travel_fee' => $scheduledJob['travel_fee'] ?? '',
@@ -2253,7 +2255,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                             'laser_watts' => $scheduledJob['laser_watts'] ?? '',
                                                             'laser_age' => $scheduledJob['laser_age'] ?? '',
                                                             'problem' => $scheduledJob['problem'] ?? '',
-                                                            'services' => implode(', ', (array) json_decode((string) ($scheduledJob['services'] ?? ''), true)),
+                                                            'services' => formatServicesListForDisplay($pdo, (string) ($scheduledJob['services'] ?? '')),
                                                             'service_speed' => $scheduledJob['service_speed'] ?? '',
                                                             'service_total' => $scheduledJob['service_total'] ?? '',
                                                             'travel_fee' => $scheduledJob['travel_fee'] ?? '',
@@ -2526,7 +2528,7 @@ require_once __DIR__ . '/../templates/header.php';
                                                 'laser_watts' => $job['laser_watts'] ?? '',
                                                 'laser_age' => $job['laser_age'] ?? '',
                                                 'problem' => $job['problem'] ?? '',
-                                                'services' => implode(', ', (array) json_decode((string) ($job['services'] ?? ''), true)),
+                                                'services' => formatServicesListForDisplay($pdo, (string) ($job['services'] ?? '')),
                                                 'service_speed' => $job['service_speed'] ?? '',
                                                 'service_total' => $job['service_total'] ?? '',
                                                 'travel_fee' => $job['travel_fee'] ?? '',
