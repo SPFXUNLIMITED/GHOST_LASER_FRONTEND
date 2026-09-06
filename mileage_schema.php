@@ -163,3 +163,12 @@ function mileageSetDefaultVehicle(PDO $pdo, int $vehicleId): void
     }
 }
 
+/**
+ * Remove bracketed blocks (e.g. "[Task Contact: Acme | 555-1234]") and any
+ * leftover whitespace from a business-purpose string, so contact metadata never
+ * leaks into the mileage purpose column.
+ */
+function mileageStripBracketed(string $text): string
+{
+    return trim((string) preg_replace('/\[[^\]]*\]/', '', $text));
+}
