@@ -136,7 +136,7 @@ try {
     $allIds       = array_merge([0], $jobIds); // always include the return-home sentinel
     $placeholders = implode(',', array_fill(0, count($allIds), '?'));
     $tsStmt       = $pdo->prepare(
-        "SELECT service_request_id, status, start_time, end_time, total_miles
+        "SELECT service_request_id, status, start_time, end_time, total_miles, start_mileage
            FROM mileage_logs
           WHERE service_request_id IN ($placeholders)
             AND trip_date = ?
@@ -147,10 +147,11 @@ try {
         $sid = (int) $row['service_request_id'];
         if (!isset($tripStates[$sid])) {   // keep only the most-recent record
             $tripStates[$sid] = [
-                'status'      => $row['status'],
-                'start_time'  => $row['start_time'],
-                'end_time'    => $row['end_time'],
-                'total_miles' => $row['total_miles'],
+                'status'        => $row['status'],
+                'start_time'    => $row['start_time'],
+                'end_time'      => $row['end_time'],
+                'total_miles'   => $row['total_miles'],
+                'start_mileage' => $row['start_mileage'],
             ];
         }
     }
@@ -1176,6 +1177,9 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
 (function () {
     'use strict';
 
+    // Starting odometer per job, used to validate the ending reading client-side.
+    var _startMileageByJob = {};
+
     // ── GPS helper ────────────────────────────────────────────────────────────
     function getCoords() {
         return new Promise(function (resolve, reject) {
@@ -1280,9 +1284,11 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
             }
 
             if (payload.action === 'on_my_way') {
+                _startMileageByJob[jobId] = payload.start_mileage;
                 setTripButtons(jobId, 'pending');
                 setStatus(jobId, '✓ Departed at ' + data.start_time, 'ok');
             } else {
+                delete _startMileageByJob[jobId];
                 setTripButtons(jobId, 'ready');
                 var miles = hasMiles(data.total_miles)
                     ? ' — ' + data.total_miles + ' miles'
@@ -1321,6 +1327,10 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
             var state      = states[jobId];
 
             if (state.status === 'pending') {
+                var startMileage = parseInt(state.start_mileage, 10);
+                if (!isNaN(startMileage)) {
+                    _startMileageByJob[jobId] = startMileage;
+                }
                 // Departed — waiting for arrival
                 setTripButtons(jobId, 'pending');
                 var depTime = formatDbTime(state.start_time);
@@ -1439,6 +1449,15 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
             return;
         }
         var data = _modalData;
+        if (data.payload.action === 'arrived') {
+            var startMileage = parseInt(_startMileageByJob[data.jobId], 10);
+            if (!isNaN(startMileage) && mileage <= startMileage) {
+                document.getElementById('nixieError').textContent =
+                    'Ending mileage must be greater than starting mileage (' + startMileage + ').';
+                shakeDisplay();
+                return;
+            }
+        }
         if (data.payload.action === 'on_my_way') {
             var vehicleSelect = document.getElementById('mileageVehicleSelect');
             var selectedVehicleId = vehicleSelect ? parseInt(vehicleSelect.value, 10) : NaN;
