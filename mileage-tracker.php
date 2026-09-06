@@ -371,15 +371,32 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         .export-btn:hover { border-color: rgba(34,197,94,0.7); background: rgba(34,197,94,0.18); }
 
         .table-wrap {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
+            overflow-x: hidden;
         }
 
         table {
             border-collapse: collapse;
             width: 100%;
-            min-width: 1100px;
+            max-width: 100%;
+            table-layout: fixed;
             font-size: 0.82rem;
+        }
+
+        .col-client   { width: 10%; }
+        .col-vehicle  { width: 12%; }
+        .col-address  { width: 14%; }
+        .col-purpose  { width: 15%; }
+        .col-time     { width: 11%; }
+        .col-odometer { width: 10%; }
+        .col-gps      { width: 10%; }
+        .col-status   { width: 7%; }
+        .col-actions  { width: 11%; }
+
+        thead th,
+        tbody td {
+            padding: 6px 8px;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         thead th {
@@ -389,10 +406,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             font-weight: 700;
             letter-spacing: 0.1em;
             text-transform: uppercase;
-            padding: 4px 6px;
             text-align: left;
             border-bottom: 1px solid rgba(63,63,70,0.8);
-            white-space: nowrap;
+            white-space: normal;
         }
 
         tbody tr {
@@ -407,7 +423,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         }
 
         tbody td {
-            padding: 4px 6px;
             color: #d4d4d8;
             vertical-align: top;
         }
@@ -444,13 +459,36 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             font-size: 0.72rem;
             color: #71717a;
             font-family: ui-monospace, monospace;
-            white-space: nowrap;
+            white-space: normal;
         }
 
         .purpose-cell {
             font-size: 0.78rem;
             color: #a1a1aa;
             line-height: 1.45;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+
+        .gps-cell {
+            font-size: 0.68rem;
+            color: #71717a;
+            font-family: ui-monospace, monospace;
+            line-height: 1.35;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+        .gps-cell > div { display: block; }
+
+        .actions-cell { line-height: 1.9; }
+        .actions-cell form { margin-left: 0.35rem; }
+
+        @media (max-width: 860px) {
+            table { font-size: 0.74rem; }
+            thead th, tbody td { padding: 5px 6px; }
+            .actions-cell form { margin-left: 0; }
+            .actions-cell .edit-btn,
+            .actions-cell .delete-btn { padding: 0.25rem 0.4rem; }
         }
 
         .miles-cell {
@@ -775,6 +813,17 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     <?php else: ?>
         <div class="table-wrap rounded-xl border border-zinc-800/70 overflow-hidden">
             <table>
+                <colgroup>
+                    <col class="col-client">
+                    <col class="col-vehicle">
+                    <col class="col-address">
+                    <col class="col-purpose">
+                    <col class="col-time">
+                    <col class="col-odometer">
+                    <col class="col-gps">
+                    <col class="col-status">
+                    <col class="col-actions">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>Client Name</th>
@@ -796,25 +845,25 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <?= htmlspecialchars($row['client_name'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
                                 <div class="text-xs text-zinc-400 font-mono">Job #<?= (int) $row['service_request_id'] ?></div>
                             </td>
-                            <td class="max-w-xs text-zinc-300" style="min-width:200px;">
+                            <td class="text-zinc-300">
                                 <?= fmtVehicleHtml($row) ?>
                             </td>
-                            <td class="max-w-xs text-zinc-300" style="min-width:160px;">
+                            <td class="text-zinc-300">
                                 <?= htmlspecialchars($row['address'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
                             </td>
-                            <td class="purpose-cell" style="min-width:220px;max-width:320px;">
+                            <td class="purpose-cell">
                                 <?= htmlspecialchars($row['purpose'] !== '' ? $row['purpose'] : '—', ENT_QUOTES, 'UTF-8') ?>
                             </td>
-                            <td class="whitespace-nowrap">
+                            <td>
                                 <div class="text-xs text-zinc-400">Start: <?= htmlspecialchars(fmtDateTime($row['start_time']), ENT_QUOTES, 'UTF-8') ?></div>
                                 <div class="text-xs text-zinc-400">End: <?= htmlspecialchars(fmtDateTime($row['end_time']), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
-                            <td class="odometer-cell whitespace-nowrap">
+                            <td class="odometer-cell">
                                 <div class="text-xs text-zinc-400">Starting: <?= htmlspecialchars(fmtOdometer($row['start_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
                                 <div class="text-xs text-zinc-400">Ending: <?= htmlspecialchars(fmtOdometer($row['end_mileage'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
                                 <div class="text-xs text-zinc-400">Total: <?= htmlspecialchars(fmtMiles($tripMiles), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
-                            <td class="whitespace-nowrap text-xs text-zinc-400 font-mono">
+                            <td class="gps-cell">
                                 <div><?= htmlspecialchars(fmtGps($row['start_lat'] ?? null, $row['start_lng'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
                                 <div><?= htmlspecialchars(fmtGps($row['end_lat'] ?? null, $row['end_lng'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
@@ -825,12 +874,12 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                     <span class="badge-pending">Pending</span>
                                 <?php endif; ?>
                             </td>
-                            <td class="whitespace-nowrap">
+                            <td class="actions-cell">
                                 <button type="button" class="edit-btn" data-edit-id="<?= (int) $row['id'] ?>" onclick="event.stopPropagation()">
                                     <svg style="width:0.7rem;height:0.7rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                                     Edit
                                 </button>
-                                <form method="POST" action="mileage-tracker.php<?= $filterStart !== '' || $filterEnd !== '' || $filterStatus !== '' ? '?' . htmlspecialchars(http_build_query(array_filter(['start' => $filterStart, 'end' => $filterEnd, 'status' => $filterStatus])), ENT_QUOTES, 'UTF-8') : '' ?>" style="display:inline;margin-left:0.35rem;">
+                                <form method="POST" action="mileage-tracker.php<?= $filterStart !== '' || $filterEnd !== '' || $filterStatus !== '' ? '?' . htmlspecialchars(http_build_query(array_filter(['start' => $filterStart, 'end' => $filterEnd, 'status' => $filterStatus])), ENT_QUOTES, 'UTF-8') : '' ?>" style="display:inline;">
                                     <input type="hidden" name="delete_id" value="<?= (int) $row['id'] ?>">
                                     <button type="submit" class="delete-btn" onclick="event.stopPropagation(); return confirm('Are you sure you want to delete this mileage record? This action cannot be undone.')">
                                         <svg style="width:0.7rem;height:0.7rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
