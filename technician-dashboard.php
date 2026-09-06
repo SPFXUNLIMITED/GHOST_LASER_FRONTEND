@@ -975,6 +975,7 @@ require_once __DIR__ . '/templates/header.php';
                                         data-action="on_my_way"
                                         data-job-id="<?= (int) $job['service_request_id'] ?>"
                                         data-client="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-problem="<?= htmlspecialchars(trim((string) ($job['problem'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
                                         data-address="<?= htmlspecialchars($fullAddress, ENT_QUOTES, 'UTF-8') ?>"
                                         title="<?= $hasActiveVehicles ? 'Record departure time and GPS coordinates' : 'Set up an active vehicle first in Vehicle Settings' ?>"
                                         <?= $hasActiveVehicles ? '' : 'disabled' ?>
@@ -986,6 +987,8 @@ require_once __DIR__ . '/templates/header.php';
                                         class="mileage-btn btn-arrived"
                                         data-action="arrived"
                                         data-job-id="<?= (int) $job['service_request_id'] ?>"
+                                        data-client="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-problem="<?= htmlspecialchars(trim((string) ($job['problem'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
                                         title="Record arrival time, GPS coordinates, and ending odometer"
                                         disabled
                                     >
@@ -1228,6 +1231,34 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         }
     }
 
+    // ── Trip purpose ──────────────────────────────────────────────────────────
+    // The job's problem text becomes the mileage log's business purpose. The
+    // return-home sentinel (Job #0) uses "Return to base", suffixed with the
+    // last completed job's client name when one is known for this session.
+    var LAST_CLIENT_KEY = 'glLastCompletedClient';
+
+    function readLastCompletedClient() {
+        try {
+            return sessionStorage.getItem(LAST_CLIENT_KEY) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function storeLastCompletedClient(name) {
+        try {
+            sessionStorage.setItem(LAST_CLIENT_KEY, name);
+        } catch (e) { /* private mode / storage disabled — purpose falls back */ }
+    }
+
+    function tripPurpose(jobId, btn) {
+        if (jobId === 0) {
+            var last = readLastCompletedClient();
+            return last ? 'Return to base (from ' + last + ')' : 'Return to base';
+        }
+        return (btn.dataset.problem || '').trim();
+    }
+
     // ── API call ──────────────────────────────────────────────────────────────
     function callMileageApi(payload, btn, jobId) {
         btn.disabled = true;
@@ -1289,6 +1320,9 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
                 setStatus(jobId, '✓ Departed at ' + data.start_time, 'ok');
             } else {
                 delete _startMileageByJob[jobId];
+                if (jobId !== 0 && payload.client_name) {
+                    storeLastCompletedClient(payload.client_name);
+                }
                 setTripButtons(jobId, 'ready');
                 var miles = hasMiles(data.total_miles)
                     ? ' — ' + data.total_miles + ' miles'
@@ -1494,14 +1528,17 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
                 action:             'on_my_way',
                 service_request_id: jobId,
                 client_name:        btn.dataset.client  || '',
-                address:            btn.dataset.address || ''
+                address:            btn.dataset.address || '',
+                notes:              tripPurpose(jobId, btn)
             };
             btn.disabled = true;
             openMileageModal(btn, jobId, payload);
         } else if (action === 'arrived') {
             var payload = {
                 action:             'arrived',
-                service_request_id: jobId
+                service_request_id: jobId,
+                client_name:        btn.dataset.client || '',
+                notes:              tripPurpose(jobId, btn)
             };
             btn.disabled = true;
             openMileageModal(btn, jobId, payload);

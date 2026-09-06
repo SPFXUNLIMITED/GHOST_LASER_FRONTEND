@@ -166,9 +166,17 @@ try {
     $stmt->execute($params);
     $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Use entered notes as the sole business-purpose source for each row.
+    // Business purpose: the stored note (written from the job's problem text, or
+    // "Return to base (from <client>)" for the return-home sentinel). Older rows
+    // with no stored note fall back to the linked job's problem text.
     foreach ($logs as &$log) {
-        $log['purpose'] = $log['notes'] ?? '';
+        $purpose = trim((string) ($log['notes'] ?? ''));
+        if ($purpose === '') {
+            $purpose = ((int) $log['service_request_id'] === 0)
+                ? 'Return to base'
+                : trim((string) ($log['problem'] ?? ''));
+        }
+        $log['purpose'] = $purpose;
     }
     unset($log);
 } catch (PDOException $e) {
@@ -776,7 +784,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <?= htmlspecialchars($row['address'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
                             </td>
                             <td class="purpose-cell" style="min-width:220px;max-width:320px;">
-                                <?= htmlspecialchars($row['purpose'], ENT_QUOTES, 'UTF-8') ?>
+                                <?= htmlspecialchars($row['purpose'] !== '' ? $row['purpose'] : '—', ENT_QUOTES, 'UTF-8') ?>
                             </td>
                             <td class="whitespace-nowrap">
                                 <div class="text-xs text-zinc-400">Start: <?= htmlspecialchars(fmtDateTime($row['start_time']), ENT_QUOTES, 'UTF-8') ?></div>
