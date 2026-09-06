@@ -99,7 +99,7 @@ if ($action === 'on_my_way') {
     $startLng         = validCoord((string) ($data['start_lng'] ?? ''));
     $startMileage     = isset($data['start_mileage']) ? (int) $data['start_mileage'] : null;
     $vehicleId        = parseNullableInt($data['vehicle_id'] ?? null);
-    $notes            = trim((string) ($data['notes'] ?? ''));
+    $notes            = mileageStripBracketed((string) ($data['notes'] ?? ''));
 
     if ($serviceRequestId < 0) {
         http_response_code(400);
@@ -282,7 +282,7 @@ if ($action === 'update') {
     $endMileage   = ($data['end_mileage']   !== '' && $data['end_mileage']   !== null) ? (int) $data['end_mileage']   : null;
     $clientName   = trim((string) ($data['client_name']   ?? ''));
     $address      = trim((string) ($data['address']       ?? ''));
-    $notes        = trim((string) ($data['notes']         ?? ''));
+    $notes        = mileageStripBracketed((string) ($data['notes'] ?? ''));
     $status       = trim((string) ($data['status']        ?? 'pending'));
     $vehicleId    = parseNullableInt($data['vehicle_id'] ?? null);
 

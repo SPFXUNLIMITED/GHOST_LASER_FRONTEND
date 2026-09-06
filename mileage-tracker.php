@@ -169,12 +169,14 @@ try {
     // Business purpose: the stored note (written from the job's problem text, or
     // "Return to base (from <client>)" for the return-home sentinel). Older rows
     // with no stored note fall back to the linked job's problem text.
+    // Bracketed blocks such as "[Task Contact: ...]" are stripped so contact
+    // metadata never pollutes the purpose column.
     foreach ($logs as &$log) {
-        $purpose = trim((string) ($log['notes'] ?? ''));
+        $purpose = mileageStripBracketed((string) ($log['notes'] ?? ''));
         if ($purpose === '') {
             $purpose = ((int) $log['service_request_id'] === 0)
                 ? 'Return to base'
-                : trim((string) ($log['problem'] ?? ''));
+                : mileageStripBracketed((string) ($log['problem'] ?? ''));
         }
         $log['purpose'] = $purpose;
     }
