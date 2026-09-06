@@ -237,8 +237,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         'Starting Odometer',
         'Ending Odometer',
         'Total Miles',
-        'Start GPS',
-        'End GPS',
+        'GPS',
         'Job ID',
         'Status',
     ]);
@@ -255,8 +254,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             $row['start_mileage'] ?? '',
             $row['end_mileage'] ?? '',
             (($tripMiles = mileageFromOdometer($row['start_mileage'] ?? null, $row['end_mileage'] ?? null)) !== null) ? number_format($tripMiles, 2) : '',
-            fmtGps($row['start_lat'] ?? null, $row['start_lng'] ?? null),
-            fmtGps($row['end_lat'] ?? null, $row['end_lng'] ?? null),
+            fmtGps($row['start_lat'] ?? null, $row['start_lng'] ?? null) . ' ' . fmtGps($row['end_lat'] ?? null, $row['end_lng'] ?? null),
             '#' . $row['service_request_id'],
             $row['status'],
         ]);
@@ -763,8 +761,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         <th>Purpose</th>
                         <th>Time</th>
                         <th>Odometer</th>
-                        <th>Start GPS</th>
-                        <th>End GPS</th>
+                        <th>GPS</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -796,10 +793,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <div class="text-xs text-zinc-400">Total: <?= htmlspecialchars(fmtMiles($tripMiles), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
                             <td class="whitespace-nowrap text-xs text-zinc-400 font-mono">
-                                <?= htmlspecialchars(fmtGps($row['start_lat'] ?? null, $row['start_lng'] ?? null), ENT_QUOTES, 'UTF-8') ?>
-                            </td>
-                            <td class="whitespace-nowrap text-xs text-zinc-400 font-mono">
-                                <?= htmlspecialchars(fmtGps($row['end_lat'] ?? null, $row['end_lng'] ?? null), ENT_QUOTES, 'UTF-8') ?>
+                                <div><?= htmlspecialchars(fmtGps($row['start_lat'] ?? null, $row['start_lng'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+                                <div><?= htmlspecialchars(fmtGps($row['end_lat'] ?? null, $row['end_lng'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
                             </td>
                             <td>
                                 <?php if ($row['status'] === 'complete'): ?>
