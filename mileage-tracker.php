@@ -82,6 +82,26 @@ function fmtVehicle(array $row): string
     return $parts !== [] ? implode(' • ', $parts) : '—';
 }
 
+function fmtVehicleHtml(array $row): string
+{
+    $name  = trim((string) ($row['vehicle_name'] ?? ''));
+    $ym    = trim((string) trim(($row['vehicle_year'] ?? '') . ' ' . ($row['vehicle_make'] ?? '') . ' ' . ($row['vehicle_model'] ?? '')));
+    $plate = trim((string) ($row['vehicle_license_plate'] ?? ''));
+
+    $lines = [];
+    if ($name !== '') {
+        $lines[] = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+    }
+    if ($ym !== '') {
+        $lines[] = htmlspecialchars($ym, ENT_QUOTES, 'UTF-8');
+    }
+    if ($plate !== '') {
+        $lines[] = 'Plate: ' . htmlspecialchars($plate, ENT_QUOTES, 'UTF-8');
+    }
+
+    return $lines !== [] ? implode('<br>', $lines) : '—';
+}
+
 $adminUsername = trim((string) ($_SESSION['admin_username'] ?? 'Admin'));
 if ($adminUsername === '') {
     $adminUsername = 'Admin';
@@ -777,7 +797,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <div class="text-xs text-zinc-400 font-mono">Job #<?= (int) $row['service_request_id'] ?></div>
                             </td>
                             <td class="max-w-xs text-zinc-300" style="min-width:200px;">
-                                <?= htmlspecialchars(fmtVehicle($row), ENT_QUOTES, 'UTF-8') ?>
+                                <?= fmtVehicleHtml($row) ?>
                             </td>
                             <td class="max-w-xs text-zinc-300" style="min-width:160px;">
                                 <?= htmlspecialchars($row['address'] ?: '—', ENT_QUOTES, 'UTF-8') ?>
