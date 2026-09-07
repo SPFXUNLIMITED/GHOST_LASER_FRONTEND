@@ -18,6 +18,7 @@
                 </p>
             </div>
             <div class="flex items-center gap-5">
+                <a href="/machines.php" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Machines</a>
                 <a href="/#services" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Services</a>
                 <a href="/#contact" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">Contact</a>
                 <a href="/sms-opt-in.php" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">SMS Terms</a>
