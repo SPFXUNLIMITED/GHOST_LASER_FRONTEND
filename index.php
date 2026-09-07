@@ -25,6 +25,7 @@ $extraHead       = <<<'HTML'
 HTML;
 $headerRight     = <<<HTML
                 <nav class="hidden md:flex items-center gap-8">
+                    <a href="/machines.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Machines</a>
                     <a href="#services" class="text-sm text-zinc-400 hover:text-white transition-colors">Services</a>
                     <a href="#why-us" class="text-sm text-zinc-400 hover:text-white transition-colors">Why Us</a>
                     <a href="#process" class="text-sm text-zinc-400 hover:text-white transition-colors">Process</a>
@@ -52,6 +53,7 @@ $headerMobileMenu = <<<HTML
         <!-- Mobile menu -->
         <div id="mobile-menu" class="hidden md:hidden border-t border-zinc-800/60 bg-zinc-950/95">
             <div class="px-6 py-4 flex flex-col gap-4">
+                <a href="/machines.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Machines</a>
                 <a href="#services" class="text-sm text-zinc-400 hover:text-white transition-colors">Services</a>
                 <a href="#why-us" class="text-sm text-zinc-400 hover:text-white transition-colors">Why Us</a>
                 <a href="#process" class="text-sm text-zinc-400 hover:text-white transition-colors">Process</a>
