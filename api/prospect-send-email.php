@@ -56,7 +56,7 @@ $SMTP_PORT = (int) ($_ENV['SMTP_PORT'] ?? 0);
 $SMTP_USERNAME = (string) ($_ENV['SMTP_USERNAME'] ?? '');
 $SMTP_PASSWORD = (string) ($_ENV['SMTP_PASSWORD'] ?? '');
 $SMTP_FROM_EMAIL = (string) ($_ENV['SMTP_FROM_EMAIL'] ?? '');
-$SMTP_FROM_NAME = (string) ($_ENV['SMTP_FORMAT_NAME'] ?? '');
+$SMTP_FROM_NAME = (string) ($_ENV['SMTP_FROM_NAME'] ?? '');
 
 prospectsEnsureSchema($pdo);
 
