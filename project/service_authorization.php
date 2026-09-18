@@ -198,17 +198,8 @@ function serviceAuthorizationBuildScopeOfWork(PDO $pdo, array $job): string
     return implode("\n\n", $parts);
 }
 
-function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId, bool $requireScheduledAccess = false): ?array
+function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId): ?array
 {
-    $accessClause = $requireScheduledAccess
-        ? " AND EXISTS (
-                SELECT 1
-                FROM scheduled_cluster_jobs scj
-                JOIN scheduled_clusters sc ON sc.id = scj.scheduled_cluster_id
-                WHERE scj.service_request_id = sr.id
-                LIMIT 1
-            )"
-        : '';
     $stmt = $pdo->prepare(
         "SELECT
             sr.id,
@@ -233,7 +224,6 @@ function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId, bool $req
          FROM service_requests sr
          LEFT JOIN customers c ON c.id = sr.customer_id
          WHERE sr.id = :id
-         {$accessClause}
          LIMIT 1"
     );
     $stmt->execute([':id' => $serviceRequestId]);
