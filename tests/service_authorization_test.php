@@ -186,7 +186,7 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     ]);
 
     ghostLaserAuthAssertSame(
-        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU Check belt wear.\n\nJob description: Machine shuts down after five minutes.",
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU Check belt wear\n\nJob description: Machine shuts down after five minutes.",
         $text,
         'Completion certificate should insert technician notes once and immediately after the issue summary block'
     );
@@ -214,7 +214,7 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     ]);
 
     ghostLaserAuthAssertSame(
-        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Fresh note from request.\n\nJob description: Machine shuts down after five minutes.",
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Fresh note from request\n\nJob description: Machine shuts down after five minutes.",
         $text,
         'Completion certificate should replace legacy technician notes blocks instead of duplicating them'
     );

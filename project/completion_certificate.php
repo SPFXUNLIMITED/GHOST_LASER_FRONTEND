@@ -384,7 +384,7 @@ function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeTex
     $blocks = array_values(array_filter(
         $blocks,
         static fn ($block): bool => trim((string) $block) !== ''
-            && !preg_match('/^Technician notes\s*\n/i', trim((string) $block))
+            && !preg_match('/^Technician notes:?\s*\n/i', trim((string) $block))
     ));
 
     return implode("\n\n", $blocks);
@@ -395,10 +395,6 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
     $scopeText = trim(str_replace(["\r\n", "\r"], "\n", (string) ($certificate['scope_of_work'] ?? '')));
     $notesValue = serviceAuthorizationNormalizeWhitespace(str_replace("\n", ' ', str_replace("\r", "\n", (string) ($certificate['technician_notes'] ?? ''))));
     $technicianNotes = $notesValue === '' ? '' : 'Technician notes: ' . $notesValue;
-    if ($technicianNotes !== '' && !preg_match('/[.!?]$/', $technicianNotes)) {
-        $technicianNotes .= '.';
-    }
-
     if ($scopeText === '' || $technicianNotes === '') {
         return $scopeText;
     }
