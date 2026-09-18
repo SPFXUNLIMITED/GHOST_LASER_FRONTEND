@@ -107,7 +107,6 @@ try {
         JOIN service_requests sr ON sr.id = scj.service_request_id
         LEFT JOIN customers c ON c.id = sr.customer_id
         WHERE sc.scheduled_date = :date
-          AND (sc.created_by_admin_id = :admin_id OR sc.created_by_admin_id IS NULL)
         ORDER BY
             FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
             sc.cluster_label ASC,
@@ -118,7 +117,6 @@ try {
         $setScheduleQueryError($pdo->errorInfo());
     } elseif (!$scheduledJobsStmt->execute([
         ':date' => $dateKey,
-        ':admin_id' => technicianDashboardAdminId(),
     ])) {
         $setScheduleQueryError($scheduledJobsStmt->errorInfo());
     } else {
