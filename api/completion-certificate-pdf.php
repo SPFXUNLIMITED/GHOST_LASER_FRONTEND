@@ -46,6 +46,8 @@ try {
     header('Content-Disposition: attachment; filename="' . basename($pdf['filename']) . '"');
     header('Content-Length: ' . strlen($pdf['content']));
     header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
     echo $pdf['content'];
 } catch (RuntimeException $e) {
     $isMissing = $e->getMessage() === 'Completion certificate record not found.';
