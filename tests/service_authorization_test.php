@@ -518,6 +518,38 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     }
 })();
 
+// --- 22b. Completion certificate photo appendix still renders without TTF fonts ---
+(function (): void {
+    $photoDir = __DIR__ . '/../uploads/service-authorizations/job-photos';
+    if (!is_dir($photoDir) && !mkdir($photoDir, 0775, true) && !is_dir($photoDir)) {
+        throw new RuntimeException('Unable to create no-font photo test directory.');
+    }
+
+    $photoPath = $photoDir . '/test-job-photo-no-font.png';
+    $image = imagecreatetruecolor(8, 8);
+    $fill = imagecolorallocate($image, 82, 82, 91);
+    imagefilledrectangle($image, 0, 0, 7, 7, $fill);
+    imagepng($image, $photoPath);
+    imagedestroy($image);
+
+    try {
+        $jpegPages = completionCertificateRenderPhotoJpegs([
+            'job_photos' => json_encode([
+                'uploads/service-authorizations/job-photos/test-job-photo-no-font.png',
+            ]),
+        ], '', '');
+
+        ghostLaserAuthAssert(
+            count($jpegPages) === 1,
+            'Completion certificate photo appendix should still render when font paths are unavailable'
+        );
+    } finally {
+        if (is_file($photoPath)) {
+            unlink($photoPath);
+        }
+    }
+})();
+
 // --- 23. Job photo API helper returns success payloads for uploads ---
 (function (): void {
     $pdo = ghostLaserMakeTestPdo([

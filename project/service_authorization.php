@@ -606,21 +606,49 @@ function serviceAuthorizationFetchJobPhotoState(PDO $pdo, int $serviceRequestId,
     return $row ?: null;
 }
 
-function serviceAuthorizationDeleteStoredFileIfPresent(?string $relativePath): void
+function serviceAuthorizationDeleteStoredPathIfPresent(?string $relativePath, array $allowedPrefixes): void
 {
     $relativePath = trim((string) $relativePath);
     if ($relativePath === '') {
         return;
     }
 
+    $normalizedPath = ltrim(str_replace('\\', '/', $relativePath), '/');
+    $isAllowed = false;
+    foreach ($allowedPrefixes as $prefix) {
+        if (strpos($normalizedPath, $prefix) === 0) {
+            $isAllowed = true;
+            break;
+        }
+    }
+    if (!$isAllowed) {
+        error_log('serviceAuthorizationDeleteStoredPathIfPresent skipped unexpected path: ' . $normalizedPath);
+        return;
+    }
+
     try {
-        $absolutePath = serviceAuthorizationResolveStoragePath($relativePath);
+        $absolutePath = serviceAuthorizationResolveStoragePath($normalizedPath);
         if (is_file($absolutePath)) {
             @unlink($absolutePath);
         }
     } catch (Throwable $e) {
-        error_log('serviceAuthorizationDeleteStoredFileIfPresent cleanup error: ' . $e->getMessage());
+        error_log('serviceAuthorizationDeleteStoredPathIfPresent cleanup error: ' . $e->getMessage());
     }
+}
+
+function serviceAuthorizationDeleteStoredJobPhotoIfPresent(?string $relativePath): void
+{
+    serviceAuthorizationDeleteStoredPathIfPresent($relativePath, [
+        'uploads/service-authorizations/job-photos/',
+        'uploads/service-authorizations/tmp/',
+    ]);
+}
+
+function serviceAuthorizationDeleteStoredCompletionCertificateIfPresent(?string $relativePath): void
+{
+    serviceAuthorizationDeleteStoredPathIfPresent($relativePath, [
+        'uploads/service-authorizations/completion-certificates/',
+    ]);
 }
 
 function serviceAuthorizationPublishStoredJobPhotos(array $storedPaths, array $createdPaths): array
@@ -811,7 +839,7 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
         throw $e;
     }
 
-    serviceAuthorizationDeleteStoredFileIfPresent($previousCertificatePath);
+    serviceAuthorizationDeleteStoredCompletionCertificateIfPresent($previousCertificatePath);
 
     return [
         'service_request_id' => $serviceRequestId,
@@ -867,8 +895,8 @@ function serviceAuthorizationRemoveJobPhoto(PDO $pdo, int $serviceRequestId, str
         throw $e;
     }
 
-    serviceAuthorizationDeleteStoredFileIfPresent($photoPath);
-    serviceAuthorizationDeleteStoredFileIfPresent($previousCertificatePath);
+    serviceAuthorizationDeleteStoredJobPhotoIfPresent($photoPath);
+    serviceAuthorizationDeleteStoredCompletionCertificateIfPresent($previousCertificatePath);
 
     return [
         'service_request_id' => $serviceRequestId,

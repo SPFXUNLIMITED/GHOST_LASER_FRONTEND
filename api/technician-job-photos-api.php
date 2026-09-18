@@ -23,8 +23,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/../project/db.php';
 require_once __DIR__ . '/../project/service_authorization.php';
 
-$body = json_decode(file_get_contents('php://input'), true);
-if (!is_array($body)) {
+$contentType = strtolower(trim((string) ($_SERVER['CONTENT_TYPE'] ?? '')));
+$contentType = explode(';', $contentType)[0];
+$body = [];
+if ($contentType === 'application/json') {
+    $rawBody = file_get_contents('php://input');
+    $decodedBody = json_decode($rawBody, true);
+    if ($rawBody !== false && trim($rawBody) !== '' && !is_array($decodedBody)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid JSON body']);
+        exit;
+    }
+    $body = is_array($decodedBody) ? $decodedBody : [];
+} else {
     $body = $_POST;
 }
 

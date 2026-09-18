@@ -384,7 +384,7 @@ function completionCertificateCollectRenderablePhotos(array $certificate): array
     return $photos;
 }
 
-function completionCertificateRenderPhotoJpegs(array $certificate): array
+function completionCertificateRenderPhotoJpegs(array $certificate, ?string $titleFont = null, ?string $bodyFont = null): array
 {
     $photos = completionCertificateCollectRenderablePhotos($certificate);
     if ($photos === []) {
@@ -396,8 +396,8 @@ function completionCertificateRenderPhotoJpegs(array $certificate): array
     $marginX = 90;
     $topMargin = 110;
     $bottomMargin = 90;
-    $titleFont = serviceAuthorizationFontPath(true);
-    $bodyFont = serviceAuthorizationFontPath(false);
+    $titleFont = $titleFont === '' ? null : ($titleFont ?? serviceAuthorizationFontPath(true));
+    $bodyFont = $bodyFont === '' ? null : ($bodyFont ?? serviceAuthorizationFontPath(false));
     $jpegPages = [];
     $totalPhotos = count($photos);
 
