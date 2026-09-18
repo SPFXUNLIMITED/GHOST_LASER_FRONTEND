@@ -356,6 +356,20 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 18. Inline technician note dedupe accepts missing colon variants ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate should deduplicate inline technician notes blocks even when the colon is missing'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {

@@ -445,11 +445,15 @@ function completionCertificateIsStructuredIssueSummaryBlock(string $block): bool
 function completionCertificateNormalizeInlineTechnicianNotesBlock(string $block): ?string
 {
     $block = trim(str_replace(["\r\n", "\r"], "\n", $block));
-    if ($block === '' || str_contains($block, "\n") || stripos($block, 'Technician notes:') !== 0) {
+    if ($block === '' || str_contains($block, "\n")) {
         return null;
     }
 
-    $value = serviceAuthorizationNormalizeWhitespace(substr($block, strlen('Technician notes:')));
+    if (!preg_match('/^Technician notes:?\s*(.*)$/i', $block, $matches)) {
+        return null;
+    }
+
+    $value = serviceAuthorizationNormalizeWhitespace((string) ($matches[1] ?? ''));
     if ($value === '') {
         return 'Technician notes:';
     }
