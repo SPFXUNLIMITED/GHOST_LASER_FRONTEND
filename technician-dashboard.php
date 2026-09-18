@@ -21,7 +21,6 @@ require_once __DIR__ . '/scheduling_settings.php';
 require_once __DIR__ . '/mileage_schema.php';
 
 ensureMileageVehicleSchema($pdo);
-ensureServiceAuthorizationSchema($pdo);
 
 // ── Date navigation ────────────────────────────────────────────────────────
 $dateParam = trim((string) ($_GET['date'] ?? ''));
@@ -103,7 +102,12 @@ foreach ($rawJobs as $job) {
 }
 $clusters = array_values($clusters);
 $jobIdsForAuthorizations = !empty($rawJobs) ? array_map('intval', array_column($rawJobs, 'service_request_id')) : [];
-$serviceAuthorizations   = serviceAuthorizationFetchLatestByJobIds($pdo, $jobIdsForAuthorizations);
+$serviceAuthorizations   = [];
+try {
+    $serviceAuthorizations = serviceAuthorizationFetchLatestByJobIds($pdo, $jobIdsForAuthorizations);
+} catch (Throwable $e) {
+    $serviceAuthorizations = [];
+}
 
 // ── Load scheduling settings (provides shop_address for Returning Home card) ─
 $schedSettings = getSchedulingSettings($pdo);
@@ -1848,11 +1852,6 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         authCanvas.addEventListener('pointermove', authorizationMoveDrawing);
         authCanvas.addEventListener('pointerup', authorizationStopDrawing);
         authCanvas.addEventListener('pointercancel', authorizationStopDrawing);
-        window.addEventListener('resize', function () {
-            if (authModal.classList.contains('open')) {
-                resizeAuthorizationCanvas();
-            }
-        });
     }
 
     if (authClearBtn) {

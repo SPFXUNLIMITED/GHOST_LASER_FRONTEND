@@ -22,8 +22,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 require_once __DIR__ . '/../project/db.php';
 require_once __DIR__ . '/../project/service_authorization.php';
 
-ensureServiceAuthorizationSchema($pdo);
-
 $authorizationId = (int) ($_GET['authorization_id'] ?? 0);
 if ($authorizationId <= 0) {
     http_response_code(400);

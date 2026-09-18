@@ -347,10 +347,15 @@ function serviceAuthorizationResolveSignaturePath(string $relativePath): string
 {
     $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
     $baseRoot     = realpath(dirname(__DIR__));
+    $uploadsRoot  = realpath(serviceAuthorizationStorageRoot());
     $absolutePath = $baseRoot . '/' . $relativePath;
     $resolved     = realpath($absolutePath);
 
-    if ($resolved === false || strpos($resolved, $baseRoot . '/uploads/service-authorizations/') !== 0) {
+    if (
+        $resolved === false ||
+        $uploadsRoot === false ||
+        ($resolved !== $uploadsRoot && strpos($resolved, $uploadsRoot . DIRECTORY_SEPARATOR) !== 0)
+    ) {
         throw new RuntimeException('Signature file is unavailable.');
     }
 
