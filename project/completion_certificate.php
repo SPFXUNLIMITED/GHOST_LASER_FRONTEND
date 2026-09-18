@@ -383,8 +383,15 @@ function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeTex
     $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
     $blocks = array_values(array_filter(
         $blocks,
-        static fn ($block): bool => trim((string) $block) !== ''
-            && !preg_match('/^Technician notes:?(?:\s*\n|$)/i', trim((string) $block))
+        static function ($block): bool {
+            $block = trim((string) $block);
+            if ($block === '') {
+                return false;
+            }
+
+            $firstLine = strtolower(trim(strtok($block, "\n")));
+            return $firstLine !== 'technician notes' && $firstLine !== 'technician notes:';
+        }
     ));
 
     return implode("\n\n", $blocks);
