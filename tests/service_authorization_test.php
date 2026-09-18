@@ -260,6 +260,20 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 11. Technician notes still render when scope text is otherwise empty ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => '',
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        'Technician notes: Bring replacement PSU',
+        $text,
+        'Completion certificate should still render technician notes when no other scope text exists'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {

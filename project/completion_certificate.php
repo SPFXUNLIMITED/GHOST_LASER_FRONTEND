@@ -402,7 +402,11 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
     $scopeText = trim(str_replace(["\r\n", "\r"], "\n", (string) ($certificate['scope_of_work'] ?? '')));
     $notesValue = serviceAuthorizationNormalizeWhitespace(str_replace("\n", ' ', str_replace("\r", "\n", (string) ($certificate['technician_notes'] ?? ''))));
     $technicianNotes = $notesValue === '' ? '' : 'Technician notes: ' . $notesValue;
-    if ($scopeText === '' || $technicianNotes === '') {
+    if ($scopeText === '') {
+        return $technicianNotes;
+    }
+
+    if ($technicianNotes === '') {
         return $scopeText;
     }
 
