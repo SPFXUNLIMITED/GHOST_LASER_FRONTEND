@@ -408,6 +408,7 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
     $scopeText = trim(str_replace(["\r\n", "\r"], "\n", (string) ($certificate['scope_of_work'] ?? '')));
     $notesValue = serviceAuthorizationNormalizeWhitespace(str_replace("\n", ' ', str_replace("\r", "\n", (string) ($certificate['technician_notes'] ?? ''))));
     $technicianNotes = $notesValue === '' ? '' : 'Technician notes: ' . $notesValue;
+    $normalizedTechnicianNotes = completionCertificateNormalizeInlineTechnicianNotesBlock($technicianNotes);
     if ($scopeText === '') {
         return $technicianNotes;
     }
@@ -420,7 +421,7 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
     $blocks = array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== ''));
     $blocks = array_values(array_filter(
         $blocks,
-        static fn ($block): bool => completionCertificateNormalizeInlineTechnicianNotesBlock((string) $block) !== $technicianNotes
+        static fn ($block): bool => completionCertificateNormalizeInlineTechnicianNotesBlock((string) $block) !== $normalizedTechnicianNotes
     ));
     foreach ($blocks as $index => $block) {
         if (completionCertificateIsStructuredIssueSummaryBlock((string) $block)) {
