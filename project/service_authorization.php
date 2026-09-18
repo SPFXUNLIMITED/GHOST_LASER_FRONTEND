@@ -44,6 +44,28 @@ function ensureServiceAuthorizationSchema(PDO $pdo): void
     if ((int) $requestIndexExistsStmt->fetchColumn() === 0) {
         $pdo->exec("ALTER TABLE service_authorizations ADD INDEX idx_service_authorizations_request (service_request_id)");
     }
+
+    $signedByTechnicianIdExistsStmt = $pdo->query("
+        SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'service_authorizations'
+          AND COLUMN_NAME = 'signed_by_technician_id'
+    ");
+    if ((int) $signedByTechnicianIdExistsStmt->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE service_authorizations ADD COLUMN signed_by_technician_id INT UNSIGNED NULL AFTER signed_longitude");
+    }
+
+    $signedByTechnicianLabelExistsStmt = $pdo->query("
+        SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'service_authorizations'
+          AND COLUMN_NAME = 'signed_by_technician_label'
+    ");
+    if ((int) $signedByTechnicianLabelExistsStmt->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE service_authorizations ADD COLUMN signed_by_technician_label VARCHAR(120) NOT NULL DEFAULT '' AFTER signed_by_technician_id");
+    }
 }
 
 function serviceAuthorizationSummaryLine(): string
@@ -312,7 +334,16 @@ function serviceAuthorizationWriteTempSignature(string $tempPath, string $binary
     }
 }
 
-function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
+function serviceAuthorizationSave(
+    PDO $pdo,
+    int $serviceRequestId,
+    string $signatureDataUrl,
+    ?float $latitude,
+    ?float $longitude,
+    ?string $signedAtInput,
+    ?int $signedByTechnicianId = null,
+    ?string $signedByTechnicianLabel = null
+): array
 {
     $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
     if (!$job) {
@@ -338,9 +369,9 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
 
         $stmt = $pdo->prepare(
             "INSERT INTO service_authorizations
-                (service_request_id, agreement_type, agreement_summary, scope_of_work, signature_path, signature_sha256, signed_at, signed_latitude, signed_longitude)
+                (service_request_id, agreement_type, agreement_summary, scope_of_work, signature_path, signature_sha256, signed_at, signed_latitude, signed_longitude, signed_by_technician_id, signed_by_technician_label)
              VALUES
-                (:service_request_id, 'service_authorization', :agreement_summary, :scope_of_work, :signature_path, :signature_sha256, :signed_at, :signed_latitude, :signed_longitude)"
+                (:service_request_id, 'service_authorization', :agreement_summary, :scope_of_work, :signature_path, :signature_sha256, :signed_at, :signed_latitude, :signed_longitude, :signed_by_technician_id, :signed_by_technician_label)"
         );
         $stmt->execute([
             ':service_request_id' => $serviceRequestId,
@@ -351,6 +382,8 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
             ':signed_at'          => $signedAt,
             ':signed_latitude'    => $latitude,
             ':signed_longitude'   => $longitude,
+            ':signed_by_technician_id' => $signedByTechnicianId !== null && $signedByTechnicianId > 0 ? $signedByTechnicianId : null,
+            ':signed_by_technician_label' => trim((string) ($signedByTechnicianLabel ?? '')),
         ]);
         $authorizationId = (int) $pdo->lastInsertId();
 
@@ -609,7 +642,16 @@ function serviceAuthorizationRenderPages(array $authorization): array
         ? sprintf('GPS: %.6f, %.6f', (float) $lat, (float) $lng)
         : 'GPS: Not captured';
     serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $stampX, $boxY + 92, $muted, $gpsText, 3);
-    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $stampX, $boxY + 126, $muted, 'Agreement: Service Authorization', 3);
+    $capturedByLabel = trim((string) ($authorization['signed_by_technician_label'] ?? ''));
+    if ($capturedByLabel === '') {
+        $capturedByTechnicianId = (int) ($authorization['signed_by_technician_id'] ?? 0);
+        if ($capturedByTechnicianId > 0) {
+            $capturedByLabel = 'Technician #' . $capturedByTechnicianId;
+        } else {
+            $capturedByLabel = 'Technician';
+        }
+    }
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $stampX, $boxY + 126, $muted, 'Captured by: ' . $capturedByLabel, 3);
 
     $pages[] = $page['image'];
 
