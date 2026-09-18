@@ -65,6 +65,27 @@ function completionCertificateFetchLatestByServiceRequestId(PDO $pdo, int $servi
     return $row ?: null;
 }
 
+function completionCertificateHasPrerequisiteAuthorization(PDO $pdo, int $serviceRequestId): bool
+{
+    if ($serviceRequestId <= 0) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT 1
+         FROM service_authorizations
+         WHERE service_request_id = :service_request_id
+           AND agreement_type = 'service_authorization'
+         ORDER BY id DESC
+         LIMIT 1"
+    );
+    $stmt->execute([
+        ':service_request_id' => $serviceRequestId,
+    ]);
+
+    return (bool) $stmt->fetchColumn();
+}
+
 function completionCertificatePrepareSignaturePaths(int $serviceRequestId): array
 {
     serviceAuthorizationEnsureDirectory(serviceAuthorizationSignatureRoot());
@@ -340,12 +361,7 @@ function completionCertificateWritePdfFile(int $serviceRequestId, string $pdfBin
 {
     serviceAuthorizationEnsureDirectory(completionCertificatePdfRoot());
 
-    $fileName = sprintf(
-        'completion-certificate-%d-%s-%s.pdf',
-        $serviceRequestId,
-        gmdate('YmdHis'),
-        bin2hex(random_bytes(6))
-    );
+    $fileName = sprintf('completion-certificate-%d.pdf', $serviceRequestId);
     $relativePath = 'uploads/service-authorizations/completion-certificates/' . $fileName;
     $absolutePath = dirname(__DIR__) . '/' . $relativePath;
 
@@ -358,7 +374,6 @@ function completionCertificateWritePdfFile(int $serviceRequestId, string $pdfBin
 
 function completionCertificatePersistFilePath(PDO $pdo, int $serviceRequestId, string $relativePath): void
 {
-    $previousPath = completionCertificateFetchStoredFilePath($pdo, $serviceRequestId);
     $stmt = $pdo->prepare(
         "UPDATE service_requests
          SET completion_certificate = :completion_certificate
@@ -369,16 +384,6 @@ function completionCertificatePersistFilePath(PDO $pdo, int $serviceRequestId, s
         ':completion_certificate' => $relativePath,
         ':id' => $serviceRequestId,
     ]);
-
-    if ($previousPath !== null && $previousPath !== $relativePath) {
-        try {
-            $resolvedOldPath = completionCertificateResolvePdfPath($previousPath);
-            if (is_file($resolvedOldPath)) {
-                @unlink($resolvedOldPath);
-            }
-        } catch (Throwable $e) {
-        }
-    }
 }
 
 function completionCertificateResolvePdfPath(string $relativePath): string

@@ -64,6 +64,12 @@ if (!technicianDashboardCanAccessServiceRequest($pdo, $serviceRequestId)) {
     exit;
 }
 
+if (!completionCertificateHasPrerequisiteAuthorization($pdo, $serviceRequestId)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Service authorization is required before generating a completion certificate.']);
+    exit;
+}
+
 if ($latitude === null || $longitude === null || $latitude === false || $longitude === false) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Valid GPS coordinates are required when signing.']);
