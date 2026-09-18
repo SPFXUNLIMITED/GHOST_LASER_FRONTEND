@@ -454,10 +454,11 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     }
 
     $photoPath = $photoDir . '/test-job-photo.png';
-    file_put_contents(
-        $photoPath,
-        base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5LmioAAAAASUVORK5CYII=', true)
-    );
+    $image = imagecreatetruecolor(8, 8);
+    $fill = imagecolorallocate($image, 24, 24, 27);
+    imagefilledrectangle($image, 0, 0, 7, 7, $fill);
+    imagepng($image, $photoPath);
+    imagedestroy($image);
 
     try {
         $jpegPages = completionCertificateRenderPhotoJpegs([
