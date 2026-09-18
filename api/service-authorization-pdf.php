@@ -25,18 +25,10 @@ require_once __DIR__ . '/../project/db.php';
 require_once __DIR__ . '/../project/service_authorization.php';
 
 $authorizationId = (int) ($_GET['authorization_id'] ?? 0);
-$downloadToken   = (string) ($_GET['token'] ?? '');
 if ($authorizationId <= 0) {
     http_response_code(400);
     header('Content-Type: text/plain; charset=UTF-8');
     echo 'Missing authorization_id';
-    exit;
-}
-
-if (!serviceAuthorizationVerifyDownloadToken($authorizationId, $downloadToken)) {
-    http_response_code(403);
-    header('Content-Type: text/plain; charset=UTF-8');
-    echo 'Invalid download token.';
     exit;
 }
 
@@ -55,9 +47,10 @@ try {
     header('X-Content-Type-Options: nosniff');
     echo $pdf['content'];
 } catch (RuntimeException $e) {
-    http_response_code(404);
+    $isMissing = $e->getMessage() === 'Authorization record not found.';
+    http_response_code($isMissing ? 404 : 500);
     header('Content-Type: text/plain; charset=UTF-8');
-    echo $e->getMessage();
+    echo $isMissing ? 'Authorization not found.' : 'Unable to generate PDF.';
 } catch (Throwable $e) {
     http_response_code(500);
     header('Content-Type: text/plain; charset=UTF-8');

@@ -1,6 +1,5 @@
 <?php
 
-require_once dirname(__DIR__) . '/bootstrap_env.php';
 require_once __DIR__ . '/service_display.php';
 
 function ensureServiceAuthorizationSchema(PDO $pdo): void
@@ -39,56 +38,6 @@ function ensureServiceAuthorizationSchema(PDO $pdo): void
 function serviceAuthorizationSummaryLine(): string
 {
     return 'The customer authorizes the technician to perform the listed work described below.';
-}
-
-function serviceAuthorizationSessionKey(): string
-{
-    return hash('sha256', 'service-authorization|' . serviceAuthorizationSigningSecret());
-}
-
-function serviceAuthorizationSigningSecret(): string
-{
-    static $secret = null;
-    if ($secret !== null) {
-        return $secret;
-    }
-
-    foreach ([
-        getenv('SERVICE_AUTHORIZATION_SIGNING_KEY'),
-        getenv('APP_KEY'),
-        getenv('APP_SECRET'),
-        getenv('DB_PASSWORD'),
-    ] as $candidate) {
-        $candidate = trim((string) $candidate);
-        if ($candidate !== '') {
-            $secret = $candidate;
-            return $secret;
-        }
-    }
-
-    throw new RuntimeException('A service authorization signing secret must be configured.');
-}
-
-function serviceAuthorizationJobAccessToken(int $serviceRequestId): string
-{
-    return hash_hmac('sha256', 'job:' . $serviceRequestId, serviceAuthorizationSessionKey());
-}
-
-function serviceAuthorizationVerifyJobAccessToken(int $serviceRequestId, string $token): bool
-{
-    $token = trim($token);
-    return $token !== '' && hash_equals(serviceAuthorizationJobAccessToken($serviceRequestId), $token);
-}
-
-function serviceAuthorizationDownloadToken(int $authorizationId): string
-{
-    return hash_hmac('sha256', 'authorization:' . $authorizationId, serviceAuthorizationSessionKey());
-}
-
-function serviceAuthorizationVerifyDownloadToken(int $authorizationId, string $token): bool
-{
-    $token = trim($token);
-    return $token !== '' && hash_equals(serviceAuthorizationDownloadToken($authorizationId), $token);
 }
 
 function serviceAuthorizationClauses(): array
@@ -371,26 +320,12 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
     $startedTransaction = false;
     $authorizationId = 0;
     $pendingSignaturePath = $signaturePaths['relative'] . '.tmp';
-    $previousSignaturePath = null;
-    $createdNewRecord = false;
 
     try {
         if (!$pdo->inTransaction()) {
             $pdo->beginTransaction();
             $startedTransaction = true;
         }
-
-        $existingStmt = $pdo->prepare(
-            "SELECT id, signature_path
-             FROM service_authorizations
-             WHERE service_request_id = :service_request_id
-               AND agreement_type = 'service_authorization'
-             LIMIT 1"
-        );
-        $existingStmt->execute([':service_request_id' => $serviceRequestId]);
-        $existingRow = $existingStmt->fetch(PDO::FETCH_ASSOC) ?: null;
-        $previousSignaturePath = $existingRow['signature_path'] ?? null;
-        $createdNewRecord = $existingRow === null;
 
         $stmt = $pdo->prepare(
             "INSERT INTO service_authorizations
@@ -447,29 +382,7 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
         if (is_file($signaturePaths['absolute'])) {
             @unlink($signaturePaths['absolute']);
         }
-        if ($createdNewRecord && $authorizationId > 0) {
-            try {
-                $delete = $pdo->prepare('DELETE FROM service_authorizations WHERE id = :id LIMIT 1');
-                $delete->execute([':id' => $authorizationId]);
-            } catch (Throwable $cleanupError) {
-            }
-        }
         throw $e;
-    }
-
-    if (
-        is_string($previousSignaturePath) &&
-        $previousSignaturePath !== '' &&
-        $previousSignaturePath !== $signaturePaths['relative'] &&
-        substr($previousSignaturePath, -4) !== '.tmp'
-    ) {
-        try {
-            $oldAbsolutePath = serviceAuthorizationResolveSignaturePath($previousSignaturePath);
-            if (is_file($oldAbsolutePath)) {
-                @unlink($oldAbsolutePath);
-            }
-        } catch (Throwable $cleanupError) {
-        }
     }
 
     return serviceAuthorizationFetchById($pdo, $authorizationId) ?? [];
