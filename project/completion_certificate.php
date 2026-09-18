@@ -266,7 +266,7 @@ function completionCertificateRenderPages(array $certificate): array
     $drawWrappedBlock($page, 'Service Request #: ' . (string) ($certificate['service_request_number'] ?? $certificate['service_request_id'] ?? ''), 14, 24, $muted, false, 0);
     $drawWrappedBlock($page, 'Completed: ' . serviceAuthorizationFormatSignedAtDisplay($certificate['signed_at'] ?? ''), 14, 24, $muted, false, 24);
     $drawWrappedBlock($page, 'Completed Work', 18, 30, $black, true, 4);
-    $drawWrappedBlock($page, (string) ($certificate['scope_of_work'] ?? ''), 15, 28, $black, false, 20);
+    $drawWrappedBlock($page, completionCertificateBuildCompletedWorkText($certificate), 15, 28, $black, false, 20);
     $drawWrappedBlock($page, 'Customer Acknowledgment', 18, 30, $black, true, 4);
 
     foreach (completionCertificateClauses() as $index => $clause) {
@@ -371,6 +371,26 @@ function completionCertificateGeneratePdf(PDO $pdo, int $authorizationId): array
         'content' => $pdfBinary,
         'certificate' => $certificate,
     ];
+}
+
+function completionCertificateBuildCompletedWorkText(array $certificate): string
+{
+    $scopeText = trim(str_replace(["\r\n", "\r"], "\n", (string) ($certificate['scope_of_work'] ?? '')));
+    $technicianNotes = trim(serviceAuthorizationEnsureSentence('Technician notes', (string) ($certificate['technician_notes'] ?? '')));
+    if ($scopeText === '' || $technicianNotes === '') {
+        return $scopeText;
+    }
+
+    $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
+    foreach ($blocks as $index => $block) {
+        if (stripos(trim($block), 'Issue summary:') === 0) {
+            array_splice($blocks, $index + 1, 0, [$technicianNotes]);
+            return implode("\n\n", $blocks);
+        }
+    }
+
+    $blocks[] = $technicianNotes;
+    return implode("\n\n", array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== '')));
 }
 
 function completionCertificatePdfRoot(): string

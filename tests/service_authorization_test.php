@@ -170,6 +170,34 @@ function ghostLaserAuthAssertNotContains(string $needle, string $haystack, strin
     );
 })();
 
+// --- 5. Completion certificate work text inserts technician notes after issue summary ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => "Bring replacement PSU\nCheck belt wear",
+    ]);
+
+    ghostLaserAuthAssertContains(
+        "Issue summary: Power issue.\n\nTechnician notes: Bring replacement PSU Check belt wear.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate should place technician notes immediately after the issue summary block'
+    );
+})();
+
+// --- 6. Blank technician notes do not add a completion certificate section ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => " \n ",
+    ]);
+
+    ghostLaserAuthAssertNotContains(
+        'Technician notes:',
+        $text,
+        'Blank technician notes should be omitted from completion certificate work text'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {

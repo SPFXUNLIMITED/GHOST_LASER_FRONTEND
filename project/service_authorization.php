@@ -457,6 +457,7 @@ function serviceAuthorizationFetchById(PDO $pdo, int $authorizationId): ?array
         "SELECT
             sa.*,
             sr.id AS service_request_number,
+            sr.technician_notes,
             COALESCE(NULLIF(TRIM(CONCAT(COALESCE(c.first_name, ''), ' ', COALESCE(c.last_name, ''))), ''), 'Customer') AS customer_name
          FROM service_authorizations sa
          JOIN service_requests sr ON sr.id = sa.service_request_id
