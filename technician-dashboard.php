@@ -16,6 +16,11 @@ if (!technicianDashboardHasAccess()) {
     exit;
 }
 
+if (empty($_SESSION['technician_dashboard_csrf'])) {
+    $_SESSION['technician_dashboard_csrf'] = bin2hex(random_bytes(16));
+}
+$technicianDashboardCsrf = (string) $_SESSION['technician_dashboard_csrf'];
+
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/project/service_display.php';
 require_once __DIR__ . '/project/service_authorization.php';
@@ -81,12 +86,16 @@ $scheduledJobsStmt = $pdo->prepare("
     JOIN service_requests sr ON sr.id = scj.service_request_id
     LEFT JOIN customers c ON c.id = sr.customer_id
     WHERE sc.scheduled_date = :date
+      AND sc.created_by_admin_id = :admin_id
     ORDER BY
         FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
         sc.cluster_label ASC,
         scj.time_window_start ASC
 ");
-$scheduledJobsStmt->execute([':date' => $dateKey]);
+$scheduledJobsStmt->execute([
+    ':date' => $dateKey,
+    ':admin_id' => technicianDashboardAdminId(),
+]);
 $rawJobs = $scheduledJobsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // ── Group jobs by cluster ─────────────────────────────────────────────────
@@ -1424,6 +1433,7 @@ require_once __DIR__ . '/templates/header.php';
 var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 var HAS_ACTIVE_VEHICLES = <?= $hasActiveVehicles ? 'true' : 'false' ?>;
 var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleId : 'null' ?>;
+var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
 
 <!-- ── Mileage Entry Modal ───────────────────────────────────────────────── -->
@@ -1952,6 +1962,7 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
                         signature_png: signaturePng,
                         signed_at: signedAt,
                         access_token: authState.btn ? (authState.btn.dataset.authorizeToken || '') : '',
+                        csrf_token: SERVICE_AUTH_CSRF,
                         latitude: coords.lat,
                         longitude: coords.lng
                     })

@@ -34,6 +34,7 @@ $serviceRequestId = (int) ($body['service_request_id'] ?? 0);
 $signature        = (string) ($body['signature_png'] ?? '');
 $signedAt         = isset($body['signed_at']) ? (string) $body['signed_at'] : null;
 $accessToken      = (string) ($body['access_token'] ?? '');
+$csrfToken        = (string) ($body['csrf_token'] ?? '');
 $latitude         = filter_var($body['latitude'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
 $longitude        = filter_var($body['longitude'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
 
@@ -52,6 +53,19 @@ if ($signature === '') {
 if (!serviceAuthorizationVerifyJobAccessToken($serviceRequestId, $accessToken)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'This job authorization request is no longer valid. Reload the dashboard and try again.']);
+    exit;
+}
+
+$sessionCsrf = (string) ($_SESSION['technician_dashboard_csrf'] ?? '');
+if ($sessionCsrf === '' || $csrfToken === '' || !hash_equals($sessionCsrf, $csrfToken)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Invalid security token. Reload the dashboard and try again.']);
+    exit;
+}
+
+if (!technicianDashboardCanAccessServiceRequest($pdo, $serviceRequestId)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'You do not have access to sign this job.']);
     exit;
 }
 

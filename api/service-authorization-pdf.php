@@ -40,6 +40,13 @@ if (!serviceAuthorizationVerifyDownloadToken($authorizationId, $downloadToken)) 
     exit;
 }
 
+if (!technicianDashboardCanAccessAuthorization($pdo, $authorizationId)) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo 'You do not have access to this authorization.';
+    exit;
+}
+
 try {
     $pdf = serviceAuthorizationGeneratePdf($pdo, $authorizationId);
     header('Content-Type: application/pdf');
