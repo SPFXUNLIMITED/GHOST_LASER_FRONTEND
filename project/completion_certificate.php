@@ -376,7 +376,11 @@ function completionCertificateGeneratePdf(PDO $pdo, int $authorizationId): array
 function completionCertificateBuildCompletedWorkText(array $certificate): string
 {
     $scopeText = trim(str_replace(["\r\n", "\r"], "\n", (string) ($certificate['scope_of_work'] ?? '')));
-    $technicianNotes = trim(serviceAuthorizationEnsureSentence('Technician notes', (string) ($certificate['technician_notes'] ?? '')));
+    $notesValue = serviceAuthorizationNormalizeWhitespace((string) ($certificate['technician_notes'] ?? ''));
+    $technicianNotes = $notesValue === '' ? '' : 'Technician notes: ' . $notesValue;
+    if ($technicianNotes !== '' && !preg_match('/[.!?]$/', $technicianNotes)) {
+        $technicianNotes .= '.';
+    }
     if ($scopeText === '' || $technicianNotes === '') {
         return $scopeText;
     }
