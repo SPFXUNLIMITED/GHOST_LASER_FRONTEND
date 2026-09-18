@@ -27,15 +27,21 @@ if (!is_array($body)) {
 $serviceRequestId = (int) ($body['service_request_id'] ?? 0);
 $action = strtolower(trim((string) ($body['action'] ?? 'upload')));
 $csrfToken = (string) ($body['csrf_token'] ?? '');
+$hasDashboardAccess = technicianDashboardHasAccess();
+$canAccessServiceRequest = $serviceRequestId > 0 && technicianDashboardCanAccessServiceRequest($pdo, $serviceRequestId);
+$job = ($hasDashboardAccess && $canAccessServiceRequest && $serviceRequestId > 0)
+    ? serviceAuthorizationFetchJob($pdo, $serviceRequestId)
+    : null;
+
 $response = serviceAuthorizationHandleJobPhotoApiRequest(
     $pdo,
-    technicianDashboardHasAccess(),
-    $serviceRequestId > 0 && technicianDashboardCanAccessServiceRequest($pdo, $serviceRequestId),
+    $hasDashboardAccess,
+    $canAccessServiceRequest,
     $serviceRequestId,
     $action,
     $csrfToken,
     (string) ($_SESSION['technician_dashboard_csrf'] ?? ''),
-    $serviceRequestId > 0 ? serviceAuthorizationFetchJob($pdo, $serviceRequestId) : null,
+    $job,
     serviceAuthorizationNormalizeUploadedFilesArray($_FILES['photos'] ?? null),
     isset($body['photo_path']) ? (string) $body['photo_path'] : null
 );

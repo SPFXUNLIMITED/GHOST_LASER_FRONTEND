@@ -952,6 +952,9 @@ $extraHead       = <<<'HTML'
             color: #a1a1aa;
         }
         .job-photo-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             flex-shrink: 0;
             min-height: 2.35rem;
             padding: 0.55rem 0.9rem;
@@ -962,13 +965,23 @@ $extraHead       = <<<'HTML'
             font-size: 0.78rem;
             font-weight: 700;
             cursor: pointer;
+            text-decoration: none;
         }
-        .job-photo-button:disabled {
+        .job-photo-button.is-disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            pointer-events: none;
         }
         .job-photo-input {
-            display: none;
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
         .job-photo-grid {
             display: grid;
@@ -1559,9 +1572,14 @@ require_once __DIR__ . '/templates/header.php';
                                         <div class="job-photo-copy">Capture or attach reference photos for the completion certificate.</div>
                                     </div>
                                     <?php if ($serviceRequestId > 0): ?>
-                                        <button type="button" class="job-photo-button" data-job-photo-picker="<?= $serviceRequestId ?>">Add photos</button>
+                                        <label
+                                            for="jobPhotoInput<?= $serviceRequestId ?>"
+                                            class="job-photo-button"
+                                            data-job-photo-picker="<?= $serviceRequestId ?>"
+                                        >Add photos</label>
                                         <input
                                             type="file"
+                                            id="jobPhotoInput<?= $serviceRequestId ?>"
                                             class="job-photo-input"
                                             data-job-photo-input="<?= $serviceRequestId ?>"
                                             accept="image/*"
@@ -2050,6 +2068,11 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
     function setJobPhotoBusy(jobId, busy) {
         jobPhotoBusyByJob[jobId] = busy;
         document.querySelectorAll('[data-job-photo-picker="' + jobId + '"], [data-job-photo-input="' + jobId + '"], [data-job-photo-remove="' + jobId + '"]').forEach(function (el) {
+            if (el.tagName === 'LABEL') {
+                el.classList.toggle('is-disabled', !!busy);
+                el.setAttribute('aria-disabled', busy ? 'true' : 'false');
+                return;
+            }
             el.disabled = !!busy;
         });
     }
@@ -3030,17 +3053,6 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
 
     // ── Attach listeners ──────────────────────────────────────────────────────
     document.addEventListener('click', function (e) {
-        var photoPickerBtn = e.target.closest('[data-job-photo-picker]');
-        if (photoPickerBtn) {
-            if (photoPickerBtn.disabled) return;
-            var pickerJobId = photoPickerBtn.dataset.jobPhotoPicker;
-            var photoInput = document.querySelector('[data-job-photo-input="' + pickerJobId + '"]');
-            if (photoInput && !photoInput.disabled) {
-                photoInput.click();
-            }
-            return;
-        }
-
         var photoRemoveBtn = e.target.closest('[data-job-photo-remove]');
         if (photoRemoveBtn) {
             if (photoRemoveBtn.disabled) return;

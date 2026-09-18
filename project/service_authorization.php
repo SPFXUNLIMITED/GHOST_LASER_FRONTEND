@@ -76,6 +76,11 @@ function serviceAuthorizationPhotoRoot(): string
     return serviceAuthorizationStorageRoot() . '/job-photos';
 }
 
+function serviceAuthorizationPhotoTempRoot(): string
+{
+    return serviceAuthorizationStorageRoot() . '/tmp';
+}
+
 function serviceAuthorizationEnsureDirectory(string $path): void
 {
     if (is_dir($path)) {
@@ -528,6 +533,7 @@ function serviceAuthorizationDecodeUploadedPhoto(array $file): array
 function serviceAuthorizationPreparePhotoPaths(int $serviceRequestId, string $extension): array
 {
     serviceAuthorizationEnsureDirectory(serviceAuthorizationPhotoRoot());
+    serviceAuthorizationEnsureDirectory(serviceAuthorizationPhotoTempRoot());
 
     $fileName = sprintf(
         'job-photo-%d-%s-%s.%s',
@@ -538,7 +544,7 @@ function serviceAuthorizationPreparePhotoPaths(int $serviceRequestId, string $ex
     );
     $relativePath = 'uploads/service-authorizations/job-photos/' . $fileName;
     $absolutePath = dirname(__DIR__) . '/' . $relativePath;
-    $tempPath = tempnam(sys_get_temp_dir(), 'gl-job-photo-');
+    $tempPath = tempnam(serviceAuthorizationPhotoTempRoot(), 'job-photo-');
     if ($tempPath === false) {
         throw new RuntimeException('Unable to prepare temporary photo storage.');
     }
@@ -632,7 +638,6 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
 
     $createdPaths = [];
     $startedTransaction = false;
-    $committedPhotoUpdate = false;
     $previousCertificatePath = null;
     $allPaths = [];
     try {
@@ -660,6 +665,10 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
             throw new InvalidArgumentException('Each job can have up to 20 photos.');
         }
 
+        foreach ($createdPaths as $pathSet) {
+            serviceAuthorizationFinalizeStoredPhoto($pathSet['temp'], $pathSet['absolute']);
+        }
+
         $allPaths = array_values(array_unique(array_merge(
             $existingPaths,
             array_column($createdPaths, 'relative')
@@ -670,39 +679,9 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
         if ($startedTransaction) {
             $pdo->commit();
         }
-        $committedPhotoUpdate = true;
-
-        foreach ($createdPaths as $pathSet) {
-            serviceAuthorizationFinalizeStoredPhoto($pathSet['temp'], $pathSet['absolute']);
-        }
     } catch (Throwable $e) {
         if ($startedTransaction && $pdo->inTransaction()) {
             $pdo->rollBack();
-        }
-        if ($committedPhotoUpdate && $allPaths !== []) {
-            try {
-                $cleanupTransaction = false;
-                if (!$pdo->inTransaction()) {
-                    $pdo->beginTransaction();
-                    $cleanupTransaction = true;
-                }
-                $state = serviceAuthorizationFetchJobPhotoState($pdo, $serviceRequestId, true);
-                if ($state) {
-                    $currentPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null);
-                    $currentPaths = array_values(array_filter(
-                        $currentPaths,
-                        static fn (string $path): bool => !in_array($path, array_column($createdPaths, 'relative'), true)
-                    ));
-                    serviceAuthorizationPersistJobPhotos($pdo, $serviceRequestId, $currentPaths);
-                }
-                if ($cleanupTransaction) {
-                    $pdo->commit();
-                }
-            } catch (Throwable $cleanupError) {
-                if ($cleanupTransaction && $pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-            }
         }
         foreach ($createdPaths as $path) {
             if (is_file($path['temp'] ?? '')) {
