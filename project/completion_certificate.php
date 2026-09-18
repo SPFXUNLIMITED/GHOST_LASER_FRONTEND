@@ -392,7 +392,7 @@ function completionCertificateResolvePdfPath(string $relativePath): string
     if (
         $resolved === false ||
         $uploadsRoot === false ||
-        ($resolved !== $uploadsRoot && strpos($resolved, $uploadsRoot . DIRECTORY_SEPARATOR) !== 0)
+        strpos($resolved, $uploadsRoot . DIRECTORY_SEPARATOR) !== 0
     ) {
         throw new RuntimeException('Stored completion certificate PDF is unavailable.');
     }
@@ -426,6 +426,25 @@ function completionCertificateGenerateAndStoreByServiceRequest(PDO $pdo, int $se
 {
     $certificate = completionCertificateFetchLatestByServiceRequestId($pdo, $serviceRequestId);
     if (!$certificate) {
+        throw new RuntimeException('Completion certificate record not found.');
+    }
+
+    return completionCertificateGenerateAndStoreById($pdo, (int) $certificate['id']);
+}
+
+function completionCertificateGenerateAndStoreById(PDO $pdo, int $authorizationId): array
+{
+    if ($authorizationId <= 0) {
+        throw new RuntimeException('Completion certificate record not found.');
+    }
+
+    $certificate = serviceAuthorizationFetchById($pdo, $authorizationId);
+    if (!$certificate || ($certificate['agreement_type'] ?? '') !== 'completion_certificate') {
+        throw new RuntimeException('Completion certificate record not found.');
+    }
+
+    $serviceRequestId = (int) ($certificate['service_request_id'] ?? 0);
+    if ($serviceRequestId <= 0) {
         throw new RuntimeException('Completion certificate record not found.');
     }
 

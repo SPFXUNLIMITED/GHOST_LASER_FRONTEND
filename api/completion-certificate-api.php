@@ -86,7 +86,7 @@ try {
         $signedAt,
         $scopeOfWork
     );
-    completionCertificateGenerateAndStoreByServiceRequest($pdo, $serviceRequestId);
+    completionCertificateGenerateAndStoreById($pdo, (int) ($certificate['id'] ?? 0));
 
     echo json_encode([
         'success' => true,
