@@ -9,7 +9,9 @@ session_set_cookie_params([
 ]);
 session_start();
 
-if (empty($_SESSION['admin_id'])) {
+require_once __DIR__ . '/project/technician_dashboard_auth.php';
+
+if (!technicianDashboardHasAccess()) {
     header('Location: admin-login.php');
     exit;
 }
@@ -1838,6 +1840,14 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         }
     }
 
+    function authorizationResetDrawingState() {
+        authState.drawing = false;
+        authState.pointerId = null;
+        if (authCtx) {
+            authCtx.closePath();
+        }
+    }
+
     function initTripStates() {
         var states = window.TRIP_STATES;
         if (!states) { return; }
@@ -1870,7 +1880,7 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         authCanvas.addEventListener('pointermove', authorizationMoveDrawing);
         authCanvas.addEventListener('pointerup', authorizationStopDrawing);
         authCanvas.addEventListener('pointercancel', authorizationStopDrawing);
-        authCanvas.addEventListener('lostpointercapture', authorizationStopDrawing);
+        authCanvas.addEventListener('lostpointercapture', authorizationResetDrawingState);
     }
 
     function syncAuthorizationCanvasToViewport() {

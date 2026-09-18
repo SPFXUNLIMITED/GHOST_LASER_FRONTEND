@@ -358,6 +358,8 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
     $summaryLine     = serviceAuthorizationSummaryLine();
     $signatureSha256 = hash('sha256', $signatureBinary);
     $startedTransaction = false;
+    $authorizationId = 0;
+    $pendingSignaturePath = $signaturePaths['relative'] . '.tmp';
 
     try {
         if (!$pdo->inTransaction()) {
@@ -375,20 +377,32 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
             ':service_request_id' => $serviceRequestId,
             ':agreement_summary'  => $summaryLine,
             ':scope_of_work'      => $scopeOfWork,
-            ':signature_path'     => $signaturePaths['relative'],
+            ':signature_path'     => $pendingSignaturePath,
             ':signature_sha256'   => $signatureSha256,
             ':signed_at'          => $signedAt,
             ':signed_latitude'    => $latitude,
             ':signed_longitude'   => $longitude,
         ]);
+        $authorizationId = (int) $pdo->lastInsertId();
+
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
 
         if (!rename($signaturePaths['temp'], $signaturePaths['absolute'])) {
             throw new RuntimeException('Unable to finalize signature image.');
         }
 
-        if ($startedTransaction) {
-            $pdo->commit();
-        }
+        $update = $pdo->prepare(
+            "UPDATE service_authorizations
+             SET signature_path = :signature_path
+             WHERE id = :id
+             LIMIT 1"
+        );
+        $update->execute([
+            ':signature_path' => $signaturePaths['relative'],
+            ':id' => $authorizationId,
+        ]);
     } catch (Throwable $e) {
         if ($startedTransaction && $pdo->inTransaction()) {
             $pdo->rollBack();
@@ -399,10 +413,17 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
         if (is_file($signaturePaths['absolute'])) {
             @unlink($signaturePaths['absolute']);
         }
+        if ($authorizationId > 0) {
+            try {
+                $delete = $pdo->prepare('DELETE FROM service_authorizations WHERE id = :id LIMIT 1');
+                $delete->execute([':id' => $authorizationId]);
+            } catch (Throwable $cleanupError) {
+            }
+        }
         throw $e;
     }
 
-    return serviceAuthorizationFetchById($pdo, (int) $pdo->lastInsertId()) ?? [];
+    return serviceAuthorizationFetchById($pdo, $authorizationId) ?? [];
 }
 
 function serviceAuthorizationFetchById(PDO $pdo, int $authorizationId): ?array

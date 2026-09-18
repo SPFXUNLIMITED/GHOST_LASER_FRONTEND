@@ -5,7 +5,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (empty($_SESSION['admin_id'])) {
+require_once __DIR__ . '/../project/technician_dashboard_auth.php';
+
+if (!technicianDashboardHasAccess()) {
     http_response_code(401);
     header('Content-Type: text/plain; charset=UTF-8');
     echo 'Unauthorized';

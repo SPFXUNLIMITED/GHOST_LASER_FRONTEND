@@ -5,10 +5,12 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once __DIR__ . '/../project/technician_dashboard_auth.php';
+
 header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
 
-if (empty($_SESSION['admin_id'])) {
+if (!technicianDashboardHasAccess()) {
     http_response_code(401);
     echo json_encode(['success' => false, 'error' => 'Unauthorized']);
     exit;
@@ -22,8 +24,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_once __DIR__ . '/../project/db.php';
 require_once __DIR__ . '/../project/service_authorization.php';
-
-ensureServiceAuthorizationSchema($pdo);
 
 $body = json_decode(file_get_contents('php://input'), true);
 if (!is_array($body)) {
