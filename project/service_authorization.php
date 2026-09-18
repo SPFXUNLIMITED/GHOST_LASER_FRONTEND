@@ -842,7 +842,7 @@ function serviceAuthorizationRemoveJobPhoto(PDO $pdo, int $serviceRequestId, str
             throw new RuntimeException('Service request not found.');
         }
 
-        $existingPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null);
+        $existingPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null, true);
         if (!in_array($photoPath, $existingPaths, true)) {
             throw new InvalidArgumentException('Photo not found.');
         }
