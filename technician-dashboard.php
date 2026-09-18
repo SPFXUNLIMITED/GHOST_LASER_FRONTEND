@@ -1870,9 +1870,17 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         authCanvas.addEventListener('pointermove', authorizationMoveDrawing);
         authCanvas.addEventListener('pointerup', authorizationStopDrawing);
         authCanvas.addEventListener('pointercancel', authorizationStopDrawing);
-        authCanvas.addEventListener('pointerleave', authorizationStopDrawing);
         authCanvas.addEventListener('lostpointercapture', authorizationStopDrawing);
     }
+
+    function syncAuthorizationCanvasToViewport() {
+        if (authModal && authModal.classList.contains('open')) {
+            resizeAuthorizationCanvas();
+        }
+    }
+
+    window.addEventListener('resize', syncAuthorizationCanvasToViewport);
+    window.addEventListener('orientationchange', syncAuthorizationCanvasToViewport);
 
     if (authClearBtn) {
         authClearBtn.addEventListener('click', function () {
