@@ -967,7 +967,7 @@ $extraHead       = <<<'HTML'
             cursor: pointer;
             text-decoration: none;
         }
-        .job-photo-button.is-disabled {
+        .job-photo-button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
             pointer-events: none;
@@ -1572,16 +1572,18 @@ require_once __DIR__ . '/templates/header.php';
                                         <div class="job-photo-copy">Capture or attach reference photos for the completion certificate.</div>
                                     </div>
                                     <?php if ($serviceRequestId > 0): ?>
-                                        <label
-                                            for="jobPhotoInput<?= $serviceRequestId ?>"
+                                        <button
+                                            type="button"
                                             class="job-photo-button"
                                             data-job-photo-picker="<?= $serviceRequestId ?>"
-                                        >Add photos</label>
+                                            aria-controls="jobPhotoInput<?= $serviceRequestId ?>"
+                                        >Add photos</button>
                                         <input
                                             type="file"
                                             id="jobPhotoInput<?= $serviceRequestId ?>"
                                             class="job-photo-input"
                                             data-job-photo-input="<?= $serviceRequestId ?>"
+                                            aria-label="Add job photos"
                                             accept="image/*"
                                             capture="environment"
                                             multiple
@@ -2068,11 +2070,6 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
     function setJobPhotoBusy(jobId, busy) {
         jobPhotoBusyByJob[jobId] = busy;
         document.querySelectorAll('[data-job-photo-picker="' + jobId + '"], [data-job-photo-input="' + jobId + '"], [data-job-photo-remove="' + jobId + '"]').forEach(function (el) {
-            if (el.tagName === 'LABEL') {
-                el.classList.toggle('is-disabled', !!busy);
-                el.setAttribute('aria-disabled', busy ? 'true' : 'false');
-                return;
-            }
             el.disabled = !!busy;
         });
     }
@@ -3053,6 +3050,17 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
 
     // ── Attach listeners ──────────────────────────────────────────────────────
     document.addEventListener('click', function (e) {
+        var photoPickerBtn = e.target.closest('[data-job-photo-picker]');
+        if (photoPickerBtn) {
+            if (photoPickerBtn.disabled) return;
+            var pickerJobId = photoPickerBtn.dataset.jobPhotoPicker;
+            var photoInput = document.querySelector('[data-job-photo-input="' + pickerJobId + '"]');
+            if (photoInput && !photoInput.disabled) {
+                photoInput.click();
+            }
+            return;
+        }
+
         var photoRemoveBtn = e.target.closest('[data-job-photo-remove]');
         if (photoRemoveBtn) {
             if (photoRemoveBtn.disabled) return;

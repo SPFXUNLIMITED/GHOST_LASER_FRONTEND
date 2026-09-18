@@ -619,7 +619,32 @@ function serviceAuthorizationDeleteStoredFileIfPresent(?string $relativePath): v
             @unlink($absolutePath);
         }
     } catch (Throwable $e) {
+        error_log('serviceAuthorizationDeleteStoredFileIfPresent cleanup error: ' . $e->getMessage());
     }
+}
+
+function serviceAuthorizationPublishStoredJobPhotos(array $storedPaths, array $createdPaths): array
+{
+    $replacements = [];
+    foreach ($createdPaths as $pathSet) {
+        $replacements[(string) $pathSet['temp_relative']] = (string) $pathSet['relative'];
+    }
+
+    $publishedPaths = [];
+    foreach ($storedPaths as $path) {
+        $candidate = $replacements[$path] ?? $path;
+        if (!in_array($candidate, $publishedPaths, true)) {
+            $publishedPaths[] = $candidate;
+        }
+    }
+
+    foreach ($createdPaths as $pathSet) {
+        if (!in_array($pathSet['relative'], $publishedPaths, true)) {
+            $publishedPaths[] = $pathSet['relative'];
+        }
+    }
+
+    return $publishedPaths;
 }
 
 function serviceAuthorizationFinalizeStoredPhoto(string $tempPath, string $absolutePath): void
@@ -706,18 +731,7 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
             throw new RuntimeException('Service request not found.');
         }
         $storedPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null, true);
-        $publishedPaths = array_values(array_map(
-            static function (string $path) use ($createdPaths): string {
-                foreach ($createdPaths as $pathSet) {
-                    if ($path === $pathSet['temp_relative']) {
-                        return $pathSet['relative'];
-                    }
-                }
-
-                return $path;
-            },
-            $storedPaths
-        ));
+        $publishedPaths = serviceAuthorizationPublishStoredJobPhotos($storedPaths, $createdPaths);
         serviceAuthorizationPersistRawJobPhotos($pdo, $serviceRequestId, $publishedPaths);
 
         if ($startedTransaction) {
