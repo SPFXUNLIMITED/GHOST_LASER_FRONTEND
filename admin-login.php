@@ -25,6 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             session_regenerate_id(true);
             $_SESSION['admin_id']       = $user['id'];
             $_SESSION['admin_username'] = $username;
+            if (($_POST['supports_return_url'] ?? '0') !== '1') {
+                header('Location: dashboard.php');
+                exit;
+            }
             echo '<!doctype html><html><head><meta charset="UTF-8"><title>Redirecting…</title></head><body>';
             echo '<script>(function(){var fallback="dashboard.php";try{var returnUrl=sessionStorage.getItem("return_url");if(returnUrl){sessionStorage.removeItem("return_url");var parsed=null;try{parsed=new URL(returnUrl,window.location.origin);}catch(e){}if(parsed&&parsed.origin===window.location.origin){window.location.replace(parsed.pathname+parsed.search+parsed.hash);return;}}}catch(e){}window.location.replace(fallback);}());</script>';
             echo '</body></html>';
@@ -94,6 +98,7 @@ require_once __DIR__ . '/templates/header.php';
 
                 <form method="POST" action="">
                     <div class="flex flex-col gap-5">
+                        <input type="hidden" name="supports_return_url" id="supports_return_url" value="0">
                         <!-- Username -->
                         <div>
                             <label for="username" class="block text-sm font-medium text-zinc-300 mb-1.5">Username</label>
@@ -157,5 +162,9 @@ require_once __DIR__ . '/templates/header.php';
             passwordInput.type = isPassword ? 'text' : 'password';
             toggleBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
         });
+        const returnUrlSupportInput = document.getElementById('supports_return_url');
+        if (returnUrlSupportInput) {
+            returnUrlSupportInput.value = '1';
+        }
     </script>
 <?php require_once __DIR__ . '/templates/footer.php'; ?>
