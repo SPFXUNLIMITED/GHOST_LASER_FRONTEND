@@ -29,6 +29,35 @@ function serviceAuthorizationSummaryLine(): string
     return 'The customer authorizes the technician to perform the listed work described below.';
 }
 
+function serviceAuthorizationSessionKey(): string
+{
+    $sessionId = session_id();
+    $adminId = (string) ($_SESSION['admin_id'] ?? '0');
+    return hash('sha256', 'service-authorization|' . $sessionId . '|' . $adminId);
+}
+
+function serviceAuthorizationJobAccessToken(int $serviceRequestId): string
+{
+    return hash_hmac('sha256', 'job:' . $serviceRequestId, serviceAuthorizationSessionKey());
+}
+
+function serviceAuthorizationVerifyJobAccessToken(int $serviceRequestId, string $token): bool
+{
+    $token = trim($token);
+    return $token !== '' && hash_equals(serviceAuthorizationJobAccessToken($serviceRequestId), $token);
+}
+
+function serviceAuthorizationDownloadToken(int $authorizationId): string
+{
+    return hash_hmac('sha256', 'authorization:' . $authorizationId, serviceAuthorizationSessionKey());
+}
+
+function serviceAuthorizationVerifyDownloadToken(int $authorizationId, string $token): bool
+{
+    $token = trim($token);
+    return $token !== '' && hash_equals(serviceAuthorizationDownloadToken($authorizationId), $token);
+}
+
 function serviceAuthorizationClauses(): array
 {
     return [
@@ -284,6 +313,8 @@ function serviceAuthorizationPersistSignaturePng(int $serviceRequestId, string $
 
 function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
 {
+    ensureServiceAuthorizationSchema($pdo);
+
     $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
     if (!$job) {
         throw new RuntimeException('Service request not found.');

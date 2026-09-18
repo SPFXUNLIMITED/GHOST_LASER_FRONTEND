@@ -1218,6 +1218,7 @@ require_once __DIR__ . '/templates/header.php';
                                         data-authorize-job-id="<?= (int) $job['service_request_id'] ?>"
                                         data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
                                         data-authorize-scope="<?= htmlspecialchars($authorizationScope, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-token="<?= htmlspecialchars(serviceAuthorizationJobAccessToken((int) $job['service_request_id']), ENT_QUOTES, 'UTF-8') ?>"
                                     >
                                         Authorize
                                     </button>
@@ -1226,7 +1227,7 @@ require_once __DIR__ . '/templates/header.php';
                                     <?php if ($existingAuthorization): ?>
                                         <span>Signed <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $existingAuthorization['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
                                         <a
-                                            href="/api/service-authorization-pdf.php?authorization_id=<?= (int) $existingAuthorization['id'] ?>"
+                                            href="/api/service-authorization-pdf.php?authorization_id=<?= (int) $existingAuthorization['id'] ?>&amp;token=<?= htmlspecialchars(rawurlencode(serviceAuthorizationDownloadToken((int) $existingAuthorization['id'])), ENT_QUOTES, 'UTF-8') ?>"
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             class="authorization-download"
@@ -1721,6 +1722,7 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         if (!authCanvas || !authCtx) return;
         var rect = authCanvas.getBoundingClientRect();
         if (!rect.width || !rect.height) return;
+        var existingSignature = authState.dirty ? authCanvas.toDataURL('image/png') : '';
         var dpr = Math.max(window.devicePixelRatio || 1, 1);
         authCanvas.width = Math.round(rect.width * dpr);
         authCanvas.height = Math.round(rect.height * dpr);
@@ -1730,6 +1732,13 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         authCtx.lineWidth = 2.75;
         authCtx.strokeStyle = '#111827';
         authCtx.clearRect(0, 0, rect.width, rect.height);
+        if (existingSignature) {
+            var img = new Image();
+            img.onload = function () {
+                authCtx.drawImage(img, 0, 0, rect.width, rect.height);
+            };
+            img.src = existingSignature;
+        }
     }
 
     function clearAuthorizationCanvas() {
@@ -1904,6 +1913,7 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
                         service_request_id: authState.jobId,
                         signature_png: signaturePng,
                         signed_at: signedAt,
+                        access_token: authState.btn ? (authState.btn.dataset.authorizeToken || '') : '',
                         latitude: coords.lat,
                         longitude: coords.lng
                     })

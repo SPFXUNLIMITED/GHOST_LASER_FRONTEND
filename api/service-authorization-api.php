@@ -33,6 +33,7 @@ if (!is_array($body)) {
 $serviceRequestId = (int) ($body['service_request_id'] ?? 0);
 $signature        = (string) ($body['signature_png'] ?? '');
 $signedAt         = isset($body['signed_at']) ? (string) $body['signed_at'] : null;
+$accessToken      = (string) ($body['access_token'] ?? '');
 $latitude         = filter_var($body['latitude'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
 $longitude        = filter_var($body['longitude'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
 
@@ -45,6 +46,12 @@ if ($serviceRequestId <= 0) {
 if ($signature === '') {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'A signature is required.']);
+    exit;
+}
+
+if (!serviceAuthorizationVerifyJobAccessToken($serviceRequestId, $accessToken)) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'This job authorization request is no longer valid. Reload the dashboard and try again.']);
     exit;
 }
 
@@ -67,7 +74,7 @@ try {
             'signed_at_display' => serviceAuthorizationFormatSignedAtDisplay((string) ($authorization['signed_at'] ?? '')),
             'latitude' => $authorization['signed_latitude'] !== null ? (float) $authorization['signed_latitude'] : null,
             'longitude' => $authorization['signed_longitude'] !== null ? (float) $authorization['signed_longitude'] : null,
-            'download_url' => '/api/service-authorization-pdf.php?authorization_id=' . (int) ($authorization['id'] ?? 0),
+            'download_url' => '/api/service-authorization-pdf.php?authorization_id=' . (int) ($authorization['id'] ?? 0) . '&token=' . rawurlencode(serviceAuthorizationDownloadToken((int) ($authorization['id'] ?? 0))),
         ],
     ]);
 } catch (InvalidArgumentException $e) {

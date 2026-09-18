@@ -23,10 +23,18 @@ require_once __DIR__ . '/../project/db.php';
 require_once __DIR__ . '/../project/service_authorization.php';
 
 $authorizationId = (int) ($_GET['authorization_id'] ?? 0);
+$downloadToken   = (string) ($_GET['token'] ?? '');
 if ($authorizationId <= 0) {
     http_response_code(400);
     header('Content-Type: text/plain; charset=UTF-8');
     echo 'Missing authorization_id';
+    exit;
+}
+
+if (!serviceAuthorizationVerifyDownloadToken($authorizationId, $downloadToken)) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo 'Invalid download token.';
     exit;
 }
 
