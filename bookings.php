@@ -180,6 +180,7 @@ try {
             laser_watts          VARCHAR(100) NULL,
             laser_age            VARCHAR(100) NULL,
             problem_summary      TEXT NULL,
+            problem              TEXT NULL,
             problem_details      TEXT NULL,
             technician_notes     TEXT NULL,
             priority_level       VARCHAR(50)  NOT NULL DEFAULT 'standard',
