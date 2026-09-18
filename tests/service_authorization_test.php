@@ -315,6 +315,20 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 15. Multiline freeform blocks starting with Issue summary are not treated as structured summary blocks ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\nAdditional freeform detail that should stay together.\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\nAdditional freeform detail that should stay together.\n\nJob description: Machine shuts down after five minutes.\n\nTechnician notes: Bring replacement PSU",
+        $text,
+        'Completion certificate should only inject after a structured single-block issue summary'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
