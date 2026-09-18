@@ -413,6 +413,356 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 19. Job photo decoding keeps only unique stored photo paths ---
+(function (): void {
+    $decoded = serviceAuthorizationDecodeJobPhotos(json_encode([
+        '/uploads/service-authorizations/job-photos/first.jpg',
+        'uploads/service-authorizations/job-photos/first.jpg',
+        'uploads/service-authorizations/job-photos/second.png',
+        'uploads/service-authorizations/signatures/not-a-job-photo.png',
+        '',
+    ]));
+
+    ghostLaserAuthAssertSame(
+        json_encode([
+            'uploads/service-authorizations/job-photos/first.jpg',
+            'uploads/service-authorizations/job-photos/second.png',
+        ]),
+        json_encode($decoded),
+        'Job photo decoding should preserve only unique job-photo storage paths'
+    );
+})();
+
+// --- 20. Job photo payloads expose public URLs for dashboard thumbnails ---
+(function (): void {
+    $payloads = serviceAuthorizationBuildJobPhotoPayloads([
+        'uploads/service-authorizations/job-photos/example.webp',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        '[{"path":"uploads\/service-authorizations\/job-photos\/example.webp","url":"\/uploads\/service-authorizations\/job-photos\/example.webp"}]',
+        json_encode($payloads),
+        'Job photo payloads should include the stored path and public thumbnail URL'
+    );
+})();
+
+// --- 21. Completion certificate photo appendix renders uploaded photos as JPEG pages ---
+(function (): void {
+    $photoDir = __DIR__ . '/../uploads/service-authorizations/job-photos';
+    if (!is_dir($photoDir) && !mkdir($photoDir, 0775, true) && !is_dir($photoDir)) {
+        throw new RuntimeException('Unable to create job photo test directory.');
+    }
+
+    $photoPath = $photoDir . '/test-job-photo.png';
+    $image = imagecreatetruecolor(8, 8);
+    $fill = imagecolorallocate($image, 24, 24, 27);
+    imagefilledrectangle($image, 0, 0, 7, 7, $fill);
+    imagepng($image, $photoPath);
+    imagedestroy($image);
+
+    try {
+        $jpegPages = completionCertificateRenderPhotoJpegs([
+            'job_photos' => json_encode([
+                'uploads/service-authorizations/job-photos/test-job-photo.png',
+            ]),
+        ]);
+
+        ghostLaserAuthAssert(
+            count($jpegPages) === 1,
+            'Completion certificate photo appendix should render one page per uploaded photo'
+        );
+
+        $imageInfo = isset($jpegPages[0]) ? @getimagesizefromstring($jpegPages[0]) : false;
+        ghostLaserAuthAssert(
+            $imageInfo !== false && ($imageInfo['mime'] ?? '') === 'image/jpeg',
+            'Completion certificate photo appendix pages should be rendered as JPEG images before PDF assembly'
+        );
+    } finally {
+        if (is_file($photoPath)) {
+            unlink($photoPath);
+        }
+    }
+})();
+
+// --- 22. Completion certificate photo appendix skips missing or invalid entries ---
+(function (): void {
+    $photoDir = __DIR__ . '/../uploads/service-authorizations/job-photos';
+    if (!is_dir($photoDir) && !mkdir($photoDir, 0775, true) && !is_dir($photoDir)) {
+        throw new RuntimeException('Unable to create job photo test directory.');
+    }
+
+    $photoPath = $photoDir . '/test-job-photo-filtered.png';
+    $image = imagecreatetruecolor(8, 8);
+    $fill = imagecolorallocate($image, 6, 182, 212);
+    imagefilledrectangle($image, 0, 0, 7, 7, $fill);
+    imagepng($image, $photoPath);
+    imagedestroy($image);
+
+    try {
+        $jpegPages = completionCertificateRenderPhotoJpegs([
+            'job_photos' => json_encode([
+                'uploads/service-authorizations/job-photos/test-job-photo-filtered.png',
+                'uploads/service-authorizations/job-photos/missing.png',
+                'uploads/service-authorizations/signatures/not-a-job-photo.png',
+            ]),
+        ]);
+
+        ghostLaserAuthAssert(
+            count($jpegPages) === 1,
+            'Completion certificate photo appendix should skip missing or invalid stored photo entries'
+        );
+    } finally {
+        if (is_file($photoPath)) {
+            unlink($photoPath);
+        }
+    }
+})();
+
+// --- 22b. Completion certificate photo appendix still renders without TTF fonts ---
+(function (): void {
+    $photoDir = __DIR__ . '/../uploads/service-authorizations/job-photos';
+    if (!is_dir($photoDir) && !mkdir($photoDir, 0775, true) && !is_dir($photoDir)) {
+        throw new RuntimeException('Unable to create no-font photo test directory.');
+    }
+
+    $photoPath = $photoDir . '/test-job-photo-no-font.png';
+    $image = imagecreatetruecolor(8, 8);
+    $fill = imagecolorallocate($image, 82, 82, 91);
+    imagefilledrectangle($image, 0, 0, 7, 7, $fill);
+    imagepng($image, $photoPath);
+    imagedestroy($image);
+
+    try {
+        $jpegPages = completionCertificateRenderPhotoJpegs([
+            'job_photos' => json_encode([
+                'uploads/service-authorizations/job-photos/test-job-photo-no-font.png',
+            ]),
+        ], '', '');
+
+        ghostLaserAuthAssert(
+            count($jpegPages) === 1,
+            'Completion certificate photo appendix should still render when font paths are unavailable'
+        );
+    } finally {
+        if (is_file($photoPath)) {
+            unlink($photoPath);
+        }
+    }
+})();
+
+// --- 23. Job photo API helper returns success payloads for uploads ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 3, 'name' => 'Diagnosis', 'duration' => 60],
+    ]);
+    $pdo->exec("INSERT INTO service_requests (id, services) VALUES (25, '[3]')");
+
+    $tmpUpload = tempnam(sys_get_temp_dir(), 'gl-photo-upload-');
+    $image = imagecreatetruecolor(10, 10);
+    $fill = imagecolorallocate($image, 34, 211, 238);
+    imagefilledrectangle($image, 0, 0, 9, 9, $fill);
+    imagepng($image, $tmpUpload);
+    imagedestroy($image);
+
+    $job = serviceAuthorizationFetchJob($pdo, 25);
+    $response = serviceAuthorizationHandleJobPhotoApiRequest(
+        $pdo,
+        true,
+        true,
+        25,
+        'upload',
+        'csrf-123',
+        'csrf-123',
+        $job,
+        [[
+            'name' => 'camera.png',
+            'type' => 'image/png',
+            'tmp_name' => $tmpUpload,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tmpUpload),
+        ]]
+    );
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 200,
+        'Job photo API helper should return HTTP 200 for a successful upload'
+    );
+    ghostLaserAuthAssert(
+        !empty($response['body']['success']) && count($response['body']['photos'] ?? []) === 1,
+        'Job photo API helper should return the uploaded photo payload on success'
+    );
+
+    $storedPath = (string) ($response['body']['photos'][0]['path'] ?? '');
+    if ($storedPath !== '') {
+        $absolutePath = __DIR__ . '/../' . $storedPath;
+        if (is_file($absolutePath)) {
+            unlink($absolutePath);
+        }
+    }
+    if (is_file($tmpUpload)) {
+        unlink($tmpUpload);
+    }
+})();
+
+// --- 24. Job photo API helper returns validation failures with status codes ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 3, 'name' => 'Diagnosis', 'duration' => 60],
+    ]);
+    $pdo->exec("INSERT INTO service_requests (id, services) VALUES (26, '[3]')");
+
+    $job = serviceAuthorizationFetchJob($pdo, 26);
+    $response = serviceAuthorizationHandleJobPhotoApiRequest(
+        $pdo,
+        true,
+        true,
+        26,
+        'upload',
+        '',
+        'csrf-123',
+        $job,
+        []
+    );
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 403,
+        'Job photo API helper should return HTTP 403 for an invalid CSRF token'
+    );
+    ghostLaserAuthAssertSame(
+        'Invalid security token. Reload the dashboard and try again.',
+        (string) ($response['body']['error'] ?? ''),
+        'Job photo API helper should return the expected invalid CSRF error message'
+    );
+})();
+
+// --- 25. Job photo API helper rejects uploads beyond the 20-photo limit ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 3, 'name' => 'Diagnosis', 'duration' => 60],
+    ]);
+
+    $existingPaths = [];
+    for ($i = 1; $i <= 20; $i++) {
+        $existingPaths[] = sprintf('uploads/service-authorizations/job-photos/existing-%02d.jpg', $i);
+    }
+
+    $stmt = $pdo->prepare('INSERT INTO service_requests (id, services, job_photos) VALUES (:id, :services, :job_photos)');
+    $stmt->execute([
+        ':id' => 27,
+        ':services' => '[3]',
+        ':job_photos' => json_encode($existingPaths),
+    ]);
+
+    $tmpUpload = tempnam(sys_get_temp_dir(), 'gl-photo-limit-');
+    $image = imagecreatetruecolor(10, 10);
+    $fill = imagecolorallocate($image, 249, 115, 22);
+    imagefilledrectangle($image, 0, 0, 9, 9, $fill);
+    imagepng($image, $tmpUpload);
+    imagedestroy($image);
+
+    $job = serviceAuthorizationFetchJob($pdo, 27);
+    $response = serviceAuthorizationHandleJobPhotoApiRequest(
+        $pdo,
+        true,
+        true,
+        27,
+        'upload',
+        'csrf-123',
+        'csrf-123',
+        $job,
+        [[
+            'name' => 'overflow.png',
+            'type' => 'image/png',
+            'tmp_name' => $tmpUpload,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tmpUpload),
+        ]]
+    );
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 400,
+        'Job photo API helper should return HTTP 400 when the 20-photo limit is exceeded'
+    );
+    ghostLaserAuthAssertSame(
+        'Each job can have up to 20 photos.',
+        (string) ($response['body']['error'] ?? ''),
+        'Job photo API helper should return the expected 20-photo limit message'
+    );
+
+    if (is_file($tmpUpload)) {
+        unlink($tmpUpload);
+    }
+})();
+
+// --- 26. Job photo API helper removes stored photos successfully ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 3, 'name' => 'Diagnosis', 'duration' => 60],
+    ]);
+
+    $photoDir = __DIR__ . '/../uploads/service-authorizations/job-photos';
+    if (!is_dir($photoDir) && !mkdir($photoDir, 0775, true) && !is_dir($photoDir)) {
+        throw new RuntimeException('Unable to create job photo removal test directory.');
+    }
+
+    $storedRelativePath = 'uploads/service-authorizations/job-photos/remove-me.png';
+    $storedAbsolutePath = __DIR__ . '/../' . $storedRelativePath;
+    $image = imagecreatetruecolor(8, 8);
+    $fill = imagecolorallocate($image, 239, 68, 68);
+    imagefilledrectangle($image, 0, 0, 7, 7, $fill);
+    imagepng($image, $storedAbsolutePath);
+    imagedestroy($image);
+
+    $stmt = $pdo->prepare('INSERT INTO service_requests (id, services, job_photos) VALUES (:id, :services, :job_photos)');
+    $stmt->execute([
+        ':id' => 28,
+        ':services' => '[3]',
+        ':job_photos' => json_encode([$storedRelativePath]),
+    ]);
+
+    $job = serviceAuthorizationFetchJob($pdo, 28);
+    $response = serviceAuthorizationHandleJobPhotoApiRequest(
+        $pdo,
+        true,
+        true,
+        28,
+        'remove',
+        'csrf-123',
+        'csrf-123',
+        $job,
+        [],
+        $storedRelativePath
+    );
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 200,
+        'Job photo API helper should return HTTP 200 for a successful removal'
+    );
+    ghostLaserAuthAssert(
+        !empty($response['body']['success']) && count($response['body']['photos'] ?? []) === 0,
+        'Job photo API helper should remove the photo from the returned payload'
+    );
+    ghostLaserAuthAssert(
+        !is_file($storedAbsolutePath),
+        'Job photo API helper should delete the stored photo file on successful removal'
+    );
+})();
+
+// --- 27. Job photo API method-not-allowed contract advertises POST ---
+(function (): void {
+    $response = serviceAuthorizationJobPhotoMethodNotAllowedResponse();
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 405,
+        'Job photo API method-not-allowed response should use HTTP 405'
+    );
+    ghostLaserAuthAssertSame(
+        'POST',
+        (string) (($response['headers']['Allow'] ?? '')),
+        'Job photo API method-not-allowed response should advertise POST in the Allow header'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
