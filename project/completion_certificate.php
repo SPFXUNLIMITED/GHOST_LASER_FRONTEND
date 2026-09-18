@@ -106,12 +106,7 @@ function completionCertificateIsCurrentForServiceRequest(PDO $pdo, int $serviceR
 
 function completionCertificateCanCreateForServiceRequest(PDO $pdo, int $serviceRequestId): bool
 {
-    $latestAuthorization = completionCertificateFetchLatestServiceAuthorization($pdo, $serviceRequestId);
-    if (!$latestAuthorization) {
-        return false;
-    }
-
-    return !completionCertificateIsCurrentForServiceRequest($pdo, $serviceRequestId);
+    return completionCertificateFetchLatestServiceAuthorization($pdo, $serviceRequestId) !== null;
 }
 
 function completionCertificateHasPrerequisiteAuthorization(PDO $pdo, int $serviceRequestId): bool
