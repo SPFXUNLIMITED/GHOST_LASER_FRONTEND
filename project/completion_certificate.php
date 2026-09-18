@@ -411,7 +411,9 @@ function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeTex
                 return false;
             }
 
-            return $normalizedNotes === '' || $body !== $normalizedNotes;
+            return $normalizedNotes === ''
+                ? true
+                : $body !== $normalizedNotes;
         }
     ));
 

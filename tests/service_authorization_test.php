@@ -302,6 +302,19 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 12c. Legacy scope cleanup preserves user-authored multiline technician notes content when request notes are blank ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTechnician notes:\nCustomer requested a follow-up call.\nDo not remove this custom scope text.\n\nJob description: Machine shuts down after five minutes."
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nTechnician notes:\nCustomer requested a follow-up call.\nDo not remove this custom scope text.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope cleanup should preserve user-authored multiline technician notes content when request notes are blank'
+    );
+})();
+
 // --- 13. Rendered technician notes deduplicate identical inline scope technician notes ---
 (function (): void {
     $text = completionCertificateBuildCompletedWorkText([
