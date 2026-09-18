@@ -198,8 +198,17 @@ function serviceAuthorizationBuildScopeOfWork(PDO $pdo, array $job): string
     return implode("\n\n", $parts);
 }
 
-function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId): ?array
+function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId, bool $requireScheduledAccess = false): ?array
 {
+    $accessClause = $requireScheduledAccess
+        ? " AND EXISTS (
+                SELECT 1
+                FROM scheduled_cluster_jobs scj
+                JOIN scheduled_clusters sc ON sc.id = scj.scheduled_cluster_id
+                WHERE scj.service_request_id = sr.id
+                LIMIT 1
+            )"
+        : '';
     $stmt = $pdo->prepare(
         "SELECT
             sr.id,
@@ -224,6 +233,7 @@ function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId): ?array
          FROM service_requests sr
          LEFT JOIN customers c ON c.id = sr.customer_id
          WHERE sr.id = :id
+         {$accessClause}
          LIMIT 1"
     );
     $stmt->execute([':id' => $serviceRequestId]);
@@ -342,9 +352,9 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
         throw new RuntimeException('Service request not found.');
     }
 
-    function serviceAuthorizationSaveTechnicianNotes(PDO $pdo, int $serviceRequestId, string $technicianNotes): array
+    function serviceAuthorizationSaveTechnicianNotes(PDO $pdo, int $serviceRequestId, string $technicianNotes, ?array $job = null): array
     {
-        $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
+        $job = $job ?? serviceAuthorizationFetchJob($pdo, $serviceRequestId);
         if (!$job) {
             throw new RuntimeException('Service request not found.');
         }

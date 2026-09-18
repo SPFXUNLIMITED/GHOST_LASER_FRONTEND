@@ -47,14 +47,15 @@ if ($sessionCsrf === '' || $csrfToken === '' || !hash_equals($sessionCsrf, $csrf
     exit;
 }
 
-if (!technicianDashboardCanAccessServiceRequest($pdo, $serviceRequestId)) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'You do not have access to update this job.']);
+$job = serviceAuthorizationFetchJob($pdo, $serviceRequestId, true);
+if (!$job) {
+    http_response_code(404);
+    echo json_encode(['success' => false, 'error' => 'Service request not found.']);
     exit;
 }
 
 try {
-    $result = serviceAuthorizationSaveTechnicianNotes($pdo, $serviceRequestId, $technicianNotes);
+    $result = serviceAuthorizationSaveTechnicianNotes($pdo, $serviceRequestId, $technicianNotes, $job);
 
     echo json_encode([
         'success' => true,
@@ -62,14 +63,6 @@ try {
         'technician_notes' => (string) $result['technician_notes'],
         'scope_of_work' => (string) $result['scope_of_work'],
     ]);
-} catch (RuntimeException $e) {
-    if ($e->getMessage() === 'Service request not found.') {
-        http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Service request not found.']);
-        exit;
-    }
-    http_response_code(500);
-    echo json_encode(['success' => false, 'error' => 'Unable to save technician notes right now.']);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Unable to save technician notes right now.']);

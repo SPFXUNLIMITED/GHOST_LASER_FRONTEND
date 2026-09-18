@@ -66,10 +66,30 @@ function ghostLaserMakeTestPdo(array $services): PDO
         service_name TEXT NOT NULL,
         duration_minutes INTEGER NOT NULL DEFAULT 0
     )');
+    $pdo->exec('CREATE TABLE customers (
+        id INTEGER PRIMARY KEY,
+        first_name TEXT,
+        last_name TEXT,
+        address TEXT,
+        city TEXT,
+        state TEXT,
+        zip TEXT
+    )');
     $pdo->exec('CREATE TABLE service_requests (
         id INTEGER PRIMARY KEY,
+        customer_id INTEGER,
+        problem_summary TEXT,
+        problem TEXT,
+        problem_details TEXT,
+        technician_notes TEXT,
         services TEXT,
-        technician_notes TEXT
+        laser_brand TEXT,
+        laser_model TEXT,
+        laser_watts TEXT,
+        destination_street TEXT,
+        destination_city TEXT,
+        destination_state TEXT,
+        destination_zip TEXT
     )');
 
     $stmt = $pdo->prepare('INSERT INTO services (id, service_name, duration_minutes) VALUES (:id, :name, :duration)');

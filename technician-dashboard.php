@@ -1566,7 +1566,7 @@ require_once __DIR__ . '/templates/header.php';
                     <button type="button" id="technicianNotesClose" class="service-auth-close" aria-label="Close">&times;</button>
                 </div>
                 <form id="technicianNotesForm" class="tech-notes-modal-body">
-                    <textarea id="technicianNotesTextarea" class="tech-notes-textarea" placeholder="Add notes, parts, or scope updates here."></textarea>
+                    <textarea id="technicianNotesTextarea" class="tech-notes-textarea" aria-label="Technician notes" placeholder="Add notes, parts, or scope updates here."></textarea>
                     <div class="tech-notes-actions">
                         <button type="button" id="technicianNotesCancel" class="service-auth-secondary">Cancel</button>
                         <button type="submit" id="technicianNotesSave" class="service-auth-primary">Save</button>
@@ -2631,6 +2631,8 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape' && authModal && authModal.classList.contains('open')) {
             closeAuthorizationModal();
+        } else if (event.key === 'Escape' && techNotesModal && techNotesModal.classList.contains('open')) {
+            closeTechnicianNotesModal();
         }
     });
 }());
