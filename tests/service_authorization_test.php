@@ -301,6 +301,20 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 14. Fallback note insertion replaces inline technician notes without issue summary ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nJob description: Machine shuts down after five minutes.\n\nTechnician notes: Bring replacement PSU",
+        $text,
+        'Completion certificate fallback insertion should replace existing inline technician notes blocks'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
