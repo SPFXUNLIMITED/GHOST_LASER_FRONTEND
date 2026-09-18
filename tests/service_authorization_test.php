@@ -40,6 +40,14 @@ function ghostLaserAuthAssertNotContains(string $needle, string $haystack, strin
     );
 }
 
+function ghostLaserAuthAssertSame(string $expected, string $actual, string $message): void
+{
+    ghostLaserAuthAssert(
+        $expected === $actual,
+        sprintf('%s (expected %s, got %s)', $message, var_export($expected, true), var_export($actual, true))
+    );
+}
+
 // --- 1. Technician notes are appended as their own section after problem text ---
 (function (): void {
     $pdo = ghostLaserMakeTestPdo([
@@ -167,6 +175,241 @@ function ghostLaserAuthAssertNotContains(string $needle, string $haystack, strin
     ghostLaserAuthAssert(
         completionCertificateCanCreateForServiceRequest($pdo, 10),
         'Should allow a new completion certificate when a newer authorization exists'
+    );
+})();
+
+// --- 5. Completion certificate work text inserts technician notes after issue summary ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => "Bring replacement PSU\nCheck belt wear",
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU Check belt wear\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate should insert technician notes once and immediately after the issue summary block'
+    );
+})();
+
+// --- 6. Blank technician notes do not add a completion certificate section ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => " \n ",
+    ]);
+
+    ghostLaserAuthAssertNotContains(
+        'Technician notes:',
+        $text,
+        'Blank technician notes should be omitted from completion certificate work text'
+    );
+})();
+
+// --- 7. Legacy multiline technician notes with a colon are stripped from stored scope text ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes:\nOld saved note\n\nJob description: Machine shuts down after five minutes.",
+        'Old saved note'
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope storage should strip legacy multiline technician notes blocks that use a colon heading'
+    );
+})();
+
+// --- 8. Blank request notes keep unrelated inline scope text intact ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => '',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Blank request notes should not strip unrelated inline scope text that merely starts with Technician notes:'
+    );
+})();
+
+// --- 9. Completion certificate scope storage strips legacy multiline technician notes blocks ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes\nLegacy saved note\n\nJob description: Machine shuts down after five minutes.",
+        'Legacy saved note'
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope storage should strip legacy multiline technician notes blocks'
+    );
+})();
+
+// --- 10. Completion certificate scope storage strips empty technician notes headings ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTechnician notes\n\nJob description: Machine shuts down after five minutes."
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope storage should strip empty technician notes headings'
+    );
+})();
+
+// --- 10b. Completion certificate scope storage strips supported technician notes heading variants ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTECHNICIAN NOTES:\nBring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        'Bring replacement PSU'
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope storage should strip supported technician notes heading variants'
+    );
+})();
+
+// --- 11. Technician notes still render when scope text is otherwise empty ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => '',
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        'Technician notes: Bring replacement PSU',
+        $text,
+        'Completion certificate should still render technician notes when no other scope text exists'
+    );
+})();
+
+// --- 12. Legacy scope cleanup preserves inline technician notes content ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes."
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope cleanup should preserve inline technician notes content'
+    );
+})();
+
+// --- 12b. Legacy scope cleanup preserves user-authored multiline technician notes content with different body ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTechnician notes:\nCustomer requested a follow-up call.\nDo not remove this custom scope text.\n\nJob description: Machine shuts down after five minutes.",
+        'Bring replacement PSU'
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nTechnician notes:\nCustomer requested a follow-up call.\nDo not remove this custom scope text.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope cleanup should preserve user-authored multiline technician notes content when it does not match the request notes'
+    );
+})();
+
+// --- 12c. Legacy scope cleanup preserves user-authored multiline technician notes content when request notes are blank ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTechnician notes:\nCustomer requested a follow-up call.\nDo not remove this custom scope text.\n\nJob description: Machine shuts down after five minutes."
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nTechnician notes:\nCustomer requested a follow-up call.\nDo not remove this custom scope text.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope cleanup should preserve user-authored multiline technician notes content when request notes are blank'
+    );
+})();
+
+// --- 13. Rendered technician notes deduplicate identical inline scope technician notes ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate should deduplicate identical inline technician notes blocks when request notes are present'
+    );
+})();
+
+// --- 14. Fallback note insertion deduplicates identical inline technician notes without issue summary ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nJob description: Machine shuts down after five minutes.\n\nTechnician notes: Bring replacement PSU",
+        $text,
+        'Completion certificate fallback insertion should deduplicate identical inline technician notes blocks'
+    );
+})();
+
+// --- 15. Multiline freeform blocks starting with Issue summary are not treated as structured summary blocks ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\nAdditional freeform detail that should stay together.\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\nAdditional freeform detail that should stay together.\n\nJob description: Machine shuts down after five minutes.\n\nTechnician notes: Bring replacement PSU",
+        $text,
+        'Completion certificate should only inject after a structured single-block issue summary'
+    );
+})();
+
+// --- 16. Identical inline technician notes later in scope are de-duplicated when inserting after summary ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.\n\nTechnician notes: Bring replacement PSU",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate should remove later duplicate technician notes blocks before inserting after the summary'
+    );
+})();
+
+// --- 17. Inline technician note dedupe normalizes spacing and label casing ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTECHNICIAN NOTES:  Bring replacement PSU  \n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate should deduplicate inline technician notes blocks even when formatting differs'
+    );
+})();
+
+// --- 18. Inline technician note dedupe accepts missing colon variants ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate should deduplicate inline technician notes blocks even when the colon is missing'
     );
 })();
 

@@ -150,7 +150,10 @@ function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $sign
     $signaturePaths  = completionCertificatePrepareSignaturePaths($serviceRequestId);
     serviceAuthorizationWriteTempSignature($signaturePaths['temp'], $signatureBinary);
     $signedAt        = serviceAuthorizationParseSignedAt($signedAtInput)->setTimezone(new DateTimeZone('UTC'))->format(DATE_ATOM);
-    $completionBody  = serviceAuthorizationBuildScopeOfWork($pdo, $job);
+    $completionBody  = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        serviceAuthorizationBuildScopeOfWork($pdo, $job),
+        (string) ($job['technician_notes'] ?? '')
+    );
     if ($scopeOverride !== null) {
         $normalizedScope = serviceAuthorizationNormalizeTextarea($scopeOverride);
         if ($normalizedScope !== '') {
@@ -266,7 +269,7 @@ function completionCertificateRenderPages(array $certificate): array
     $drawWrappedBlock($page, 'Service Request #: ' . (string) ($certificate['service_request_number'] ?? $certificate['service_request_id'] ?? ''), 14, 24, $muted, false, 0);
     $drawWrappedBlock($page, 'Completed: ' . serviceAuthorizationFormatSignedAtDisplay($certificate['signed_at'] ?? ''), 14, 24, $muted, false, 24);
     $drawWrappedBlock($page, 'Completed Work', 18, 30, $black, true, 4);
-    $drawWrappedBlock($page, (string) ($certificate['scope_of_work'] ?? ''), 15, 28, $black, false, 20);
+    $drawWrappedBlock($page, completionCertificateBuildCompletedWorkText($certificate), 15, 28, $black, false, 20);
     $drawWrappedBlock($page, 'Customer Acknowledgment', 18, 30, $black, true, 4);
 
     foreach (completionCertificateClauses() as $index => $clause) {
@@ -371,6 +374,112 @@ function completionCertificateGeneratePdf(PDO $pdo, int $authorizationId): array
         'content' => $pdfBinary,
         'certificate' => $certificate,
     ];
+}
+
+function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeText, ?string $technicianNotes = null): string
+{
+    $scopeText = trim(str_replace(["\r\n", "\r"], "\n", $scopeText));
+    if ($scopeText === '') {
+        return '';
+    }
+
+    $normalizedNotes = serviceAuthorizationNormalizeTextarea((string) $technicianNotes);
+    $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
+    $blocks = array_values(array_filter(
+        $blocks,
+        static function ($block): bool {
+            return trim((string) $block) !== '';
+        }
+    ));
+    $blocks = array_values(array_filter(
+        $blocks,
+        static function ($block) use ($normalizedNotes): bool {
+            $block = trim((string) $block);
+            $newlinePos = strpos($block, "\n");
+            if ($newlinePos === false) {
+                return !completionCertificateIsTechnicianNotesHeadingLine($block);
+            }
+
+            $firstLine = trim(substr($block, 0, $newlinePos));
+            if (!completionCertificateIsTechnicianNotesHeadingLine($firstLine)) {
+                return true;
+            }
+
+            $body = serviceAuthorizationNormalizeTextarea(substr($block, $newlinePos + 1));
+            if ($body === '') {
+                return false;
+            }
+
+            return $normalizedNotes === ''
+                ? true
+                : $body !== $normalizedNotes;
+        }
+    ));
+
+    return implode("\n\n", $blocks);
+}
+
+function completionCertificateBuildCompletedWorkText(array $certificate): string
+{
+    $scopeText = trim(str_replace(["\r\n", "\r"], "\n", (string) ($certificate['scope_of_work'] ?? '')));
+    $notesValue = serviceAuthorizationNormalizeWhitespace(str_replace("\n", ' ', str_replace("\r", "\n", (string) ($certificate['technician_notes'] ?? ''))));
+    $technicianNotes = $notesValue === '' ? '' : 'Technician notes: ' . $notesValue;
+    $normalizedTechnicianNotes = completionCertificateNormalizeInlineTechnicianNotesBlock($technicianNotes);
+    if ($scopeText === '') {
+        return $technicianNotes;
+    }
+
+    if ($technicianNotes === '') {
+        return $scopeText;
+    }
+
+    $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
+    $blocks = array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== ''));
+    $blocks = array_values(array_filter(
+        $blocks,
+        static fn ($block): bool => completionCertificateNormalizeInlineTechnicianNotesBlock((string) $block) !== $normalizedTechnicianNotes
+    ));
+    foreach ($blocks as $index => $block) {
+        if (completionCertificateIsStructuredIssueSummaryBlock((string) $block)) {
+            array_splice($blocks, $index + 1, 0, [$technicianNotes]);
+            return implode("\n\n", $blocks);
+        }
+    }
+
+    $blocks[] = $technicianNotes;
+    return implode("\n\n", array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== '')));
+}
+
+function completionCertificateIsStructuredIssueSummaryBlock(string $block): bool
+{
+    $block = trim($block);
+    return $block !== ''
+        && !str_contains($block, "\n")
+        && stripos($block, 'Issue summary:') === 0;
+}
+
+function completionCertificateNormalizeInlineTechnicianNotesBlock(string $block): ?string
+{
+    $block = trim(str_replace(["\r\n", "\r"], "\n", $block));
+    if ($block === '' || str_contains($block, "\n")) {
+        return null;
+    }
+
+    if (!preg_match('/^Technician notes(?:\s*:\s*|\s+)(.*)$/i', $block, $matches)) {
+        return null;
+    }
+
+    $value = serviceAuthorizationNormalizeWhitespace((string) ($matches[1] ?? ''));
+    if ($value === '') {
+        return 'Technician notes:';
+    }
+
+    return 'Technician notes: ' . $value;
+}
+
+function completionCertificateIsTechnicianNotesHeadingLine(string $line): bool
+{
+    return preg_match('/^Technician notes(?:\s*:)?$/i', trim($line)) === 1;
 }
 
 function completionCertificatePdfRoot(): string
