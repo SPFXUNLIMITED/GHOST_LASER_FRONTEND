@@ -302,6 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $srAge       = trim((string) ($_POST['sr_age']        ?? ''));
             $srSummary   = trim((string) ($_POST['sr_summary']    ?? ''));
             $srDetails   = trim((string) ($_POST['sr_details']    ?? ''));
+            $srTechnicianNotes = trim((string) ($_POST['sr_technician_notes'] ?? ''));
             $srPriority  = trim((string) ($_POST['sr_priority']   ?? 'standard'));
             $srStatus    = trim((string) ($_POST['sr_status']     ?? 'new'));
             $srPrefStart = trim((string) ($_POST['sr_pref_start'] ?? ''));
@@ -332,11 +333,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->prepare("
                         UPDATE service_requests
                            SET laser_brand = ?, laser_model = ?, laser_watts = ?, laser_age = ?,
-                               problem_summary = ?, problem_details = ?, priority_level = ?,
+                               problem_summary = ?, problem_details = ?, technician_notes = ?, priority_level = ?,
                                request_status = ?, preferred_date_start = ?, preferred_date_end = ?
                          WHERE id = ?
                     ")->execute([$srBrand, $srModel, $srWatts ?: null, $srAge ?: null,
-                                 $srSummary, $srDetails, $srPriority,
+                                 $srSummary, $srDetails, $srTechnicianNotes, $srPriority,
                                  $srStatus, $srPrefStart, $srPrefEnd, $editId]);
 
                     $previousStatus = strtolower(trim((string) ($srData['request_status'] ?? '')));
@@ -436,6 +437,7 @@ try {
             sr.problem_summary,
             sr.problem_details,
             sr.problem,
+            sr.technician_notes,
             sr.services,
             sr.speed,
             sr.service_total,
@@ -1084,6 +1086,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 </div>
                 <div class="mt-3"><label class="form-label">Problem Summary</label><input type="text" name="sr_summary" id="editSummary" class="form-input" autocomplete="off"></div>
                 <div class="mt-3"><label class="form-label">Problem Details</label><textarea name="sr_details" id="editDetails" class="form-textarea" autocomplete="off"></textarea></div>
+                <div class="mt-3"><label class="form-label">Technician notes</label><textarea name="sr_technician_notes" id="editTechnicianNotes" class="form-textarea" autocomplete="off"></textarea></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-cancel-modal" onclick="closeModal('editModal')">Cancel</button>
@@ -1184,6 +1187,10 @@ function openViewModal(row) {
     var fullName = [row.first_name, row.last_name].filter(Boolean).join(' ') || '—';
     var location = [row.address, row.city, row.state, row.zip].filter(Boolean).join(', ') || '—';
     var machine  = [row.laser_brand, row.laser_model].filter(Boolean).join(' ') || '—';
+    var technicianNotes = row.technician_notes || '';
+    var technicianNotesBlock = String(technicianNotes).trim() !== ''
+        ? '<div class="detail-item" style="grid-column:1/-1"><label>Technician notes</label><p style="white-space:pre-wrap">' + esc(technicianNotes) + '</p></div>'
+        : '';
 
     document.getElementById('viewModalTitle').textContent = 'Booking #' + row.id + ' \u2014 ' + fullName;
     document.getElementById('viewModalBody').innerHTML = [
@@ -1210,6 +1217,7 @@ function openViewModal(row) {
         '<div class="detail-item"><label>Preferred Start</label><p>' + esc(row.preferred_date_start) + '</p></div>',
         '<div class="detail-item"><label>Preferred End</label><p>' + esc(row.preferred_date_end) + '</p></div>',
         '<div class="detail-item" style="grid-column:1/-1"><label>Problem</label><p style="white-space:pre-wrap">' + esc(row.problem || row.problem_details || row.problem_summary) + '</p></div>',
+        technicianNotesBlock,
         '<div class="detail-item" style="grid-column:1/-1"><label>Booking Summary</label><p style="white-space:pre-wrap">' + esc(formatBookingSummary(row)) + '</p></div>',
         '</div>',
         '<p class="form-section-title">Geocoding</p>',
@@ -1254,6 +1262,7 @@ function openEditModal(row) {
     document.getElementById('editAge').value       = row.laser_age   || '';
     document.getElementById('editSummary').value   = row.problem_summary || '';
     document.getElementById('editDetails').value   = row.problem_details || '';
+    document.getElementById('editTechnicianNotes').value = row.technician_notes || '';
     document.getElementById('editPrefStart').value = row.preferred_date_start || '';
     document.getElementById('editPrefEnd').value   = row.preferred_date_end   || '';
 
