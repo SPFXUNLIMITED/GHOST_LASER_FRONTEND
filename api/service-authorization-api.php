@@ -36,11 +36,6 @@ $signedAt         = isset($body['signed_at']) ? (string) $body['signed_at'] : nu
 $csrfToken        = (string) ($body['csrf_token'] ?? '');
 $latitude         = filter_var($body['latitude'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
 $longitude        = filter_var($body['longitude'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
-$signedByTechnicianId = (int) ($_SESSION['admin_id'] ?? 0);
-$signedByTechnicianLabel = trim((string) ($_SESSION['admin_username'] ?? ''));
-if ($signedByTechnicianLabel === '' && $signedByTechnicianId > 0) {
-    $signedByTechnicianLabel = 'Technician #' . $signedByTechnicianId;
-}
 
 if ($serviceRequestId <= 0) {
     http_response_code(400);
@@ -86,9 +81,7 @@ try {
         $signature,
         (float) $latitude,
         (float) $longitude,
-        $signedAt,
-        $signedByTechnicianId > 0 ? $signedByTechnicianId : null,
-        $signedByTechnicianLabel
+        $signedAt
     );
 
     echo json_encode([
