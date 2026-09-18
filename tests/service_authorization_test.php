@@ -40,6 +40,14 @@ function ghostLaserAuthAssertNotContains(string $needle, string $haystack, strin
     );
 }
 
+function ghostLaserAuthAssertSame(string $expected, string $actual, string $message): void
+{
+    ghostLaserAuthAssert(
+        $expected === $actual,
+        sprintf('%s (expected %s, got %s)', $message, var_export($expected, true), var_export($actual, true))
+    );
+}
+
 // --- 1. Technician notes are appended as their own section after problem text ---
 (function (): void {
     $pdo = ghostLaserMakeTestPdo([
@@ -177,10 +185,10 @@ function ghostLaserAuthAssertNotContains(string $needle, string $haystack, strin
         'technician_notes' => "Bring replacement PSU\nCheck belt wear",
     ]);
 
-    ghostLaserAuthAssertContains(
-        "Issue summary: Power issue.\n\nTechnician notes: Bring replacement PSU Check belt wear.\n\nJob description: Machine shuts down after five minutes.",
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU Check belt wear.\n\nJob description: Machine shuts down after five minutes.",
         $text,
-        'Completion certificate should place technician notes immediately after the issue summary block'
+        'Completion certificate should insert technician notes once and immediately after the issue summary block'
     );
 })();
 
