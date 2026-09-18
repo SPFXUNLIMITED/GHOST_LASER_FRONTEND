@@ -32,6 +32,7 @@ require_once __DIR__ . '/scheduling_settings.php';
 require_once __DIR__ . '/mileage_schema.php';
 
 ensureMileageVehicleSchema($pdo);
+serviceAuthorizationEnsureJobPhotosColumn($pdo);
 
 // ── Date navigation ────────────────────────────────────────────────────────
 $dateParam = trim((string) ($_GET['date'] ?? ''));
@@ -82,6 +83,7 @@ try {
             sr.problem_summary,
             sr.problem,
             sr.technician_notes,
+            sr.job_photos,
             sr.services,
             sr.service_speed,
             sr.speed,
@@ -924,6 +926,102 @@ $extraHead       = <<<'HTML'
             color: #a1a1aa;
         }
 
+        .job-photo-panel {
+            margin-top: 0.75rem;
+            padding: 0.8rem 0.9rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.72);
+            background: rgba(9, 9, 11, 0.58);
+        }
+        .job-photo-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+        .job-photo-heading {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #71717a;
+        }
+        .job-photo-copy {
+            margin-top: 0.35rem;
+            font-size: 0.8rem;
+            line-height: 1.45;
+            color: #a1a1aa;
+        }
+        .job-photo-button {
+            flex-shrink: 0;
+            min-height: 2.35rem;
+            padding: 0.55rem 0.9rem;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(34, 211, 238, 0.38);
+            background: rgba(34, 211, 238, 0.12);
+            color: #67e8f9;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .job-photo-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .job-photo-input {
+            display: none;
+        }
+        .job-photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+            gap: 0.7rem;
+            margin-top: 0.85rem;
+        }
+        .job-photo-empty {
+            font-size: 0.82rem;
+            color: #a1a1aa;
+        }
+        .job-photo-tile {
+            overflow: hidden;
+            border-radius: 0.85rem;
+            border: 1px solid rgba(63, 63, 70, 0.78);
+            background: rgba(24, 24, 27, 0.92);
+        }
+        .job-photo-link {
+            display: block;
+            aspect-ratio: 1 / 1;
+            background: #18181b;
+        }
+        .job-photo-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .job-photo-remove {
+            width: 100%;
+            border: 0;
+            border-top: 1px solid rgba(63, 63, 70, 0.78);
+            background: rgba(39, 39, 42, 0.75);
+            color: #e4e4e7;
+            font-size: 0.74rem;
+            font-weight: 700;
+            padding: 0.5rem 0.6rem;
+            cursor: pointer;
+        }
+        .job-photo-remove:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .job-photo-status {
+            min-height: 1rem;
+            margin-top: 0.7rem;
+            font-size: 0.78rem;
+            color: #a1a1aa;
+        }
+        .job-photo-status.ok { color: #86efac; }
+        .job-photo-status.err { color: #fca5a5; }
+
         .tech-notes-modal {
             display: none;
             position: fixed;
@@ -1188,8 +1286,13 @@ $extraHead       = <<<'HTML'
             }
             .service-auth-primary,
             .service-auth-secondary,
-            .authorize-btn {
+            .authorize-btn,
+            .job-photo-button {
                 width: 100%;
+            }
+            .job-photo-header {
+                flex-direction: column;
+                align-items: stretch;
             }
         }
     </style>
@@ -1311,6 +1414,7 @@ require_once __DIR__ . '/templates/header.php';
                         $completionCertificateScope = $authorizationScope;
                         $customerProblem = str_replace(["\r\n", "\r"], "\n", serviceAuthorizationPrimaryProblemText($job));
                         $technicianNotes = str_replace(["\r\n", "\r"], "\n", (string) ($job['technician_notes'] ?? ''));
+                        $jobPhotoItems = serviceAuthorizationBuildJobPhotoPayloads(serviceAuthorizationDecodeJobPhotos($job['job_photos'] ?? null));
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
                         if ($customerName === '') {
                             // Fall back to task_contact (company or contact name) for task-type rows.
@@ -1448,6 +1552,58 @@ require_once __DIR__ . '/templates/header.php';
                                     <div class="job-note-row-value<?= trim($technicianNotes) === '' ? ' is-placeholder' : '' ?>"><?= htmlspecialchars(trim($technicianNotes) !== '' ? $technicianNotes : 'No notes yet', ENT_QUOTES, 'UTF-8') ?></div>
                                 </div>
                             <?php endif; ?>
+
+                            <div class="job-photo-panel">
+                                <div class="job-photo-header">
+                                    <div class="min-w-0">
+                                        <div class="job-photo-heading">Job Photos</div>
+                                        <div class="job-photo-copy">Capture or attach reference photos for the completion certificate.</div>
+                                    </div>
+                                    <?php if ($serviceRequestId > 0): ?>
+                                        <button type="button" class="job-photo-button" data-job-photo-picker="<?= $serviceRequestId ?>">Add photos</button>
+                                        <input
+                                            type="file"
+                                            class="job-photo-input"
+                                            data-job-photo-input="<?= $serviceRequestId ?>"
+                                            accept="image/*"
+                                            capture="environment"
+                                            multiple
+                                        >
+                                    <?php endif; ?>
+                                </div>
+                                <div class="job-photo-grid" data-job-photo-grid="<?= $serviceRequestId ?>">
+                                    <?php if ($jobPhotoItems !== []): ?>
+                                        <?php foreach ($jobPhotoItems as $photoIndex => $jobPhoto): ?>
+                                            <div class="job-photo-tile">
+                                                <a
+                                                    href="<?= htmlspecialchars($jobPhoto['url'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="job-photo-link"
+                                                >
+                                                    <img
+                                                        src="<?= htmlspecialchars($jobPhoto['url'], ENT_QUOTES, 'UTF-8') ?>"
+                                                        alt="Job photo <?= $photoIndex + 1 ?>"
+                                                        class="job-photo-image"
+                                                        loading="lazy"
+                                                    >
+                                                </a>
+                                                <?php if ($serviceRequestId > 0): ?>
+                                                    <button
+                                                        type="button"
+                                                        class="job-photo-remove"
+                                                        data-job-photo-remove="<?= $serviceRequestId ?>"
+                                                        data-photo-path="<?= htmlspecialchars($jobPhoto['path'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    >Remove</button>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <div class="job-photo-empty">No photos yet.</div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="job-photo-status" data-job-photo-status="<?= $serviceRequestId ?>" role="status" aria-live="polite"></div>
+                            </div>
 
                             <div class="mt-3 pt-3 border-t border-zinc-700/40">
                                 <div class="flex items-center justify-between gap-3">
@@ -1833,6 +1989,7 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
         jobId: 0,
         submitting: false
     };
+    var jobPhotoBusyByJob = {};
 
     // ── GPS helper ────────────────────────────────────────────────────────────
     function getCoords() {
@@ -1881,6 +2038,150 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
         } catch (err) {
             return '';
         }
+    }
+
+    function setJobPhotoStatus(jobId, msg, type) {
+        var el = document.querySelector('[data-job-photo-status="' + jobId + '"]');
+        if (!el) return;
+        el.textContent = msg;
+        el.className = 'job-photo-status' + (type ? ' ' + type : '');
+    }
+
+    function setJobPhotoBusy(jobId, busy) {
+        jobPhotoBusyByJob[jobId] = busy;
+        document.querySelectorAll('[data-job-photo-picker="' + jobId + '"], [data-job-photo-input="' + jobId + '"], [data-job-photo-remove="' + jobId + '"]').forEach(function (el) {
+            el.disabled = !!busy;
+        });
+    }
+
+    function renderJobPhotos(jobId, photos) {
+        var grid = document.querySelector('[data-job-photo-grid="' + jobId + '"]');
+        if (!grid) return;
+
+        grid.textContent = '';
+        if (!photos || photos.length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'job-photo-empty';
+            empty.textContent = 'No photos yet.';
+            grid.appendChild(empty);
+            return;
+        }
+
+        photos.forEach(function (photo, index) {
+            var tile = document.createElement('div');
+            tile.className = 'job-photo-tile';
+
+            var link = document.createElement('a');
+            link.href = photo.url || '';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.className = 'job-photo-link';
+
+            var image = document.createElement('img');
+            image.src = photo.url || '';
+            image.alt = 'Job photo ' + (index + 1);
+            image.className = 'job-photo-image';
+            image.loading = 'lazy';
+            link.appendChild(image);
+            tile.appendChild(link);
+
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'job-photo-remove';
+            removeBtn.textContent = 'Remove';
+            removeBtn.dataset.jobPhotoRemove = String(jobId);
+            removeBtn.dataset.photoPath = photo.path || '';
+            removeBtn.disabled = !!jobPhotoBusyByJob[jobId];
+            tile.appendChild(removeBtn);
+
+            grid.appendChild(tile);
+        });
+    }
+
+    function parseJsonResponse(res) {
+        return res.text().then(function (text) {
+            var data = null;
+            if (text) {
+                try {
+                    data = JSON.parse(text);
+                } catch (err) {
+                    if (!res.ok) {
+                        throw new Error(text || ('Server error (' + res.status + ')'));
+                    }
+                    throw new Error('Invalid server response');
+                }
+            }
+
+            if (!res.ok) {
+                throw new Error((data && data.error) ? data.error : ('Server error (' + res.status + ')'));
+            }
+
+            if (!data || !data.success) {
+                throw new Error((data && data.error) ? data.error : 'Unable to update photos.');
+            }
+
+            return data;
+        });
+    }
+
+    function uploadJobPhotos(jobId, input) {
+        if (!input || !input.files || !input.files.length || jobPhotoBusyByJob[jobId]) {
+            return;
+        }
+
+        var formData = new FormData();
+        formData.append('action', 'upload');
+        formData.append('service_request_id', String(jobId));
+        formData.append('csrf_token', SERVICE_AUTH_CSRF);
+        Array.prototype.forEach.call(input.files, function (file) {
+            formData.append('photos[]', file, file.name || 'photo');
+        });
+
+        setJobPhotoBusy(jobId, true);
+        setJobPhotoStatus(jobId, 'Uploading photos…', '');
+
+        fetch('/api/technician-job-photos-api.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData
+        }).then(parseJsonResponse).then(function (data) {
+            renderJobPhotos(jobId, data.photos || []);
+            setJobPhotoStatus(jobId, 'Photos updated.', 'ok');
+            input.value = '';
+            setJobPhotoBusy(jobId, false);
+        }).catch(function (err) {
+            setJobPhotoStatus(jobId, '✗ ' + err.message, 'err');
+            input.value = '';
+            setJobPhotoBusy(jobId, false);
+        });
+    }
+
+    function removeJobPhoto(jobId, photoPath) {
+        if (!photoPath || jobPhotoBusyByJob[jobId]) {
+            return;
+        }
+
+        setJobPhotoBusy(jobId, true);
+        setJobPhotoStatus(jobId, 'Removing photo…', '');
+
+        fetch('/api/technician-job-photos-api.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'remove',
+                service_request_id: jobId,
+                photo_path: photoPath,
+                csrf_token: SERVICE_AUTH_CSRF
+            })
+        }).then(parseJsonResponse).then(function (data) {
+            renderJobPhotos(jobId, data.photos || []);
+            setJobPhotoStatus(jobId, 'Photo removed.', 'ok');
+            setJobPhotoBusy(jobId, false);
+        }).catch(function (err) {
+            setJobPhotoStatus(jobId, '✗ ' + err.message, 'err');
+            setJobPhotoBusy(jobId, false);
+        });
     }
 
     function modalFocusableElements(container) {
@@ -2428,6 +2729,14 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
         });
     });
 
+    document.querySelectorAll('[data-job-photo-input]').forEach(function (input) {
+        input.addEventListener('change', function () {
+            var jobId = parseInt(input.dataset.jobPhotoInput, 10) || 0;
+            if (!jobId) return;
+            uploadJobPhotos(jobId, input);
+        });
+    });
+
     if (techNotesCancelBtn) {
         techNotesCancelBtn.addEventListener('click', function () {
             closeTechnicianNotesModal();
@@ -2720,6 +3029,27 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
 
     // ── Attach listeners ──────────────────────────────────────────────────────
     document.addEventListener('click', function (e) {
+        var photoPickerBtn = e.target.closest('[data-job-photo-picker]');
+        if (photoPickerBtn) {
+            if (photoPickerBtn.disabled) return;
+            var pickerJobId = photoPickerBtn.dataset.jobPhotoPicker;
+            var photoInput = document.querySelector('[data-job-photo-input="' + pickerJobId + '"]');
+            if (photoInput && !photoInput.disabled) {
+                photoInput.click();
+            }
+            return;
+        }
+
+        var photoRemoveBtn = e.target.closest('[data-job-photo-remove]');
+        if (photoRemoveBtn) {
+            if (photoRemoveBtn.disabled) return;
+            removeJobPhoto(
+                parseInt(photoRemoveBtn.dataset.jobPhotoRemove, 10) || 0,
+                photoRemoveBtn.dataset.photoPath || ''
+            );
+            return;
+        }
+
         var authorizeBtn = e.target.closest('.authorize-btn');
         if (authorizeBtn) {
             if (authorizeBtn.disabled) return;

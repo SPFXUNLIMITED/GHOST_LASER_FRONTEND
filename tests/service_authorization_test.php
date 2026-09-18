@@ -413,6 +413,76 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 19. Job photo decoding keeps only unique stored photo paths ---
+(function (): void {
+    $decoded = serviceAuthorizationDecodeJobPhotos(json_encode([
+        '/uploads/service-authorizations/job-photos/first.jpg',
+        'uploads/service-authorizations/job-photos/first.jpg',
+        'uploads/service-authorizations/job-photos/second.png',
+        'uploads/service-authorizations/signatures/not-a-job-photo.png',
+        '',
+    ]));
+
+    ghostLaserAuthAssertSame(
+        json_encode([
+            'uploads/service-authorizations/job-photos/first.jpg',
+            'uploads/service-authorizations/job-photos/second.png',
+        ]),
+        json_encode($decoded),
+        'Job photo decoding should preserve only unique job-photo storage paths'
+    );
+})();
+
+// --- 20. Job photo payloads expose public URLs for dashboard thumbnails ---
+(function (): void {
+    $payloads = serviceAuthorizationBuildJobPhotoPayloads([
+        'uploads/service-authorizations/job-photos/example.webp',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        '[{"path":"uploads\/service-authorizations\/job-photos\/example.webp","url":"\/uploads\/service-authorizations\/job-photos\/example.webp"}]',
+        json_encode($payloads),
+        'Job photo payloads should include the stored path and public thumbnail URL'
+    );
+})();
+
+// --- 21. Completion certificate photo appendix renders uploaded photos as JPEG pages ---
+(function (): void {
+    $photoDir = __DIR__ . '/../uploads/service-authorizations/job-photos';
+    if (!is_dir($photoDir) && !mkdir($photoDir, 0775, true) && !is_dir($photoDir)) {
+        throw new RuntimeException('Unable to create job photo test directory.');
+    }
+
+    $photoPath = $photoDir . '/test-job-photo.png';
+    file_put_contents(
+        $photoPath,
+        base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5LmioAAAAASUVORK5CYII=', true)
+    );
+
+    try {
+        $jpegPages = completionCertificateRenderPhotoJpegs([
+            'job_photos' => json_encode([
+                'uploads/service-authorizations/job-photos/test-job-photo.png',
+            ]),
+        ]);
+
+        ghostLaserAuthAssert(
+            count($jpegPages) === 1,
+            'Completion certificate photo appendix should render one page per uploaded photo'
+        );
+
+        $imageInfo = isset($jpegPages[0]) ? @getimagesizefromstring($jpegPages[0]) : false;
+        ghostLaserAuthAssert(
+            $imageInfo !== false && ($imageInfo['mime'] ?? '') === 'image/jpeg',
+            'Completion certificate photo appendix pages should be rendered as JPEG images before PDF assembly'
+        );
+    } finally {
+        if (is_file($photoPath)) {
+            unlink($photoPath);
+        }
+    }
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {

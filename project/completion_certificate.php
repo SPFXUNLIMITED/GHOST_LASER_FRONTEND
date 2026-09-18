@@ -351,6 +351,112 @@ function completionCertificateRenderPages(array $certificate): array
         imagedestroy($image);
     }
 
+    return array_merge($jpegPages, completionCertificateRenderPhotoJpegs($certificate));
+}
+
+function completionCertificateCollectRenderablePhotos(array $certificate): array
+{
+    $photos = [];
+    foreach (serviceAuthorizationDecodeJobPhotos($certificate['job_photos'] ?? null) as $path) {
+        try {
+            $resolved = serviceAuthorizationResolveStoragePath($path);
+        } catch (Throwable $e) {
+            continue;
+        }
+
+        $binary = @file_get_contents($resolved);
+        if (!is_string($binary) || $binary === '') {
+            continue;
+        }
+
+        $imageInfo = @getimagesizefromstring($binary);
+        if ($imageInfo === false || strpos((string) ($imageInfo['mime'] ?? ''), 'image/') !== 0) {
+            continue;
+        }
+
+        $photos[] = [
+            'path' => $path,
+            'label' => basename($path),
+            'binary' => $binary,
+        ];
+    }
+
+    return $photos;
+}
+
+function completionCertificateRenderPhotoJpegs(array $certificate): array
+{
+    $photos = completionCertificateCollectRenderablePhotos($certificate);
+    if ($photos === []) {
+        return [];
+    }
+
+    $pageWidth = 1275;
+    $pageHeight = 1650;
+    $marginX = 90;
+    $topMargin = 110;
+    $bottomMargin = 90;
+    $titleFont = serviceAuthorizationFontPath(true);
+    $bodyFont = serviceAuthorizationFontPath(false);
+    $jpegPages = [];
+    $totalPhotos = count($photos);
+
+    foreach ($photos as $index => $photo) {
+        $sourceImage = @imagecreatefromstring($photo['binary']);
+        if ($sourceImage === false) {
+            continue;
+        }
+
+        $page = imagecreatetruecolor($pageWidth, $pageHeight);
+        imageantialias($page, true);
+        $white = imagecolorallocate($page, 255, 255, 255);
+        $black = imagecolorallocate($page, 17, 24, 39);
+        $muted = imagecolorallocate($page, 75, 85, 99);
+        $lineColor = imagecolorallocate($page, 209, 213, 219);
+        imagefilledrectangle($page, 0, 0, $pageWidth, $pageHeight, $white);
+
+        serviceAuthorizationRenderTextLine($page, $titleFont, 24, $marginX, $topMargin, $black, 'Job Photo Appendix', 5);
+        serviceAuthorizationRenderTextLine($page, $bodyFont, 15, $marginX, $topMargin + 40, $muted, 'Technician-captured reference photos for this completion certificate.', 4);
+        serviceAuthorizationRenderTextLine(
+            $page,
+            $bodyFont,
+            14,
+            $marginX,
+            $topMargin + 76,
+            $muted,
+            sprintf('Photo %d of %d', $index + 1, $totalPhotos),
+            3
+        );
+
+        $boxX = $marginX;
+        $boxY = $topMargin + 120;
+        $boxW = $pageWidth - ($marginX * 2);
+        $boxH = $pageHeight - $boxY - $bottomMargin - 90;
+        imagerectangle($page, $boxX, $boxY, $boxX + $boxW, $boxY + $boxH, $lineColor);
+
+        $srcW = imagesx($sourceImage);
+        $srcH = imagesy($sourceImage);
+        $destW = $boxW - 32;
+        $destH = max(1, (int) round(($srcH / max(1, $srcW)) * $destW));
+        if ($destH > ($boxH - 32)) {
+            $destH = $boxH - 32;
+            $destW = max(1, (int) round(($srcW / max(1, $srcH)) * $destH));
+        }
+        $destX = $boxX + (int) floor(($boxW - $destW) / 2);
+        $destY = $boxY + (int) floor(($boxH - $destH) / 2);
+        imagealphablending($page, true);
+        imagesavealpha($page, true);
+        imagecopyresampled($page, $sourceImage, $destX, $destY, 0, 0, $destW, $destH, $srcW, $srcH);
+        imagedestroy($sourceImage);
+
+        serviceAuthorizationRenderTextLine($page, $bodyFont, 13, $marginX, $pageHeight - $bottomMargin, $muted, $photo['label'], 3);
+
+        ob_start();
+        imagejpeg($page, null, 92);
+        $jpegPages[] = (string) ob_get_clean();
+        imagedestroy($page);
+    }
+
     return $jpegPages;
 }
 
@@ -617,23 +723,5 @@ function completionCertificateLoadOrGenerateByServiceRequest(PDO $pdo, int $serv
         throw new RuntimeException('Completion certificate record not found.');
     }
 
-    $latestCertificateId = (int) ($latestCertificate['id'] ?? 0);
-    $expectedPath = completionCertificateExpectedPdfPath($serviceRequestId, $latestCertificateId);
-    $storedPath = completionCertificateFetchStoredFilePath($pdo, $serviceRequestId);
-    if ($storedPath !== null && $storedPath === $expectedPath) {
-        try {
-            $resolved = completionCertificateResolvePdfPath($storedPath);
-            $content = @file_get_contents($resolved);
-            if (is_string($content) && $content !== '') {
-                return [
-                    'filename' => basename($resolved),
-                    'content' => $content,
-                    'path' => $storedPath,
-                ];
-            }
-        } catch (Throwable $e) {
-        }
-    }
-
-    return completionCertificateGenerateAndStoreById($pdo, $latestCertificateId);
+    return completionCertificateGenerateAndStoreById($pdo, (int) ($latestCertificate['id'] ?? 0));
 }

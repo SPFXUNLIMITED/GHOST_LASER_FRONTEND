@@ -46,6 +46,32 @@ function ensureServiceAuthorizationSchema(PDO $pdo): void
     }
 }
 
+function serviceAuthorizationEnsureJobPhotosColumn(PDO $pdo): void
+{
+    static $checked = [];
+
+    $key = spl_object_id($pdo);
+    if (isset($checked[$key])) {
+        return;
+    }
+    $checked[$key] = true;
+
+    if ((string) $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') {
+        return;
+    }
+
+    $stmt = $pdo->query("
+        SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'service_requests'
+          AND COLUMN_NAME = 'job_photos'
+    ");
+    if ((int) $stmt->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE service_requests ADD COLUMN job_photos JSON NULL AFTER technician_notes");
+    }
+}
+
 function serviceAuthorizationSummaryLine(): string
 {
     return 'The customer authorizes the technician to perform the listed work described below.';
@@ -71,6 +97,11 @@ function serviceAuthorizationSignatureRoot(): string
     return serviceAuthorizationStorageRoot() . '/signatures';
 }
 
+function serviceAuthorizationPhotoRoot(): string
+{
+    return serviceAuthorizationStorageRoot() . '/job-photos';
+}
+
 function serviceAuthorizationEnsureDirectory(string $path): void
 {
     if (is_dir($path)) {
@@ -94,6 +125,66 @@ function serviceAuthorizationNormalizeTextarea(string $value): string
 {
     $value = trim(str_replace(["\r\n", "\r"], "\n", $value));
     return preg_replace("/\n{3,}/", "\n\n", $value) ?? $value;
+}
+
+function serviceAuthorizationNormalizeStoredPhotoPath(string $path): string
+{
+    $path = ltrim(str_replace('\\', '/', trim($path)), '/');
+    return strpos($path, 'uploads/service-authorizations/job-photos/') === 0 ? $path : '';
+}
+
+function serviceAuthorizationDecodeJobPhotos($value): array
+{
+    $items = [];
+    if (is_array($value)) {
+        $items = $value;
+    } elseif (is_string($value)) {
+        $trimmed = trim($value);
+        if ($trimmed !== '') {
+            $decoded = json_decode($trimmed, true);
+            if (is_array($decoded)) {
+                $items = $decoded;
+            }
+        }
+    }
+
+    $paths = [];
+    foreach ($items as $item) {
+        if (!is_string($item)) {
+            continue;
+        }
+        $path = serviceAuthorizationNormalizeStoredPhotoPath($item);
+        if ($path === '' || in_array($path, $paths, true)) {
+            continue;
+        }
+        $paths[] = $path;
+    }
+
+    return $paths;
+}
+
+function serviceAuthorizationEncodeJobPhotos(array $paths): ?string
+{
+    $paths = serviceAuthorizationDecodeJobPhotos($paths);
+    return $paths === [] ? null : json_encode($paths, JSON_UNESCAPED_SLASHES);
+}
+
+function serviceAuthorizationJobPhotoPublicUrl(string $relativePath): string
+{
+    return '/' . ltrim(str_replace('\\', '/', $relativePath), '/');
+}
+
+function serviceAuthorizationBuildJobPhotoPayloads(array $paths): array
+{
+    $payloads = [];
+    foreach (serviceAuthorizationDecodeJobPhotos($paths) as $path) {
+        $payloads[] = [
+            'path' => $path,
+            'url' => serviceAuthorizationJobPhotoPublicUrl($path),
+        ];
+    }
+
+    return $payloads;
 }
 
 function serviceAuthorizationEnsureSentence(string $label, string $value): string
@@ -210,6 +301,8 @@ function serviceAuthorizationBuildScopeOfWork(PDO $pdo, array $job): string
 
 function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId): ?array
 {
+    serviceAuthorizationEnsureJobPhotosColumn($pdo);
+
     $stmt = $pdo->prepare(
         "SELECT
             sr.id,
@@ -217,6 +310,7 @@ function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId): ?array
             sr.problem,
             sr.problem_details,
             sr.technician_notes,
+            sr.job_photos,
             sr.services,
             sr.laser_brand,
             sr.laser_model,
@@ -375,6 +469,220 @@ function serviceAuthorizationSaveTechnicianNotes(PDO $pdo, int $serviceRequestId
     ];
 }
 
+function serviceAuthorizationNormalizeUploadedFilesArray(?array $filesSpec): array
+{
+    if (!is_array($filesSpec) || !isset($filesSpec['name'])) {
+        return [];
+    }
+
+    $names = is_array($filesSpec['name']) ? $filesSpec['name'] : [$filesSpec['name']];
+    $types = is_array($filesSpec['type'] ?? null) ? $filesSpec['type'] : [$filesSpec['type'] ?? ''];
+    $tmpNames = is_array($filesSpec['tmp_name'] ?? null) ? $filesSpec['tmp_name'] : [$filesSpec['tmp_name'] ?? ''];
+    $errors = is_array($filesSpec['error'] ?? null) ? $filesSpec['error'] : [$filesSpec['error'] ?? UPLOAD_ERR_NO_FILE];
+    $sizes = is_array($filesSpec['size'] ?? null) ? $filesSpec['size'] : [$filesSpec['size'] ?? 0];
+
+    $files = [];
+    foreach ($names as $index => $name) {
+        $files[] = [
+            'name' => (string) $name,
+            'type' => (string) ($types[$index] ?? ''),
+            'tmp_name' => (string) ($tmpNames[$index] ?? ''),
+            'error' => (int) ($errors[$index] ?? UPLOAD_ERR_NO_FILE),
+            'size' => (int) ($sizes[$index] ?? 0),
+        ];
+    }
+
+    return $files;
+}
+
+function serviceAuthorizationPhotoExtensionForMime(string $mime): ?string
+{
+    $map = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+    ];
+
+    return $map[strtolower($mime)] ?? null;
+}
+
+function serviceAuthorizationDecodeUploadedPhoto(array $file): array
+{
+    $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($error === UPLOAD_ERR_NO_FILE) {
+        throw new InvalidArgumentException('No photos were selected.');
+    }
+    if ($error !== UPLOAD_ERR_OK) {
+        throw new InvalidArgumentException('One of the selected photos could not be uploaded.');
+    }
+
+    $size = (int) ($file['size'] ?? 0);
+    if ($size <= 0) {
+        throw new InvalidArgumentException('One of the selected photos is empty.');
+    }
+    if ($size > 10 * 1024 * 1024) {
+        throw new InvalidArgumentException('Each photo must be 10MB or smaller.');
+    }
+
+    $tmpName = (string) ($file['tmp_name'] ?? '');
+    if ($tmpName === '' || !is_file($tmpName)) {
+        throw new InvalidArgumentException('A selected photo is unavailable.');
+    }
+
+    $binary = @file_get_contents($tmpName);
+    if (!is_string($binary) || $binary === '') {
+        throw new InvalidArgumentException('A selected photo could not be read.');
+    }
+
+    $imageInfo = @getimagesizefromstring($binary);
+    $mime = strtolower((string) ($imageInfo['mime'] ?? ''));
+    $extension = serviceAuthorizationPhotoExtensionForMime($mime);
+    if ($extension === null) {
+        throw new InvalidArgumentException('Photos must be JPG, PNG, or WebP images.');
+    }
+
+    $image = @imagecreatefromstring($binary);
+    if ($image === false) {
+        throw new InvalidArgumentException('One of the selected photos is not a valid image.');
+    }
+    imagedestroy($image);
+
+    return [
+        'binary' => $binary,
+        'extension' => $extension,
+    ];
+}
+
+function serviceAuthorizationPreparePhotoPaths(int $serviceRequestId, string $extension): array
+{
+    serviceAuthorizationEnsureDirectory(serviceAuthorizationPhotoRoot());
+
+    $fileName = sprintf(
+        'job-photo-%d-%s-%s.%s',
+        $serviceRequestId,
+        gmdate('YmdHis'),
+        bin2hex(random_bytes(6)),
+        $extension
+    );
+    $relativePath = 'uploads/service-authorizations/job-photos/' . $fileName;
+    $absolutePath = dirname(__DIR__) . '/' . $relativePath;
+
+    return [
+        'relative' => $relativePath,
+        'absolute' => $absolutePath,
+        'temp' => $absolutePath . '.tmp',
+    ];
+}
+
+function serviceAuthorizationPersistJobPhotos(PDO $pdo, int $serviceRequestId, array $paths): void
+{
+    $encoded = serviceAuthorizationEncodeJobPhotos($paths);
+    $stmt = $pdo->prepare(
+        "UPDATE service_requests
+         SET job_photos = :job_photos
+         WHERE id = :id
+         LIMIT 1"
+    );
+    if ($encoded === null) {
+        $stmt->bindValue(':job_photos', null, PDO::PARAM_NULL);
+    } else {
+        $stmt->bindValue(':job_photos', $encoded, PDO::PARAM_STR);
+    }
+    $stmt->bindValue(':id', $serviceRequestId, PDO::PARAM_INT);
+    $stmt->execute();
+}
+
+function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, array $uploadedFiles, array $job): array
+{
+    if ((int) ($job['id'] ?? 0) !== $serviceRequestId) {
+        throw new RuntimeException('Service request not found.');
+    }
+
+    $uploadedFiles = array_values(array_filter(
+        $uploadedFiles,
+        static fn (array $file): bool => (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE
+    ));
+    if ($uploadedFiles === []) {
+        throw new InvalidArgumentException('No photos were selected.');
+    }
+    if (count($uploadedFiles) > 10) {
+        throw new InvalidArgumentException('Upload up to 10 photos at a time.');
+    }
+
+    $existingPaths = serviceAuthorizationDecodeJobPhotos($job['job_photos'] ?? null);
+    if ((count($existingPaths) + count($uploadedFiles)) > 20) {
+        throw new InvalidArgumentException('Each job can have up to 20 photos.');
+    }
+
+    $createdPaths = [];
+    try {
+        foreach ($uploadedFiles as $file) {
+            $decoded = serviceAuthorizationDecodeUploadedPhoto($file);
+            $paths = serviceAuthorizationPreparePhotoPaths($serviceRequestId, $decoded['extension']);
+            if (file_put_contents($paths['temp'], $decoded['binary'], LOCK_EX) === false) {
+                throw new RuntimeException('Unable to save one of the photos.');
+            }
+            if (!rename($paths['temp'], $paths['absolute'])) {
+                @unlink($paths['temp']);
+                throw new RuntimeException('Unable to finalize one of the photos.');
+            }
+            $createdPaths[] = $paths['relative'];
+        }
+
+        $allPaths = array_values(array_unique(array_merge($existingPaths, $createdPaths)));
+        serviceAuthorizationPersistJobPhotos($pdo, $serviceRequestId, $allPaths);
+    } catch (Throwable $e) {
+        foreach ($createdPaths as $path) {
+            $absolutePath = dirname(__DIR__) . '/' . $path;
+            if (is_file($absolutePath)) {
+                @unlink($absolutePath);
+            }
+        }
+        throw $e;
+    }
+
+    return [
+        'service_request_id' => $serviceRequestId,
+        'photos' => serviceAuthorizationBuildJobPhotoPayloads(array_merge($existingPaths, $createdPaths)),
+    ];
+}
+
+function serviceAuthorizationRemoveJobPhoto(PDO $pdo, int $serviceRequestId, string $photoPath, array $job): array
+{
+    if ((int) ($job['id'] ?? 0) !== $serviceRequestId) {
+        throw new RuntimeException('Service request not found.');
+    }
+
+    $photoPath = serviceAuthorizationNormalizeStoredPhotoPath($photoPath);
+    if ($photoPath === '') {
+        throw new InvalidArgumentException('Invalid photo path.');
+    }
+
+    $existingPaths = serviceAuthorizationDecodeJobPhotos($job['job_photos'] ?? null);
+    if (!in_array($photoPath, $existingPaths, true)) {
+        throw new InvalidArgumentException('Photo not found.');
+    }
+
+    $remainingPaths = array_values(array_filter(
+        $existingPaths,
+        static fn (string $path): bool => $path !== $photoPath
+    ));
+    serviceAuthorizationPersistJobPhotos($pdo, $serviceRequestId, $remainingPaths);
+
+    try {
+        $absolutePath = serviceAuthorizationResolveStoragePath($photoPath);
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
+    } catch (Throwable $e) {
+    }
+
+    return [
+        'service_request_id' => $serviceRequestId,
+        'photos' => serviceAuthorizationBuildJobPhotoPayloads($remainingPaths),
+    ];
+}
+
 function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
 {
     $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
@@ -453,11 +761,14 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
 
 function serviceAuthorizationFetchById(PDO $pdo, int $authorizationId): ?array
 {
+    serviceAuthorizationEnsureJobPhotosColumn($pdo);
+
     $stmt = $pdo->prepare(
         "SELECT
             sa.*,
             sr.id AS service_request_number,
             sr.technician_notes,
+            sr.job_photos,
             COALESCE(NULLIF(TRIM(CONCAT(COALESCE(c.first_name, ''), ' ', COALESCE(c.last_name, ''))), ''), 'Customer') AS customer_name
          FROM service_authorizations sa
          JOIN service_requests sr ON sr.id = sa.service_request_id
@@ -471,7 +782,7 @@ function serviceAuthorizationFetchById(PDO $pdo, int $authorizationId): ?array
     return $row ?: null;
 }
 
-function serviceAuthorizationResolveSignaturePath(string $relativePath): string
+function serviceAuthorizationResolveStoragePath(string $relativePath): string
 {
     $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
     $baseRoot     = realpath(dirname(__DIR__));
@@ -484,10 +795,19 @@ function serviceAuthorizationResolveSignaturePath(string $relativePath): string
         $uploadsRoot === false ||
         ($resolved !== $uploadsRoot && strpos($resolved, $uploadsRoot . DIRECTORY_SEPARATOR) !== 0)
     ) {
-        throw new RuntimeException('Signature file is unavailable.');
+        throw new RuntimeException('Stored file is unavailable.');
     }
 
     return $resolved;
+}
+
+function serviceAuthorizationResolveSignaturePath(string $relativePath): string
+{
+    try {
+        return serviceAuthorizationResolveStoragePath($relativePath);
+    } catch (Throwable $e) {
+        throw new RuntimeException('Signature file is unavailable.');
+    }
 }
 
 function serviceAuthorizationFontPath(bool $bold = false): ?string
