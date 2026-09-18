@@ -3,3 +3,4 @@ api/.env
 .env
 .env.local
 .env.*.local
+uploads/service-authorizations/
