@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['admin_id']       = $user['id'];
             $_SESSION['admin_username'] = $username;
             echo '<!doctype html><html><head><meta charset="UTF-8"><title>Redirecting…</title></head><body>';
-            echo '<script>(function(){var fallback="dashboard.php";try{var returnUrl=sessionStorage.getItem("return_url");if(returnUrl){sessionStorage.removeItem("return_url");window.location.replace(returnUrl);return;}}catch(e){}window.location.replace(fallback);}());</script>';
+            echo '<script>(function(){var fallback="dashboard.php";try{var returnUrl=sessionStorage.getItem("return_url");if(returnUrl){sessionStorage.removeItem("return_url");var parsed=null;try{parsed=new URL(returnUrl,window.location.origin);}catch(e){}if(parsed&&parsed.origin===window.location.origin){window.location.replace(parsed.pathname+parsed.search+parsed.hash);return;}}}catch(e){}window.location.replace(fallback);}());</script>';
             echo '</body></html>';
             exit;
         } else {
