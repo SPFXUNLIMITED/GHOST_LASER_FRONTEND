@@ -1136,6 +1136,15 @@ require_once __DIR__ . '/templates/header.php';
             </span>
         </div>
 
+        <?php
+        $serviceAgreementTerms = [
+            'The customer authorizes Ghost Laser to inspect, diagnose, and perform the approved service described in the Scope of Work.',
+            'The customer agrees to pay for all parts, labor, travel, and related service charges required to complete the authorized work.',
+            'The customer acknowledges that the equipment may have pre-existing wear, cosmetic issues, or damage that is unrelated to the authorized service.',
+            'The customer waives claims arising solely from normal wear, hidden defects, or conditions discovered during service that are not caused by Ghost Laser negligence.',
+        ];
+        ?>
+
         <!-- Clusters -->
         <?php foreach ($clusters as $clusterIndex => $cluster): ?>
             <div class="mb-7">
@@ -1271,10 +1280,9 @@ require_once __DIR__ . '/templates/header.php';
 
                                     <div class="mt-3 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-cyan-300/85">Terms</div>
                                     <ol class="mt-1 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-zinc-300">
-                                        <li>The customer authorizes Ghost Laser to inspect, diagnose, and perform the approved service described in the Scope of Work.</li>
-                                        <li>The customer agrees to pay for all parts, labor, travel, and related service charges required to complete the authorized work.</li>
-                                        <li>The customer acknowledges that the equipment may have pre-existing wear, cosmetic issues, or damage that is unrelated to the authorized service.</li>
-                                        <li>The customer waives claims arising solely from normal wear, hidden defects, or conditions discovered during service that are not caused by Ghost Laser negligence.</li>
+                                        <?php foreach ($serviceAgreementTerms as $serviceAgreementTerm): ?>
+                                            <li><?= htmlspecialchars($serviceAgreementTerm, ENT_QUOTES, 'UTF-8') ?></li>
+                                        <?php endforeach; ?>
                                     </ol>
                                 </div>
                                 <div class="authorization-status<?= $existingAuthorization ? ' is-signed' : '' ?>" data-auth-job="<?= (int) $job['service_request_id'] ?>">
@@ -1353,10 +1361,9 @@ require_once __DIR__ . '/templates/header.php';
 
                         <h3>Terms</h3>
                         <ol>
-                            <li>The customer authorizes Ghost Laser to inspect, diagnose, and perform the approved service described in the Scope of Work.</li>
-                            <li>The customer agrees to pay for all parts, labor, travel, and related service charges required to complete the authorized work.</li>
-                            <li>The customer acknowledges that the equipment may have pre-existing wear, cosmetic issues, or damage that is unrelated to the authorized service.</li>
-                            <li>The customer waives claims arising solely from normal wear, hidden defects, or conditions discovered during service that are not caused by Ghost Laser negligence.</li>
+                            <?php foreach ($serviceAgreementTerms as $serviceAgreementTerm): ?>
+                                <li><?= htmlspecialchars($serviceAgreementTerm, ENT_QUOTES, 'UTF-8') ?></li>
+                            <?php endforeach; ?>
                         </ol>
                     </div>
 
