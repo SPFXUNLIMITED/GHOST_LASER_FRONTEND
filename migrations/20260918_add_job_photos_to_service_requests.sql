@@ -8,7 +8,7 @@ SET @ghost_laser_has_job_photos := (
 
 SET @ghost_laser_add_job_photos_sql := IF(
     @ghost_laser_has_job_photos = 0,
-    'ALTER TABLE service_requests ADD COLUMN job_photos JSON NULL AFTER technician_notes',
+    'ALTER TABLE service_requests ADD COLUMN job_photos TEXT NULL AFTER technician_notes',
     'SELECT 1'
 );
 
