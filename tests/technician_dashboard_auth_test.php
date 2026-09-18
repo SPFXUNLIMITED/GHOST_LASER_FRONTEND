@@ -74,6 +74,11 @@ function ghostLaserAuthMakeTestPdo(): PDO
         technicianDashboardCanAccessServiceRequest($pdo, 100),
         'Unauthenticated sessions should still be denied access'
     );
+    ghostLaserAuthAssertSame(
+        false,
+        technicianDashboardCanAccessAuthorization($pdo, 500),
+        'Unauthenticated sessions should still be denied authorization access'
+    );
 })();
 
 if ($failures !== []) {
