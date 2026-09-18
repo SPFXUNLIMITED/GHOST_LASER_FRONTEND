@@ -1418,6 +1418,7 @@ require_once __DIR__ . '/templates/header.php';
                                     class="job-note-edit"
                                     data-tech-notes-job-id="<?= $serviceRequestId ?>"
                                     data-technician-notes="<?= htmlspecialchars($technicianNotes, ENT_QUOTES, 'UTF-8') ?>"
+                                    aria-label="Edit technician notes for <?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
                                     title="Edit technician notes"
                                 >
                                     <span class="job-note-edit-label">
