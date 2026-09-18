@@ -372,6 +372,7 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
     $authorizationId = 0;
     $pendingSignaturePath = $signaturePaths['relative'] . '.tmp';
     $previousSignaturePath = null;
+    $createdNewRecord = false;
 
     try {
         if (!$pdo->inTransaction()) {
@@ -389,6 +390,7 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
         $existingStmt->execute([':service_request_id' => $serviceRequestId]);
         $existingRow = $existingStmt->fetch(PDO::FETCH_ASSOC) ?: null;
         $previousSignaturePath = $existingRow['signature_path'] ?? null;
+        $createdNewRecord = $existingRow === null;
 
         $stmt = $pdo->prepare(
             "INSERT INTO service_authorizations
@@ -445,7 +447,7 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
         if (is_file($signaturePaths['absolute'])) {
             @unlink($signaturePaths['absolute']);
         }
-        if ($authorizationId > 0) {
+        if ($createdNewRecord && $authorizationId > 0) {
             try {
                 $delete = $pdo->prepare('DELETE FROM service_authorizations WHERE id = :id LIMIT 1');
                 $delete->execute([':id' => $authorizationId]);

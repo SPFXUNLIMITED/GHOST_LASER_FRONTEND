@@ -1701,7 +1701,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         if (!el) return;
 
         el.textContent = '';
-        el.className = 'authorization-status';
+        el.classList.remove('is-signed');
 
         if (!authorization || !authorization.download_url) {
             var empty = document.createElement('span');
@@ -1904,6 +1904,9 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
 
     function syncAuthorizationCanvasToViewport() {
         if (authModal && authModal.classList.contains('open')) {
+            if (authState.dirty) {
+                return;
+            }
             resizeAuthorizationCanvas();
         }
     }
