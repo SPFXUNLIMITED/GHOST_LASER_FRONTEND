@@ -1303,7 +1303,7 @@ require_once __DIR__ . '/templates/header.php';
                         $serviceRequestId = (int) ($job['service_request_id'] ?? 0);
                         $authorizationScope = serviceAuthorizationBuildScopeOfWork($pdo, $job);
                         $existingAuthorization = $serviceAuthorizations[(int) $job['service_request_id']] ?? null;
-                        $customerProblem = str_replace(["\r\n", "\r"], "\n", (string) ($job['problem'] ?? $job['problem_details'] ?? ''));
+                        $customerProblem = str_replace(["\r\n", "\r"], "\n", serviceAuthorizationPrimaryProblemText($job));
                         $technicianNotes = str_replace(["\r\n", "\r"], "\n", (string) ($job['technician_notes'] ?? ''));
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
                         if ($customerName === '') {

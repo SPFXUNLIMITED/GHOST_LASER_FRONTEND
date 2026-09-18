@@ -79,6 +79,26 @@ function ghostLaserAuthAssertNotContains(string $needle, string $haystack, strin
     ghostLaserAuthAssertNotContains('Technician notes', $scope, 'Blank technician notes should not add an empty section');
 })();
 
+// --- 3. Legacy rows still fall back to problem_details when problem is blank ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 3, 'name' => 'Diagnosis', 'duration' => 60],
+    ]);
+
+    $scope = serviceAuthorizationBuildScopeOfWork($pdo, [
+        'services' => json_encode([3]),
+        'problem_summary' => 'Power issue',
+        'problem' => '   ',
+        'problem_details' => 'Legacy description from older requests.',
+    ]);
+
+    ghostLaserAuthAssertContains(
+        'Job description: Legacy description from older requests.',
+        $scope,
+        'Legacy rows should fall back to problem_details when problem is blank'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {

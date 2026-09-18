@@ -121,6 +121,16 @@ function serviceAuthorizationBuildHeadingBlock(string $heading, string $value): 
     return $heading . "\n" . $value;
 }
 
+function serviceAuthorizationPrimaryProblemText(array $job): string
+{
+    $problem = (string) ($job['problem'] ?? '');
+    if (trim($problem) !== '') {
+        return $problem;
+    }
+
+    return (string) ($job['problem_details'] ?? '');
+}
+
 function serviceAuthorizationFormatServices(PDO $pdo, $services): string
 {
     if ($services === null) {
@@ -166,7 +176,7 @@ function serviceAuthorizationBuildScopeOfWork(PDO $pdo, array $job): string
         $parts[] = serviceAuthorizationEnsureSentence('Issue summary', $problemSummary);
     }
 
-    $problemDetails = trim((string) ($job['problem'] ?? $job['problem_details'] ?? ''));
+    $problemDetails = trim(serviceAuthorizationPrimaryProblemText($job));
     if ($problemDetails !== '' && strcasecmp($problemDetails, $problemSummary) !== 0) {
         $parts[] = serviceAuthorizationEnsureSentence('Job description', $problemDetails);
     }
