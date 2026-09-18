@@ -27,6 +27,7 @@ $technicianDashboardCsrf = (string) $_SESSION['technician_dashboard_csrf'];
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/project/service_display.php';
 require_once __DIR__ . '/project/service_authorization.php';
+require_once __DIR__ . '/project/completion_certificate.php';
 require_once __DIR__ . '/scheduling_settings.php';
 require_once __DIR__ . '/mileage_schema.php';
 
@@ -147,10 +148,13 @@ foreach ($rawJobs as $job) {
 $clusters = array_values($clusters);
 $jobIdsForAuthorizations = !empty($rawJobs) ? array_map('intval', array_column($rawJobs, 'service_request_id')) : [];
 $serviceAuthorizations   = [];
+$completionCertificates  = [];
 try {
     $serviceAuthorizations = serviceAuthorizationFetchLatestByJobIds($pdo, $jobIdsForAuthorizations);
+    $completionCertificates = completionCertificateFetchLatestByJobIds($pdo, $jobIdsForAuthorizations);
 } catch (Throwable $e) {
     $serviceAuthorizations = [];
+    $completionCertificates = [];
 }
 
 // ── Load scheduling settings (provides shop_address for Returning Home card) ─
@@ -1244,6 +1248,15 @@ require_once __DIR__ . '/templates/header.php';
         </div>
     <?php endif; ?>
 
+    <?php
+    $serviceAgreementTerms = [
+        'The customer authorizes Ghost Laser to inspect, diagnose, and perform the approved service described in the Scope of Work.',
+        'The customer agrees to pay for all parts, labor, travel, and related service charges required to complete the authorized work.',
+        'The customer acknowledges that the equipment may have pre-existing wear, cosmetic issues, or damage that is unrelated to the authorized service.',
+        'The customer waives claims arising solely from normal wear, hidden defects, or conditions discovered during service that are not caused by Ghost Laser negligence.',
+    ];
+    $completionCertificateTerms = completionCertificateClauses();
+    ?>
     <?php if (empty($clusters)): ?>
         <!-- Empty state -->
         <div class="flex flex-col items-center justify-center py-16 text-center">
@@ -1273,15 +1286,6 @@ require_once __DIR__ . '/templates/header.php';
             </span>
         </div>
 
-        <?php
-        $serviceAgreementTerms = [
-            'The customer authorizes Ghost Laser to inspect, diagnose, and perform the approved service described in the Scope of Work.',
-            'The customer agrees to pay for all parts, labor, travel, and related service charges required to complete the authorized work.',
-            'The customer acknowledges that the equipment may have pre-existing wear, cosmetic issues, or damage that is unrelated to the authorized service.',
-            'The customer waives claims arising solely from normal wear, hidden defects, or conditions discovered during service that are not caused by Ghost Laser negligence.',
-        ];
-        ?>
-
         <!-- Clusters -->
         <?php foreach ($clusters as $clusterIndex => $cluster): ?>
             <div class="mb-7">
@@ -1303,6 +1307,22 @@ require_once __DIR__ . '/templates/header.php';
                         $serviceRequestId = (int) ($job['service_request_id'] ?? 0);
                         $authorizationScope = serviceAuthorizationBuildScopeOfWork($pdo, $job);
                         $existingAuthorization = $serviceAuthorizations[(int) $job['service_request_id']] ?? null;
+                        $existingCompletionCertificate = $completionCertificates[(int) $job['service_request_id']] ?? null;
+                        $completionCertificateScope = $authorizationScope;
+                        $hasCurrentCompletionCertificate = false;
+                        if ($existingCompletionCertificate) {
+                            if ($existingAuthorization) {
+                                $completionSignedAtTs = strtotime((string) ($existingCompletionCertificate['signed_at'] ?? ''));
+                                $authorizationSignedAtTs = strtotime((string) ($existingAuthorization['signed_at'] ?? ''));
+                                $hasCurrentCompletionCertificate = $completionSignedAtTs !== false
+                                    && $authorizationSignedAtTs !== false
+                                    && $completionSignedAtTs >= $authorizationSignedAtTs;
+                            } else {
+                                $hasCurrentCompletionCertificate = true;
+                            }
+                        }
+                        $displayCompletionCertificate = $hasCurrentCompletionCertificate ? $existingCompletionCertificate : null;
+                        $canGenerateCompletionCertificate = $existingAuthorization && !$hasCurrentCompletionCertificate;
                         $customerProblem = str_replace(["\r\n", "\r"], "\n", serviceAuthorizationPrimaryProblemText($job));
                         $technicianNotes = str_replace(["\r\n", "\r"], "\n", (string) ($job['technician_notes'] ?? ''));
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
@@ -1455,6 +1475,7 @@ require_once __DIR__ . '/templates/header.php';
                                         data-authorize-job-id="<?= (int) $job['service_request_id'] ?>"
                                         data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
                                         data-authorize-scope="<?= htmlspecialchars($authorizationScope, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-doc-type="service_authorization"
                                     >
                                         Authorize
                                     </button>
@@ -1470,6 +1491,40 @@ require_once __DIR__ . '/templates/header.php';
                                         >Download PDF</a>
                                     <?php else: ?>
                                         <span>Not signed yet.</span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
+                            <div class="mt-3 pt-3 border-t border-zinc-700/40">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-zinc-500">Completion Certificate</div>
+                                        <div class="mt-1 text-xs text-zinc-400">Confirms completed work and customer approval of final payment.</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="authorize-btn"
+                                        data-authorize-job-id="<?= (int) $job['service_request_id'] ?>"
+                                        data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-scope="<?= htmlspecialchars($completionCertificateScope, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-doc-type="completion_certificate"
+                                        title="<?= $canGenerateCompletionCertificate ? 'Capture customer completion signature' : ($existingAuthorization ? 'Completion certificate is already current' : 'Complete service authorization first') ?>"
+                                        <?= $canGenerateCompletionCertificate ? '' : 'disabled' ?>
+                                    >
+                                        Generate completion certificate
+                                    </button>
+                                </div>
+                                <div class="authorization-status<?= $displayCompletionCertificate ? ' is-signed' : '' ?>" data-cert-job="<?= (int) $job['service_request_id'] ?>">
+                                    <?php if ($displayCompletionCertificate): ?>
+                                        <span>Generated <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $displayCompletionCertificate['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
+                                        <a
+                                            href="/api/completion-certificate-pdf.php?service_request_id=<?= (int) $job['service_request_id'] ?>"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="authorization-download"
+                                        >Download PDF</a>
+                                    <?php else: ?>
+                                        <span><?= !$existingAuthorization ? 'Complete service authorization first.' : ($existingCompletionCertificate ? 'A newer authorization requires a new certificate.' : 'Not generated yet.') ?></span>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -1522,19 +1577,19 @@ require_once __DIR__ . '/templates/header.php';
             <div class="service-auth-modal-inner">
                 <div class="service-auth-modal-header">
                     <div>
-                        <div class="service-auth-modal-kicker">Service Authorization</div>
+                        <div id="serviceAuthorizationModalKicker" class="service-auth-modal-kicker">Service Authorization</div>
                         <div id="serviceAuthorizationModalTitle" class="service-auth-modal-title">Authorize Work</div>
                     </div>
                     <button type="button" id="serviceAuthorizationClose" class="service-auth-close" aria-label="Close">&times;</button>
                 </div>
-                <div class="service-auth-summary">The customer authorizes the technician to perform the listed work described below.</div>
+                <div id="serviceAuthorizationSummary" class="service-auth-summary">The customer authorizes the technician to perform the listed work described below.</div>
                 <div class="service-auth-layout">
                     <div class="service-auth-contract">
-                        <h3>Scope of Work</h3>
+                        <h3 id="serviceAuthorizationScopeHeading">Scope of Work</h3>
                         <p id="serviceAuthorizationScope"></p>
 
-                        <h3>Terms</h3>
-                        <ol>
+                        <h3 id="serviceAuthorizationTermsHeading">Terms</h3>
+                        <ol id="serviceAuthorizationTermsList">
                             <?php foreach ($serviceAgreementTerms as $serviceAgreementTerm): ?>
                                 <li><?= htmlspecialchars($serviceAgreementTerm, ENT_QUOTES, 'UTF-8') ?></li>
                             <?php endforeach; ?>
@@ -1680,6 +1735,8 @@ var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 var HAS_ACTIVE_VEHICLES = <?= $hasActiveVehicles ? 'true' : 'false' ?>;
 var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleId : 'null' ?>;
 var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+var SERVICE_AUTH_TERMS = <?= json_encode($serviceAgreementTerms, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
 
 <!-- ── Mileage Entry Modal ───────────────────────────────────────────────── -->
@@ -1753,6 +1810,12 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
     // Starting odometer per job, used to validate the ending reading client-side.
     var _startMileageByJob = {};
     var authModal = document.getElementById('serviceAuthorizationModal');
+    var authKicker = document.getElementById('serviceAuthorizationModalKicker');
+    var authTitle = document.getElementById('serviceAuthorizationModalTitle');
+    var authSummary = document.getElementById('serviceAuthorizationSummary');
+    var authScopeHeading = document.getElementById('serviceAuthorizationScopeHeading');
+    var authTermsHeading = document.getElementById('serviceAuthorizationTermsHeading');
+    var authTermsList = document.getElementById('serviceAuthorizationTermsList');
     var authScope = document.getElementById('serviceAuthorizationScope');
     var authMeta = document.getElementById('serviceAuthorizationMeta');
     var authStatus = document.getElementById('serviceAuthorizationStatus');
@@ -1766,6 +1829,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
     var authState = {
         btn: null,
         jobId: 0,
+        documentType: 'service_authorization',
         dirty: false,
         drawing: false,
         pointerId: null,
@@ -1882,7 +1946,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
             authorizeBtn.dataset.authorizeScope = scopeOfWork;
         });
 
-        if (authState.jobId === jobId && authScope) {
+        if (authState.jobId === jobId && authScope && authState.documentType === 'service_authorization') {
             authScope.textContent = scopeOfWork || 'Perform the service request currently listed for this visit.';
         }
     }
@@ -2024,8 +2088,55 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         return value !== null && value !== undefined && value !== '';
     }
 
-    function setAuthorizationCardStatus(jobId, authorization) {
-        var el = document.querySelector('[data-auth-job="' + jobId + '"]');
+    function getAuthorizationDocumentConfig(documentType) {
+        if (documentType === 'completion_certificate') {
+            return {
+                kicker: 'Completion Certificate',
+                title: 'Generate completion certificate',
+                summary: 'This certifies that the work has been satisfactorily completed and the customer approves final payment.',
+                scopeHeading: 'Completed Work',
+                termsHeading: 'Customer Acknowledgment',
+                terms: window.COMPLETION_CERTIFICATE_TERMS || [],
+                emptyCardStatus: 'Not generated yet.',
+                signedCardPrefix: 'Generated ',
+                saveStatusMessage: 'Saving completion certificate…',
+                saveError: 'Unable to save completion certificate.',
+                apiEndpoint: '/api/completion-certificate-api.php',
+                responseKey: 'certificate',
+                statusSelectorPrefix: 'data-cert-job'
+            };
+        }
+
+        return {
+            kicker: 'Service Authorization',
+            title: 'Authorize Work',
+            summary: 'The customer authorizes the technician to perform the listed work described below.',
+            scopeHeading: 'Scope of Work',
+            termsHeading: 'Terms',
+            terms: window.SERVICE_AUTH_TERMS || [],
+            emptyCardStatus: 'Not signed yet.',
+            signedCardPrefix: 'Signed ',
+            saveStatusMessage: 'Saving authorization…',
+            saveError: 'Unable to save authorization.',
+            apiEndpoint: '/api/service-authorization-api.php',
+            responseKey: 'authorization',
+            statusSelectorPrefix: 'data-auth-job'
+        };
+    }
+
+    function renderAuthorizationTerms(terms) {
+        if (!authTermsList) return;
+        authTermsList.textContent = '';
+        (terms || []).forEach(function (term) {
+            var li = document.createElement('li');
+            li.textContent = term;
+            authTermsList.appendChild(li);
+        });
+    }
+
+    function setAuthorizationCardStatus(jobId, documentType, authorization, warning) {
+        var config = getAuthorizationDocumentConfig(documentType);
+        var el = document.querySelector('[' + config.statusSelectorPrefix + '="' + jobId + '"]');
         if (!el) return;
 
         el.textContent = '';
@@ -2033,14 +2144,30 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
 
         if (!authorization || !authorization.download_url) {
             var empty = document.createElement('span');
-            empty.textContent = 'Not signed yet.';
+            empty.textContent = config.emptyCardStatus;
             el.appendChild(empty);
             return;
         }
 
         el.classList.add('is-signed');
+
+        if (warning) {
+            var warningText = document.createElement('span');
+            warningText.textContent = warning;
+            el.appendChild(warningText);
+
+            var warningLink = document.createElement('a');
+            warningLink.href = authorization.download_url;
+            warningLink.target = '_blank';
+            warningLink.rel = 'noopener noreferrer';
+            warningLink.className = 'authorization-download';
+            warningLink.textContent = 'Download PDF';
+            el.appendChild(warningLink);
+            return;
+        }
+
         var signedText = document.createElement('span');
-        signedText.textContent = 'Signed ' + (authorization.signed_at_display || authorization.signed_at || '');
+        signedText.textContent = config.signedCardPrefix + (authorization.signed_at_display || authorization.signed_at || '');
         el.appendChild(signedText);
 
         var link = document.createElement('a');
@@ -2096,12 +2223,21 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
     }
 
     function openAuthorizationModal(btn) {
+        var documentType = btn.dataset.authorizeDocType || 'service_authorization';
+        var config = getAuthorizationDocumentConfig(documentType);
         authState.btn = btn;
         authState.jobId = parseInt(btn.dataset.authorizeJobId, 10) || 0;
+        authState.documentType = documentType;
         authState.dirty = false;
         authState.drawing = false;
         authState.pointerId = null;
         authState.submitting = false;
+        if (authKicker) authKicker.textContent = config.kicker;
+        if (authTitle) authTitle.textContent = config.title;
+        if (authSummary) authSummary.textContent = config.summary;
+        if (authScopeHeading) authScopeHeading.textContent = config.scopeHeading;
+        if (authTermsHeading) authTermsHeading.textContent = config.termsHeading;
+        renderAuthorizationTerms(config.terms);
         if (authScope) {
             authScope.textContent = btn.dataset.authorizeScope || 'Perform the service request currently listed for this visit.';
         }
@@ -2135,6 +2271,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         document.body.style.overflow = '';
         authState.btn = null;
         authState.jobId = 0;
+        authState.documentType = 'service_authorization';
         authState.dirty = false;
         authState.drawing = false;
         authState.pointerId = null;
@@ -2339,19 +2476,21 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
             if (authClearBtn) authClearBtn.disabled = true;
             if (authCancelBtn) authCancelBtn.disabled = true;
             if (authCloseBtn) authCloseBtn.disabled = true;
+            var docConfig = getAuthorizationDocumentConfig(authState.documentType);
             setAuthorizationModalStatus('Getting GPS location…', '');
 
             var signedAt = new Date().toISOString();
             var signaturePng = authCanvas.toDataURL('image/png');
 
             getCoords().then(function (coords) {
-                setAuthorizationModalStatus('Saving authorization…', '');
-                return fetch('/api/service-authorization-api.php', {
+                setAuthorizationModalStatus(docConfig.saveStatusMessage, '');
+                return fetch(docConfig.apiEndpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         service_request_id: authState.jobId,
                         signature_png: signaturePng,
+                        scope_of_work: authScope ? authScope.textContent : '',
                         signed_at: signedAt,
                         csrf_token: SERVICE_AUTH_CSRF,
                         latitude: coords.lat,
@@ -2376,14 +2515,16 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
                         throw new Error((data && data.error) ? data.error : ('Server error (' + res.status + ')'));
                     }
 
-                    if (!data || !data.success || !data.authorization) {
-                        throw new Error((data && data.error) ? data.error : 'Unable to save authorization.');
+                    if (!data || !data.success || !data[docConfig.responseKey]) {
+                        throw new Error((data && data.error) ? data.error : docConfig.saveError);
                     }
 
-                    return data.authorization;
+                    return data;
                 });
-            }).then(function (authorization) {
-                setAuthorizationCardStatus(authState.jobId, authorization);
+            }).then(function (payload) {
+                var authorization = payload[docConfig.responseKey];
+                var warning = payload.warning || '';
+                setAuthorizationCardStatus(authState.jobId, authState.documentType, authorization, warning);
                 authState.submitting = false;
                 if (authCloseBtn) authCloseBtn.disabled = false;
                 closeAuthorizationModal(true);
@@ -2595,6 +2736,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
     document.addEventListener('click', function (e) {
         var authorizeBtn = e.target.closest('.authorize-btn');
         if (authorizeBtn) {
+            if (authorizeBtn.disabled) return;
             openAuthorizationModal(authorizeBtn);
             return;
         }
