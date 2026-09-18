@@ -2152,6 +2152,11 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
             return;
         }
 
+        function finishUploadCleanup() {
+            input.value = '';
+            setJobPhotoBusy(jobId, false);
+        }
+
         var formData = new FormData();
         formData.append('action', 'upload');
         formData.append('service_request_id', String(jobId));
@@ -2168,14 +2173,12 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
             credentials: 'same-origin',
             body: formData
         }).then(parseJsonResponse).then(function (data) {
-            setJobPhotoBusy(jobId, false);
+            finishUploadCleanup();
             renderJobPhotos(jobId, data.photos || []);
             setJobPhotoStatus(jobId, 'Photos updated.', 'ok');
-            input.value = '';
         }).catch(function (err) {
             setJobPhotoStatus(jobId, '✗ ' + err.message, 'err');
-            input.value = '';
-            setJobPhotoBusy(jobId, false);
+            finishUploadCleanup();
         });
     }
 

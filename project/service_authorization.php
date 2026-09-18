@@ -669,12 +669,14 @@ function serviceAuthorizationFilterActiveStoredJobPhotos(array $paths): array
 function serviceAuthorizationFinalizeStoredPhoto(string $tempPath, string $absolutePath): void
 {
     if (@rename($tempPath, $absolutePath)) {
+        @chmod($absolutePath, 0664);
         return;
     }
 
     if (!@copy($tempPath, $absolutePath)) {
         throw new RuntimeException('Unable to finalize one of the photos.');
     }
+    @chmod($absolutePath, 0664);
     if (!@unlink($tempPath)) {
         error_log('serviceAuthorizationFinalizeStoredPhoto temp cleanup warning: unable to remove ' . $tempPath);
     }
@@ -725,7 +727,8 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
         $activeStoredPaths = serviceAuthorizationFilterActiveStoredJobPhotos(
             serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null, true)
         );
-        if ((count($activeStoredPaths) + count($createdPaths)) > 20) {
+        $publishedStoredPaths = serviceAuthorizationDecodeJobPhotos($activeStoredPaths);
+        if ((count($publishedStoredPaths) + count($createdPaths)) > 20) {
             throw new InvalidArgumentException('Each job can have up to 20 photos.');
         }
 
