@@ -84,7 +84,7 @@ function completionCertificatePrepareSignaturePaths(int $serviceRequestId): arra
     ];
 }
 
-function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
+function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput, ?string $scopeOverride = null): array
 {
     $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
     if (!$job) {
@@ -96,6 +96,12 @@ function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $sign
     serviceAuthorizationWriteTempSignature($signaturePaths['temp'], $signatureBinary);
     $signedAt        = serviceAuthorizationParseSignedAt($signedAtInput)->setTimezone(new DateTimeZone('UTC'))->format(DATE_ATOM);
     $completionBody  = serviceAuthorizationBuildScopeOfWork($pdo, $job);
+    if ($scopeOverride !== null) {
+        $normalizedScope = serviceAuthorizationNormalizeTextarea($scopeOverride);
+        if ($normalizedScope !== '') {
+            $completionBody = $normalizedScope;
+        }
+    }
     $summaryLine     = completionCertificateSummaryLine();
     $signatureSha256 = hash('sha256', $signatureBinary);
     $startedTransaction = false;
@@ -363,6 +369,47 @@ function completionCertificatePersistFilePath(PDO $pdo, int $serviceRequestId, s
     ]);
 }
 
+function completionCertificateResolvePdfPath(string $relativePath): string
+{
+    $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
+    $baseRoot     = realpath(dirname(__DIR__));
+    $uploadsRoot  = realpath(completionCertificatePdfRoot());
+    $absolutePath = $baseRoot . '/' . $relativePath;
+    $resolved     = realpath($absolutePath);
+
+    if (
+        $resolved === false ||
+        $uploadsRoot === false ||
+        ($resolved !== $uploadsRoot && strpos($resolved, $uploadsRoot . DIRECTORY_SEPARATOR) !== 0)
+    ) {
+        throw new RuntimeException('Stored completion certificate PDF is unavailable.');
+    }
+
+    return $resolved;
+}
+
+function completionCertificateFetchStoredFilePath(PDO $pdo, int $serviceRequestId): ?string
+{
+    if ($serviceRequestId <= 0) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT completion_certificate
+         FROM service_requests
+         WHERE id = :id
+         LIMIT 1"
+    );
+    $stmt->execute([':id' => $serviceRequestId]);
+    $value = $stmt->fetchColumn();
+    if ($value === false) {
+        return null;
+    }
+
+    $path = trim((string) $value);
+    return $path !== '' ? $path : null;
+}
+
 function completionCertificateGenerateAndStoreByServiceRequest(PDO $pdo, int $serviceRequestId): array
 {
     $certificate = completionCertificateFetchLatestByServiceRequestId($pdo, $serviceRequestId);
@@ -380,4 +427,25 @@ function completionCertificateGenerateAndStoreByServiceRequest(PDO $pdo, int $se
         'certificate' => $pdf['certificate'],
         'path' => $relativePath,
     ];
+}
+
+function completionCertificateLoadOrGenerateByServiceRequest(PDO $pdo, int $serviceRequestId): array
+{
+    $storedPath = completionCertificateFetchStoredFilePath($pdo, $serviceRequestId);
+    if ($storedPath !== null) {
+        try {
+            $resolved = completionCertificateResolvePdfPath($storedPath);
+            $content = @file_get_contents($resolved);
+            if (is_string($content) && $content !== '') {
+                return [
+                    'filename' => basename($resolved),
+                    'content' => $content,
+                    'path' => $storedPath,
+                ];
+            }
+        } catch (Throwable $e) {
+        }
+    }
+
+    return completionCertificateGenerateAndStoreByServiceRequest($pdo, $serviceRequestId);
 }

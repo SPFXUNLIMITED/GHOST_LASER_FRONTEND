@@ -2460,6 +2460,7 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
                     body: JSON.stringify({
                         service_request_id: authState.jobId,
                         signature_png: signaturePng,
+                        scope_of_work: authScope ? authScope.textContent : '',
                         signed_at: signedAt,
                         csrf_token: SERVICE_AUTH_CSRF,
                         latitude: coords.lat,

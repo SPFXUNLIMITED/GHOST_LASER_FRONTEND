@@ -41,7 +41,7 @@ if (!technicianDashboardCanAccessServiceRequest($pdo, $serviceRequestId)) {
 }
 
 try {
-    $pdf = completionCertificateGenerateAndStoreByServiceRequest($pdo, $serviceRequestId);
+    $pdf = completionCertificateLoadOrGenerateByServiceRequest($pdo, $serviceRequestId);
     header('Content-Type: application/pdf');
     header('Content-Disposition: attachment; filename="' . basename($pdf['filename']) . '"');
     header('Content-Length: ' . strlen($pdf['content']));

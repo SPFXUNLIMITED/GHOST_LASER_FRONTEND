@@ -34,6 +34,7 @@ if (!is_array($body)) {
 $serviceRequestId = (int) ($body['service_request_id'] ?? 0);
 $signature        = (string) ($body['signature_png'] ?? '');
 $signedAt         = isset($body['signed_at']) ? (string) $body['signed_at'] : null;
+$scopeOfWork      = isset($body['scope_of_work']) ? (string) $body['scope_of_work'] : null;
 $csrfToken        = (string) ($body['csrf_token'] ?? '');
 $latitude         = filter_var($body['latitude'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
 $longitude        = filter_var($body['longitude'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
@@ -82,7 +83,8 @@ try {
         $signature,
         (float) $latitude,
         (float) $longitude,
-        $signedAt
+        $signedAt,
+        $scopeOfWork
     );
     completionCertificateGenerateAndStoreByServiceRequest($pdo, $serviceRequestId);
 
