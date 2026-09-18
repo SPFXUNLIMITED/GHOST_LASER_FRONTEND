@@ -274,6 +274,19 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 12. Legacy scope cleanup preserves inline technician notes content ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes."
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope cleanup should preserve inline technician notes content'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {

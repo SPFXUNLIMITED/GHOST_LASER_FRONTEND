@@ -389,7 +389,13 @@ function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeTex
                 return false;
             }
 
-            $firstLine = strtolower(trim(strtok($block, "\n")));
+            $newlinePos = strpos($block, "\n");
+            if ($newlinePos === false) {
+                $normalized = strtolower($block);
+                return $normalized !== 'technician notes' && $normalized !== 'technician notes:';
+            }
+
+            $firstLine = strtolower(trim(substr($block, 0, $newlinePos)));
             return $firstLine !== 'technician notes' && $firstLine !== 'technician notes:';
         }
     ));
