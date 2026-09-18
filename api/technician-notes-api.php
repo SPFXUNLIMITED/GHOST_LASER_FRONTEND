@@ -69,6 +69,14 @@ try {
         'technician_notes' => (string) $result['technician_notes'],
         'scope_of_work' => (string) $result['scope_of_work'],
     ]);
+} catch (RuntimeException $e) {
+    if ($e->getMessage() === 'Service request not found.') {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'Service request not found.']);
+        exit;
+    }
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Unable to save technician notes right now.']);

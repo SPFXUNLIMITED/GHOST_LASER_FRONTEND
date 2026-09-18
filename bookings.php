@@ -182,7 +182,6 @@ try {
             problem_summary      TEXT NULL,
             problem              TEXT NULL,
             problem_details      TEXT NULL,
-            technician_notes     TEXT NULL,
             priority_level       VARCHAR(50)  NOT NULL DEFAULT 'standard',
             source               VARCHAR(50)  NOT NULL DEFAULT 'api',
             request_status       VARCHAR(50)  NOT NULL DEFAULT 'new',

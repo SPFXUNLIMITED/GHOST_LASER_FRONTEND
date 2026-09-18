@@ -2672,6 +2672,8 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
             closeAuthorizationModal();
         } else if (event.key === 'Escape' && techNotesModal && techNotesModal.classList.contains('open')) {
             closeTechnicianNotesModal();
+        } else if (authModal && authModal.classList.contains('open')) {
+            trapModalFocus(event, authModal);
         } else if (techNotesModal && techNotesModal.classList.contains('open')) {
             trapModalFocus(event, techNotesModal);
         }

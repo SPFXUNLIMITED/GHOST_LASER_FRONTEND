@@ -569,7 +569,6 @@ $problem_summary = mb_substr($problem, 0, 255);
 foreach ([
     'services'             => "JSON         NULL COMMENT 'Selected service IDs as JSON array'",
     'problem'              => "TEXT         NULL COMMENT 'Original customer problem description'",
-    'technician_notes'     => "TEXT         NULL COMMENT 'Technician-entered notes, parts, and scope updates'",
     'other_service'        => "TEXT         NULL COMMENT 'Other service description when \"Other\" is selected'",
     'service_speed'        => "VARCHAR(50)  NULL COMMENT 'Service speed/tier key'",
     'speed'               => "VARCHAR(50)  NULL COMMENT 'Booking speed/tier key'",
