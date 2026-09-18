@@ -314,8 +314,6 @@ function serviceAuthorizationWriteTempSignature(string $tempPath, string $binary
 
 function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
 {
-    ensureServiceAuthorizationSchema($pdo);
-
     $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
     if (!$job) {
         throw new RuntimeException('Service request not found.');
@@ -324,7 +322,7 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
     $signatureBinary = serviceAuthorizationDecodeSignaturePng($signatureDataUrl);
     $signaturePaths  = serviceAuthorizationPrepareSignaturePaths($serviceRequestId);
     serviceAuthorizationWriteTempSignature($signaturePaths['temp'], $signatureBinary);
-    $signedAt        = serviceAuthorizationParseSignedAt($signedAtInput)->setTimezone(new DateTimeZone('UTC'))->format(DATE_ATOM);
+    $signedAt        = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format(DATE_ATOM);
     $scopeOfWork     = serviceAuthorizationBuildScopeOfWork($pdo, $job);
     $summaryLine     = serviceAuthorizationSummaryLine();
     $signatureSha256 = hash('sha256', $signatureBinary);
