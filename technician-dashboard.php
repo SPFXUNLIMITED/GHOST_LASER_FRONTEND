@@ -1273,6 +1273,15 @@ require_once __DIR__ . '/templates/header.php';
                                         <div class="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-zinc-500">Service Agreement</div>
                                         <div class="mt-1 text-xs text-zinc-400">Customer approval for the listed work before service begins.</div>
                                     </div>
+                                    <button
+                                        type="button"
+                                        class="authorize-btn"
+                                        data-authorize-job-id="<?= (int) $job['service_request_id'] ?>"
+                                        data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-scope="<?= htmlspecialchars($authorizationScope, ENT_QUOTES, 'UTF-8') ?>"
+                                    >
+                                        Authorize
+                                    </button>
                                 </div>
                                 <div class="mt-3 rounded-lg border border-zinc-700/40 bg-zinc-900/50 p-3">
                                     <div class="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-cyan-300/85">Scope of Work</div>
@@ -2195,6 +2204,12 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
 
     // ── Attach listeners ──────────────────────────────────────────────────────
     document.addEventListener('click', function (e) {
+        var authorizeBtn = e.target.closest('.authorize-btn');
+        if (authorizeBtn) {
+            openAuthorizationModal(authorizeBtn);
+            return;
+        }
+
         var btn = e.target.closest('.mileage-btn');
         if (!btn || btn.disabled) return;
 
