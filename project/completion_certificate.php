@@ -418,24 +418,17 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
 
     $blocks = preg_split("/\n{2,}/", completionCertificateRemoveLegacyTechnicianNotesBlocks($scopeText)) ?: [];
     $blocks = array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== ''));
+    $blocks = array_values(array_filter(
+        $blocks,
+        static fn ($block): bool => trim((string) $block) !== $technicianNotes
+    ));
     foreach ($blocks as $index => $block) {
         if (completionCertificateIsStructuredIssueSummaryBlock((string) $block)) {
-            while (
-                isset($blocks[$index + 1])
-                && trim((string) $blocks[$index + 1]) === $technicianNotes
-            ) {
-                array_splice($blocks, $index + 1, 1);
-            }
-
             array_splice($blocks, $index + 1, 0, [$technicianNotes]);
             return implode("\n\n", $blocks);
         }
     }
 
-    $blocks = array_values(array_filter(
-        $blocks,
-        static fn ($block): bool => trim((string) $block) !== $technicianNotes
-    ));
     $blocks[] = $technicianNotes;
     return implode("\n\n", array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== '')));
 }

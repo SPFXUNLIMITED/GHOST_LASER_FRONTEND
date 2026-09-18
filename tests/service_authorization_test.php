@@ -329,6 +329,20 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 16. Identical inline technician notes later in scope are de-duplicated when inserting after summary ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.\n\nTechnician notes: Bring replacement PSU",
+        'technician_notes' => 'Bring replacement PSU',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate should remove later duplicate technician notes blocks before inserting after the summary'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
