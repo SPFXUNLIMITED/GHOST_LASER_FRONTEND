@@ -748,10 +748,11 @@ $extraHead       = <<<'HTML'
             line-height: 1.4;
         }
         .service-auth-layout {
-            flex: 1;
+            flex: 1 1 auto;
             min-height: 0;
             display: flex;
             flex-direction: column;
+            overflow-y: auto;
             padding: 0.9rem 1rem 1rem;
             gap: 0.8rem;
         }
