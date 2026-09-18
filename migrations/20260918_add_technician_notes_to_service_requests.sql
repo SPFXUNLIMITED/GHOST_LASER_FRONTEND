@@ -8,7 +8,7 @@ SET @ghost_laser_has_technician_notes := (
 
 SET @ghost_laser_add_technician_notes_sql := IF(
     @ghost_laser_has_technician_notes = 0,
-    'ALTER TABLE service_requests ADD COLUMN technician_notes TEXT NULL AFTER problem_details',
+    'ALTER TABLE service_requests ADD COLUMN technician_notes TEXT NULL AFTER problem',
     'SELECT 1'
 );
 
