@@ -261,6 +261,20 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 10b. Completion certificate scope storage strips supported technician notes heading variants ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTECHNICIAN NOTES:\nBring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
+        'Bring replacement PSU'
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope storage should strip supported technician notes heading variants'
+    );
+})();
+
 // --- 11. Technician notes still render when scope text is otherwise empty ---
 (function (): void {
     $text = completionCertificateBuildCompletedWorkText([

@@ -397,12 +397,11 @@ function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeTex
             $block = trim((string) $block);
             $newlinePos = strpos($block, "\n");
             if ($newlinePos === false) {
-                $normalized = strtolower($block);
-                return $normalized !== 'technician notes' && $normalized !== 'technician notes:';
+                return !completionCertificateIsTechnicianNotesHeadingLine($block);
             }
 
-            $firstLine = strtolower(trim(substr($block, 0, $newlinePos)));
-            if ($firstLine !== 'technician notes' && $firstLine !== 'technician notes:') {
+            $firstLine = trim(substr($block, 0, $newlinePos));
+            if (!completionCertificateIsTechnicianNotesHeadingLine($firstLine)) {
                 return true;
             }
 
@@ -476,6 +475,11 @@ function completionCertificateNormalizeInlineTechnicianNotesBlock(string $block)
     }
 
     return 'Technician notes: ' . $value;
+}
+
+function completionCertificateIsTechnicianNotesHeadingLine(string $line): bool
+{
+    return preg_match('/^Technician notes(?:\s*:)?$/i', trim($line)) === 1;
 }
 
 function completionCertificatePdfRoot(): string
