@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
+
 // Extend session lifetime to 12 hours for technicians using this page while driving.
 ini_set('session.gc_maxlifetime', 43200);
 session_set_cookie_params([
@@ -43,60 +46,91 @@ $nextDate = $viewDate->modify('+1 day');
 $dateKey  = $viewDate->format('Y-m-d');
 
 // ── Load scheduled clusters for the selected date ─────────────────────────
-$scheduledJobsStmt = $pdo->prepare("
-    SELECT
-        sc.id AS scheduled_cluster_id,
-        sc.cluster_label,
-        sc.centroid_latitude,
-        sc.centroid_longitude,
-        scj.time_window_start,
-        scj.time_window_end,
-        sr.id AS service_request_id,
-        sr.priority_level,
-        sr.laser_brand,
-        sr.laser_model,
-        sr.laser_watts,
-        sr.laser_age,
-        sr.problem_summary,
-        sr.problem,
-        sr.services,
-        sr.service_speed,
-        sr.speed,
-        sr.service_total,
-        sr.travel_fee,
-        sr.grand_total,
-        sr.preferred_date_start,
-        sr.preferred_date_end,
-        sr.destination_street,
-        sr.destination_city,
-        sr.destination_state,
-        sr.destination_zip,
-        sr.task_contact,
-        COALESCE(c.first_name, '') AS first_name,
-        COALESCE(c.last_name,  '') AS last_name,
-        COALESCE(c.phone,  '') AS phone,
-        COALESCE(c.email,  '') AS email,
-        COALESCE(c.company,'') AS company,
-        COALESCE(c.address, sr.destination_street) AS address,
-        COALESCE(c.city,    sr.destination_city)   AS city,
-        COALESCE(c.state,   sr.destination_state)  AS state,
-        COALESCE(c.zip,     sr.destination_zip)    AS zip
-    FROM scheduled_clusters sc
-    JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
-    JOIN service_requests sr ON sr.id = scj.service_request_id
-    LEFT JOIN customers c ON c.id = sr.customer_id
-    WHERE sc.scheduled_date = :date
-      AND (sc.created_by_admin_id = :admin_id OR sc.created_by_admin_id IS NULL)
-    ORDER BY
-        FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
-        sc.cluster_label ASC,
-        scj.time_window_start ASC
-");
-$scheduledJobsStmt->execute([
-    ':date' => $dateKey,
-    ':admin_id' => technicianDashboardAdminId(),
-]);
-$rawJobs = $scheduledJobsStmt->fetchAll(PDO::FETCH_ASSOC);
+$scheduleQueryError = null;
+$rawJobs = [];
+$setScheduleQueryError = static function (array $errorInfo) use (&$scheduleQueryError): void {
+    $scheduleQueryError = [
+        'sqlstate' => (string) ($errorInfo[0] ?? 'N/A'),
+        'code' => isset($errorInfo[1]) && $errorInfo[1] !== null ? (string) $errorInfo[1] : 'N/A',
+        'message' => (string) ($errorInfo[2] ?? 'Unknown database error.'),
+    ];
+
+    error_log(sprintf(
+        'technician-dashboard schedule query failed [SQLSTATE %s] [Code %s] %s',
+        $scheduleQueryError['sqlstate'],
+        $scheduleQueryError['code'],
+        $scheduleQueryError['message']
+    ));
+};
+
+try {
+    $scheduledJobsStmt = $pdo->prepare("
+        SELECT
+            sc.id AS scheduled_cluster_id,
+            sc.cluster_label,
+            sc.centroid_latitude,
+            sc.centroid_longitude,
+            scj.time_window_start,
+            scj.time_window_end,
+            sr.id AS service_request_id,
+            sr.priority_level,
+            sr.laser_brand,
+            sr.laser_model,
+            sr.laser_watts,
+            sr.laser_age,
+            sr.problem_summary,
+            sr.problem,
+            sr.services,
+            sr.service_speed,
+            sr.speed,
+            sr.service_total,
+            sr.travel_fee,
+            sr.grand_total,
+            sr.preferred_date_start,
+            sr.preferred_date_end,
+            sr.destination_street,
+            sr.destination_city,
+            sr.destination_state,
+            sr.destination_zip,
+            sr.task_contact,
+            COALESCE(c.first_name, '') AS first_name,
+            COALESCE(c.last_name,  '') AS last_name,
+            COALESCE(c.phone,  '') AS phone,
+            COALESCE(c.email,  '') AS email,
+            COALESCE(c.company,'') AS company,
+            COALESCE(c.address, sr.destination_street) AS address,
+            COALESCE(c.city,    sr.destination_city)   AS city,
+            COALESCE(c.state,   sr.destination_state)  AS state,
+            COALESCE(c.zip,     sr.destination_zip)    AS zip
+        FROM scheduled_clusters sc
+        JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
+        JOIN service_requests sr ON sr.id = scj.service_request_id
+        LEFT JOIN customers c ON c.id = sr.customer_id
+        WHERE sc.scheduled_date = :date
+          AND (sc.created_by_admin_id = :admin_id OR sc.created_by_admin_id IS NULL)
+        ORDER BY
+            FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
+            sc.cluster_label ASC,
+            scj.time_window_start ASC
+    ");
+
+    if ($scheduledJobsStmt === false) {
+        $setScheduleQueryError($pdo->errorInfo());
+    } elseif (!$scheduledJobsStmt->execute([
+        ':date' => $dateKey,
+        ':admin_id' => technicianDashboardAdminId(),
+    ])) {
+        $setScheduleQueryError($scheduledJobsStmt->errorInfo());
+    } else {
+        $rawJobs = $scheduledJobsStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Throwable $e) {
+    $setScheduleQueryError(
+        ($e instanceof PDOException && !empty($e->errorInfo))
+            ? $e->errorInfo
+            : [(string) $e->getCode(), null, $e->getMessage()]
+    );
+}
 
 // ── Group jobs by cluster ─────────────────────────────────────────────────
 $clusters = [];
@@ -1063,6 +1097,15 @@ require_once __DIR__ . '/templates/header.php';
     <?php if (!$hasActiveVehicles): ?>
         <div class="mb-5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
             Mileage logging is disabled until an active vehicle is added in Vehicle Settings.
+        </div>
+    <?php endif; ?>
+
+    <?php if ($scheduleQueryError !== null): ?>
+        <div class="mb-5 rounded-xl border border-red-500/70 bg-red-500/15 px-4 py-3 text-sm text-red-100">
+            <div class="font-semibold">Schedule query failed.</div>
+            <div class="mt-1">SQLSTATE: <?= htmlspecialchars($scheduleQueryError['sqlstate'], ENT_QUOTES, 'UTF-8') ?></div>
+            <div>Error code: <?= htmlspecialchars($scheduleQueryError['code'], ENT_QUOTES, 'UTF-8') ?></div>
+            <div>Message: <?= htmlspecialchars($scheduleQueryError['message'], ENT_QUOTES, 'UTF-8') ?></div>
         </div>
     <?php endif; ?>
 
