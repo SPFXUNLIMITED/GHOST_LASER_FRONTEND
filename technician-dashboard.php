@@ -2427,7 +2427,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
                             data = JSON.parse(text);
                         } catch (err) {
                             if (!res.ok) {
-                                throw new Error('Server error (' + res.status + ')');
+                                throw new Error(text || ('Server error (' + res.status + ')'));
                             }
                             throw new Error('Invalid server response');
                         }
