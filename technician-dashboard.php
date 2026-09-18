@@ -1575,7 +1575,7 @@ require_once __DIR__ . '/templates/header.php';
                         <button type="button" id="technicianNotesCancel" class="service-auth-secondary">Cancel</button>
                         <button type="submit" id="technicianNotesSave" class="service-auth-primary">Save</button>
                     </div>
-                    <div id="technicianNotesStatus" class="tech-notes-status"></div>
+                    <div id="technicianNotesStatus" class="tech-notes-status" role="status" aria-live="polite"></div>
                 </form>
             </div>
         </div>
@@ -2366,7 +2366,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
                             data = JSON.parse(text);
                         } catch (err) {
                             if (!res.ok) {
-                                throw new Error('Server error (' + res.status + ')');
+                                throw new Error(text || ('Server error (' + res.status + ')'));
                             }
                             throw new Error('Invalid server response');
                         }
