@@ -1320,13 +1320,15 @@ require_once __DIR__ . '/templates/header.php';
                         <div class="service-auth-signature-copy">Customer signature</div>
                         <div id="serviceAuthorizationMeta" class="service-auth-meta">Draw with a finger, then tap Sign to capture the signature, timestamp, and GPS.</div>
                         <canvas id="serviceAuthorizationCanvas" class="service-auth-canvas"></canvas>
-                        <div class="service-auth-actions">
-                            <button type="button" id="serviceAuthorizationClear" class="service-auth-secondary">Clear</button>
-                            <div class="service-auth-primary-actions">
-                                <button type="button" id="serviceAuthorizationCancel" class="service-auth-secondary">Cancel</button>
-                                <button type="button" id="serviceAuthorizationSign" class="service-auth-primary">Sign</button>
+                        <form id="serviceAuthorizationForm">
+                            <div class="service-auth-actions">
+                                <button type="button" id="serviceAuthorizationClear" class="service-auth-secondary">Clear</button>
+                                <div class="service-auth-primary-actions">
+                                    <button type="button" id="serviceAuthorizationCancel" class="service-auth-secondary">Cancel</button>
+                                    <button type="submit" id="serviceAuthorizationSign" class="service-auth-primary">Sign</button>
+                                </div>
                             </div>
-                        </div>
+                        </form>
                         <div id="serviceAuthorizationStatus" class="service-auth-status"></div>
                     </div>
                 </div>
@@ -1513,6 +1515,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
     var authCancelBtn = document.getElementById('serviceAuthorizationCancel');
     var authCloseBtn = document.getElementById('serviceAuthorizationClose');
     var authSignBtn = document.getElementById('serviceAuthorizationSign');
+    var authForm = document.getElementById('serviceAuthorizationForm');
     var authCanvas = document.getElementById('serviceAuthorizationCanvas');
     var authCtx = authCanvas ? authCanvas.getContext('2d') : null;
     var authState = {
@@ -1936,8 +1939,9 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         });
     }
 
-    if (authSignBtn) {
-        authSignBtn.addEventListener('click', function () {
+    if (authForm) {
+        authForm.addEventListener('submit', function (event) {
+            event.preventDefault();
             if (!authState.jobId || authState.submitting) return;
             if (!authState.dirty || !authCanvas) {
                 setAuthorizationModalStatus('Signature required before continuing.', 'err');

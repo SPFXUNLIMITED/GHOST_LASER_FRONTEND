@@ -44,10 +44,15 @@ function technicianDashboardCanAccessAuthorization(PDO $pdo, int $authorizationI
         "SELECT EXISTS(
             SELECT 1
             FROM service_authorizations sa
-            JOIN scheduled_cluster_jobs scj ON scj.service_request_id = sa.service_request_id
-            JOIN scheduled_clusters sc ON sc.id = scj.scheduled_cluster_id
             WHERE sa.id = :authorization_id
-              AND sc.created_by_admin_id = :admin_id
+              AND EXISTS (
+                SELECT 1
+                FROM scheduled_cluster_jobs scj
+                JOIN scheduled_clusters sc ON sc.id = scj.scheduled_cluster_id
+                WHERE scj.service_request_id = sa.service_request_id
+                  AND sc.created_by_admin_id = :admin_id
+                LIMIT 1
+              )
          )"
     );
     $stmt->execute([

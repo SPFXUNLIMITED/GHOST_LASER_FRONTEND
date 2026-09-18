@@ -93,7 +93,7 @@ try {
             'signed_at_display' => serviceAuthorizationFormatSignedAtDisplay((string) ($authorization['signed_at'] ?? '')),
             'latitude' => $authorization['signed_latitude'] !== null ? (float) $authorization['signed_latitude'] : null,
             'longitude' => $authorization['signed_longitude'] !== null ? (float) $authorization['signed_longitude'] : null,
-            'download_url' => '/api/service-authorization-pdf.php?authorization_id=' . (int) ($authorization['id'] ?? 0) . '&token=' . rawurlencode(serviceAuthorizationDownloadToken((int) ($authorization['id'] ?? 0))),
+            'download_url' => '/api/service-authorization-pdf.php?authorization_id=' . (int) ($authorization['id'] ?? 0),
         ],
     ]);
 } catch (InvalidArgumentException $e) {
