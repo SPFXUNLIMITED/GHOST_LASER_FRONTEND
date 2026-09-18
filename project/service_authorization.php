@@ -18,7 +18,7 @@ function ensureServiceAuthorizationSchema(PDO $pdo): void
             signed_longitude DECIMAL(10,7) NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uniq_service_authorization_request_type (service_request_id, agreement_type),
+            INDEX idx_service_authorizations_request (service_request_id),
             INDEX idx_service_authorizations_type (agreement_type)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
     );
@@ -30,8 +30,19 @@ function ensureServiceAuthorizationSchema(PDO $pdo): void
           AND TABLE_NAME = 'service_authorizations'
           AND INDEX_NAME = 'uniq_service_authorization_request_type'
     ");
-    if ((int) $uniqueIndexExistsStmt->fetchColumn() === 0) {
-        $pdo->exec("ALTER TABLE service_authorizations ADD UNIQUE KEY uniq_service_authorization_request_type (service_request_id, agreement_type)");
+    if ((int) $uniqueIndexExistsStmt->fetchColumn() > 0) {
+        $pdo->exec("ALTER TABLE service_authorizations DROP INDEX uniq_service_authorization_request_type");
+    }
+
+    $requestIndexExistsStmt = $pdo->query("
+        SELECT COUNT(*)
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'service_authorizations'
+          AND INDEX_NAME = 'idx_service_authorizations_request'
+    ");
+    if ((int) $requestIndexExistsStmt->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE service_authorizations ADD INDEX idx_service_authorizations_request (service_request_id)");
     }
 }
 
@@ -331,16 +342,7 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
             "INSERT INTO service_authorizations
                 (service_request_id, agreement_type, agreement_summary, scope_of_work, signature_path, signature_sha256, signed_at, signed_latitude, signed_longitude)
              VALUES
-                (:service_request_id, 'service_authorization', :agreement_summary, :scope_of_work, :signature_path, :signature_sha256, :signed_at, :signed_latitude, :signed_longitude)
-             ON DUPLICATE KEY UPDATE
-                id = LAST_INSERT_ID(id),
-                agreement_summary = VALUES(agreement_summary),
-                scope_of_work = VALUES(scope_of_work),
-                signature_path = VALUES(signature_path),
-                signature_sha256 = VALUES(signature_sha256),
-                signed_at = VALUES(signed_at),
-                signed_latitude = VALUES(signed_latitude),
-                signed_longitude = VALUES(signed_longitude)"
+                (:service_request_id, 'service_authorization', :agreement_summary, :scope_of_work, :signature_path, :signature_sha256, :signed_at, :signed_latitude, :signed_longitude)"
         );
         $stmt->execute([
             ':service_request_id' => $serviceRequestId,

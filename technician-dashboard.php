@@ -1793,10 +1793,10 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         window.requestAnimationFrame(function () {
             resizeAuthorizationCanvas();
             clearAuthorizationCanvas();
-            if (authSignBtn) {
-                authSignBtn.focus();
-            } else if (authCloseBtn) {
+            if (authCloseBtn) {
                 authCloseBtn.focus();
+            } else if (authSignBtn) {
+                authSignBtn.focus();
             }
         });
     }
