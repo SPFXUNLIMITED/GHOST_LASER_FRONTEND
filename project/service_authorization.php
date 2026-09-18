@@ -756,6 +756,9 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
         }
         $storedPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null, true);
         $publishedPaths = serviceAuthorizationPublishStoredJobPhotos($storedPaths, $createdPaths);
+        if (count(serviceAuthorizationDecodeJobPhotos($publishedPaths)) > 20) {
+            throw new InvalidArgumentException('Each job can have up to 20 photos.');
+        }
         serviceAuthorizationPersistRawJobPhotos($pdo, $serviceRequestId, $publishedPaths);
 
         if ($startedTransaction) {

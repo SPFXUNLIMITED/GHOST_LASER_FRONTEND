@@ -662,6 +662,60 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     }
 })();
 
+// --- 26. Job photo API helper removes stored photos successfully ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 3, 'name' => 'Diagnosis', 'duration' => 60],
+    ]);
+
+    $photoDir = __DIR__ . '/../uploads/service-authorizations/job-photos';
+    if (!is_dir($photoDir) && !mkdir($photoDir, 0775, true) && !is_dir($photoDir)) {
+        throw new RuntimeException('Unable to create job photo removal test directory.');
+    }
+
+    $storedRelativePath = 'uploads/service-authorizations/job-photos/remove-me.png';
+    $storedAbsolutePath = __DIR__ . '/../' . $storedRelativePath;
+    $image = imagecreatetruecolor(8, 8);
+    $fill = imagecolorallocate($image, 239, 68, 68);
+    imagefilledrectangle($image, 0, 0, 7, 7, $fill);
+    imagepng($image, $storedAbsolutePath);
+    imagedestroy($image);
+
+    $stmt = $pdo->prepare('INSERT INTO service_requests (id, services, job_photos) VALUES (:id, :services, :job_photos)');
+    $stmt->execute([
+        ':id' => 28,
+        ':services' => '[3]',
+        ':job_photos' => json_encode([$storedRelativePath]),
+    ]);
+
+    $job = serviceAuthorizationFetchJob($pdo, 28);
+    $response = serviceAuthorizationHandleJobPhotoApiRequest(
+        $pdo,
+        true,
+        true,
+        28,
+        'remove',
+        'csrf-123',
+        'csrf-123',
+        $job,
+        [],
+        $storedRelativePath
+    );
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 200,
+        'Job photo API helper should return HTTP 200 for a successful removal'
+    );
+    ghostLaserAuthAssert(
+        !empty($response['body']['success']) && count($response['body']['photos'] ?? []) === 0,
+        'Job photo API helper should remove the photo from the returned payload'
+    );
+    ghostLaserAuthAssert(
+        !is_file($storedAbsolutePath),
+        'Job photo API helper should delete the stored photo file on successful removal'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
