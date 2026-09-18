@@ -206,17 +206,16 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
-// --- 7. Existing scope technician notes are replaced instead of duplicated ---
+// --- 7. Legacy multiline technician notes with a colon are stripped from stored scope text ---
 (function (): void {
-    $text = completionCertificateBuildCompletedWorkText([
-        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes\nOld saved note\n\nJob description: Machine shuts down after five minutes.",
-        'technician_notes' => 'Fresh note from request',
-    ]);
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes:\nOld saved note\n\nJob description: Machine shuts down after five minutes."
+    );
 
     ghostLaserAuthAssertSame(
-        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Fresh note from request\n\nJob description: Machine shuts down after five minutes.",
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.",
         $text,
-        'Completion certificate should replace legacy technician notes blocks instead of duplicating them'
+        'Completion certificate scope storage should strip legacy multiline technician notes blocks that use a colon heading'
     );
 })();
 

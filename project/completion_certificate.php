@@ -417,7 +417,7 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
         return $scopeText;
     }
 
-    $blocks = preg_split("/\n{2,}/", completionCertificateRemoveLegacyTechnicianNotesBlocks($scopeText)) ?: [];
+    $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
     $blocks = array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== ''));
     $blocks = array_values(array_filter(
         $blocks,
