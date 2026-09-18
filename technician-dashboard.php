@@ -916,6 +916,9 @@ $extraHead       = <<<'HTML'
         .job-note-edit-value.is-placeholder {
             color: #a1a1aa;
         }
+        .job-note-row-value.is-placeholder {
+            color: #a1a1aa;
+        }
 
         .tech-notes-modal {
             display: none;
@@ -1297,6 +1300,7 @@ require_once __DIR__ . '/templates/header.php';
                         $gmapsUrl    = techDashGoogleMapsUrl($job);
                         $timeWindow  = techDashTimeWindow($job['time_window_start'] ?? null, $job['time_window_end'] ?? null);
                         $bookingDetailEntries = techDashBookingDetailEntries($job);
+                        $serviceRequestId = (int) ($job['service_request_id'] ?? 0);
                         $authorizationScope = serviceAuthorizationBuildScopeOfWork($pdo, $job);
                         $existingAuthorization = $serviceAuthorizations[(int) $job['service_request_id']] ?? null;
                         $customerProblem = str_replace(["\r\n", "\r"], "\n", (string) ($job['problem'] ?? $job['problem_details'] ?? ''));
@@ -1408,25 +1412,32 @@ require_once __DIR__ . '/templates/header.php';
                                     <div class="job-note-row-value"><?= htmlspecialchars($customerProblem, ENT_QUOTES, 'UTF-8') ?></div>
                                 </div>
                             <?php endif; ?>
-                            <button
-                                type="button"
-                                class="job-note-edit"
-                                data-tech-notes-job-id="<?= (int) $job['service_request_id'] ?>"
-                                data-technician-notes="<?= htmlspecialchars($technicianNotes, ENT_QUOTES, 'UTF-8') ?>"
-                                title="Edit technician notes"
-                            >
-                                <span class="job-note-edit-label">
-                                    <span>Technician notes</span>
-                                    <span class="job-note-edit-hint">
-                                        <svg class="job-note-edit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.768-6.768a2.5 2.5 0 113.536 3.536L12.536 16.536A4 4 0 019.707 17.707L7 18l.293-2.707A4 4 0 018.464 12.536z"/></svg>
-                                        Edit
+                            <?php if ($serviceRequestId > 0): ?>
+                                <button
+                                    type="button"
+                                    class="job-note-edit"
+                                    data-tech-notes-job-id="<?= $serviceRequestId ?>"
+                                    data-technician-notes="<?= htmlspecialchars($technicianNotes, ENT_QUOTES, 'UTF-8') ?>"
+                                    title="Edit technician notes"
+                                >
+                                    <span class="job-note-edit-label">
+                                        <span>Technician notes</span>
+                                        <span class="job-note-edit-hint">
+                                            <svg class="job-note-edit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.768-6.768a2.5 2.5 0 113.536 3.536L12.536 16.536A4 4 0 019.707 17.707L7 18l.293-2.707A4 4 0 018.464 12.536z"/></svg>
+                                            Edit
+                                        </span>
                                     </span>
-                                </span>
-                                <span
-                                    class="job-note-edit-value<?= trim($technicianNotes) === '' ? ' is-placeholder' : '' ?>"
-                                    data-tech-notes-value
-                                ><?= htmlspecialchars(trim($technicianNotes) !== '' ? $technicianNotes : 'Tap to add notes', ENT_QUOTES, 'UTF-8') ?></span>
-                            </button>
+                                    <span
+                                        class="job-note-edit-value<?= trim($technicianNotes) === '' ? ' is-placeholder' : '' ?>"
+                                        data-tech-notes-value
+                                    ><?= htmlspecialchars(trim($technicianNotes) !== '' ? $technicianNotes : 'Tap to add notes', ENT_QUOTES, 'UTF-8') ?></span>
+                                </button>
+                            <?php else: ?>
+                                <div class="job-note-row">
+                                    <div class="job-note-row-label">Technician notes</div>
+                                    <div class="job-note-row-value<?= trim($technicianNotes) === '' ? ' is-placeholder' : '' ?>"><?= htmlspecialchars(trim($technicianNotes) !== '' ? $technicianNotes : 'No notes yet', ENT_QUOTES, 'UTF-8') ?></div>
+                                </div>
+                            <?php endif; ?>
 
                             <div class="mt-3 pt-3 border-t border-zinc-700/40">
                                 <div class="flex items-center justify-between gap-3">
@@ -1810,8 +1821,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
     }
 
     function refreshTechnicianNotesCard(jobId, notes, scopeOfWork) {
-        var trigger = document.querySelector('[data-tech-notes-job-id="' + jobId + '"]');
-        if (trigger) {
+        document.querySelectorAll('[data-tech-notes-job-id="' + jobId + '"]').forEach(function (trigger) {
             trigger.dataset.technicianNotes = notes;
             var valueEl = trigger.querySelector('[data-tech-notes-value]');
             if (valueEl) {
@@ -1819,12 +1829,11 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
                 valueEl.textContent = hasNotes ? notes : 'Tap to add notes';
                 valueEl.classList.toggle('is-placeholder', !hasNotes);
             }
-        }
+        });
 
-        var authorizeBtn = document.querySelector('[data-authorize-job-id="' + jobId + '"]');
-        if (authorizeBtn) {
+        document.querySelectorAll('[data-authorize-job-id="' + jobId + '"]').forEach(function (authorizeBtn) {
             authorizeBtn.dataset.authorizeScope = scopeOfWork;
-        }
+        });
     }
 
     function setTripButtons(jobId, state) {
