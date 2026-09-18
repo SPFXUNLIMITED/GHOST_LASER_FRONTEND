@@ -2166,10 +2166,10 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
             credentials: 'same-origin',
             body: formData
         }).then(parseJsonResponse).then(function (data) {
+            setJobPhotoBusy(jobId, false);
             renderJobPhotos(jobId, data.photos || []);
             setJobPhotoStatus(jobId, 'Photos updated.', 'ok');
             input.value = '';
-            setJobPhotoBusy(jobId, false);
         }).catch(function (err) {
             setJobPhotoStatus(jobId, '✗ ' + err.message, 'err');
             input.value = '';
@@ -2196,9 +2196,9 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
                 csrf_token: SERVICE_AUTH_CSRF
             })
         }).then(parseJsonResponse).then(function (data) {
+            setJobPhotoBusy(jobId, false);
             renderJobPhotos(jobId, data.photos || []);
             setJobPhotoStatus(jobId, 'Photo removed.', 'ok');
-            setJobPhotoBusy(jobId, false);
         }).catch(function (err) {
             setJobPhotoStatus(jobId, '✗ ' + err.message, 'err');
             setJobPhotoBusy(jobId, false);

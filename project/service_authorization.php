@@ -653,8 +653,11 @@ function serviceAuthorizationFinalizeStoredPhoto(string $tempPath, string $absol
         return;
     }
 
-    if (!@copy($tempPath, $absolutePath) || !@unlink($tempPath)) {
+    if (!@copy($tempPath, $absolutePath)) {
         throw new RuntimeException('Unable to finalize one of the photos.');
+    }
+    if (!@unlink($tempPath)) {
+        error_log('serviceAuthorizationFinalizeStoredPhoto temp cleanup warning: unable to remove ' . $tempPath);
     }
 }
 
@@ -700,13 +703,13 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
             throw new RuntimeException('Service request not found.');
         }
 
-        $existingPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null, true);
-        if ((count($existingPaths) + count($createdPaths)) > 20) {
+        $visibleExistingPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null);
+        if ((count($visibleExistingPaths) + count($createdPaths)) > 20) {
             throw new InvalidArgumentException('Each job can have up to 20 photos.');
         }
 
         $pendingPaths = array_values(array_unique(array_merge(
-            $existingPaths,
+            $visibleExistingPaths,
             array_column($createdPaths, 'temp_relative')
         )));
         $previousCertificatePath = $state['completion_certificate'] ?? null;
