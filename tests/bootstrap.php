@@ -82,6 +82,7 @@ function ghostLaserMakeTestPdo(array $services): PDO
         problem TEXT,
         problem_details TEXT,
         technician_notes TEXT,
+        completion_certificate TEXT,
         services TEXT,
         laser_brand TEXT,
         laser_model TEXT,

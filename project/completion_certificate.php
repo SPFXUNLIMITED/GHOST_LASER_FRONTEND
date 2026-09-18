@@ -1,0 +1,383 @@
+<?php
+
+function completionCertificateSummaryLine(): string
+{
+    return 'This certifies that the approved work has been satisfactorily completed and accepted by the customer.';
+}
+
+function completionCertificateClauses(): array
+{
+    return [
+        'The customer confirms the listed work has been completed to their satisfaction.',
+        'The customer approves release of final payment for the completed service.',
+    ];
+}
+
+function completionCertificateFetchLatestByJobIds(PDO $pdo, array $serviceRequestIds): array
+{
+    $serviceRequestIds = array_values(array_unique(array_filter(array_map('intval', $serviceRequestIds), static fn (int $id): bool => $id > 0)));
+    if ($serviceRequestIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($serviceRequestIds), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT sa.*
+         FROM service_authorizations sa
+         INNER JOIN (
+            SELECT MAX(id) AS latest_id
+            FROM service_authorizations
+            WHERE agreement_type = 'completion_certificate'
+              AND service_request_id IN ($placeholders)
+            GROUP BY service_request_id
+         ) latest ON latest.latest_id = sa.id"
+    );
+    $stmt->execute($serviceRequestIds);
+
+    $rows = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $rows[(int) $row['service_request_id']] = $row;
+    }
+
+    return $rows;
+}
+
+function completionCertificateFetchLatestByServiceRequestId(PDO $pdo, int $serviceRequestId): ?array
+{
+    if ($serviceRequestId <= 0) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT sa.*
+         FROM service_authorizations sa
+         WHERE sa.service_request_id = :service_request_id
+           AND sa.agreement_type = 'completion_certificate'
+         ORDER BY sa.id DESC
+         LIMIT 1"
+    );
+    $stmt->execute([
+        ':service_request_id' => $serviceRequestId,
+    ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $row ?: null;
+}
+
+function completionCertificatePrepareSignaturePaths(int $serviceRequestId): array
+{
+    serviceAuthorizationEnsureDirectory(serviceAuthorizationSignatureRoot());
+
+    $fileName = sprintf(
+        'completion-cert-%d-%s-%s.png',
+        $serviceRequestId,
+        gmdate('YmdHis'),
+        bin2hex(random_bytes(6))
+    );
+    $relativePath = 'uploads/service-authorizations/signatures/' . $fileName;
+    $absolutePath = dirname(__DIR__) . '/' . $relativePath;
+
+    return [
+        'relative' => $relativePath,
+        'absolute' => $absolutePath,
+        'temp' => $absolutePath . '.tmp',
+    ];
+}
+
+function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
+{
+    $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
+    if (!$job) {
+        throw new RuntimeException('Service request not found.');
+    }
+
+    $signatureBinary = serviceAuthorizationDecodeSignaturePng($signatureDataUrl);
+    $signaturePaths  = completionCertificatePrepareSignaturePaths($serviceRequestId);
+    serviceAuthorizationWriteTempSignature($signaturePaths['temp'], $signatureBinary);
+    $signedAt        = serviceAuthorizationParseSignedAt($signedAtInput)->setTimezone(new DateTimeZone('UTC'))->format(DATE_ATOM);
+    $completionBody  = serviceAuthorizationBuildScopeOfWork($pdo, $job);
+    $summaryLine     = completionCertificateSummaryLine();
+    $signatureSha256 = hash('sha256', $signatureBinary);
+    $startedTransaction = false;
+    $authorizationId = 0;
+    $pendingSignaturePath = $signaturePaths['relative'] . '.tmp';
+
+    try {
+        if (!$pdo->inTransaction()) {
+            $pdo->beginTransaction();
+            $startedTransaction = true;
+        }
+
+        $stmt = $pdo->prepare(
+            "INSERT INTO service_authorizations
+                (service_request_id, agreement_type, agreement_summary, scope_of_work, signature_path, signature_sha256, signed_at, signed_latitude, signed_longitude)
+             VALUES
+                (:service_request_id, 'completion_certificate', :agreement_summary, :scope_of_work, :signature_path, :signature_sha256, :signed_at, :signed_latitude, :signed_longitude)"
+        );
+        $stmt->execute([
+            ':service_request_id' => $serviceRequestId,
+            ':agreement_summary'  => $summaryLine,
+            ':scope_of_work'      => $completionBody,
+            ':signature_path'     => $pendingSignaturePath,
+            ':signature_sha256'   => $signatureSha256,
+            ':signed_at'          => $signedAt,
+            ':signed_latitude'    => $latitude,
+            ':signed_longitude'   => $longitude,
+        ]);
+        $authorizationId = (int) $pdo->lastInsertId();
+
+        if (!rename($signaturePaths['temp'], $signaturePaths['absolute'])) {
+            throw new RuntimeException('Unable to finalize signature image.');
+        }
+
+        $update = $pdo->prepare(
+            "UPDATE service_authorizations
+             SET signature_path = :signature_path
+             WHERE id = :id
+             LIMIT 1"
+        );
+        $update->execute([
+            ':signature_path' => $signaturePaths['relative'],
+            ':id' => $authorizationId,
+        ]);
+
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
+    } catch (Throwable $e) {
+        if ($startedTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        if (is_file($signaturePaths['temp'])) {
+            @unlink($signaturePaths['temp']);
+        }
+        if (is_file($signaturePaths['absolute'])) {
+            @unlink($signaturePaths['absolute']);
+        }
+        throw $e;
+    }
+
+    return serviceAuthorizationFetchById($pdo, $authorizationId) ?? [];
+}
+
+function completionCertificateRenderPages(array $certificate): array
+{
+    $pageWidth          = 1275;
+    $pageHeight         = 1650;
+    $marginX            = 90;
+    $topMargin          = 110;
+    $bottomMargin       = 90;
+    $signatureBlockSize = 400;
+    $bodyLimit          = $pageHeight - $bottomMargin - $signatureBlockSize;
+    $bodyWidth          = $pageWidth - ($marginX * 2);
+    $titleFont          = serviceAuthorizationFontPath(true);
+    $bodyFont           = serviceAuthorizationFontPath(false);
+    $pages              = [];
+
+    $newPage = static function () use ($pageWidth, $pageHeight, $topMargin): array {
+        $image = imagecreatetruecolor($pageWidth, $pageHeight);
+        imageantialias($image, true);
+        $white = imagecolorallocate($image, 255, 255, 255);
+        imagefilledrectangle($image, 0, 0, $pageWidth, $pageHeight, $white);
+
+        return [
+            'image' => $image,
+            'y' => $topMargin,
+        ];
+    };
+
+    $page = $newPage();
+    $black = imagecolorallocate($page['image'], 17, 24, 39);
+    $muted = imagecolorallocate($page['image'], 75, 85, 99);
+    $lineColor = imagecolorallocate($page['image'], 209, 213, 219);
+
+    $ensureRoom = static function (array &$pageState, int $neededHeight) use (&$pages, $newPage, $bodyLimit): void {
+        if (($pageState['y'] + $neededHeight) <= $bodyLimit) {
+            return;
+        }
+
+        $pages[] = $pageState['image'];
+        $pageState = $newPage();
+    };
+
+    $drawWrappedBlock = static function (array &$pageState, string $text, int $fontSize, int $lineHeight, int $color, bool $bold = false, int $after = 18) use ($bodyWidth, $marginX, $ensureRoom, $titleFont, $bodyFont): void {
+        $fontPath = $bold ? $titleFont : $bodyFont;
+        $lines = serviceAuthorizationWrapText($fontPath, $fontSize, $bodyWidth, $text);
+        foreach ($lines as $line) {
+            $ensureRoom($pageState, $lineHeight);
+            serviceAuthorizationRenderTextLine($pageState['image'], $fontPath, $fontSize, $marginX, $pageState['y'], $color, $line, $bold ? 5 : 4);
+            $pageState['y'] += $lineHeight;
+        }
+        $pageState['y'] += $after;
+    };
+
+    $drawWrappedBlock($page, 'Completion Certificate', 26, 42, $black, true, 10);
+    $drawWrappedBlock($page, completionCertificateSummaryLine(), 16, 28, $black, false, 16);
+    $drawWrappedBlock($page, 'Customer: ' . ($certificate['customer_name'] ?? 'Customer'), 14, 24, $muted, false, 0);
+    $drawWrappedBlock($page, 'Service Request #: ' . (string) ($certificate['service_request_number'] ?? $certificate['service_request_id'] ?? ''), 14, 24, $muted, false, 0);
+    $drawWrappedBlock($page, 'Completed: ' . serviceAuthorizationFormatSignedAtDisplay($certificate['signed_at'] ?? ''), 14, 24, $muted, false, 24);
+    $drawWrappedBlock($page, 'Completed Work', 18, 30, $black, true, 4);
+    $drawWrappedBlock($page, (string) ($certificate['scope_of_work'] ?? ''), 15, 28, $black, false, 20);
+    $drawWrappedBlock($page, 'Customer Acknowledgment', 18, 30, $black, true, 4);
+
+    foreach (completionCertificateClauses() as $index => $clause) {
+        $drawWrappedBlock($page, ($index + 1) . '. ' . $clause, 15, 28, $black, false, 10);
+    }
+
+    $signatureTop = max($page['y'] + 10, $pageHeight - $bottomMargin - $signatureBlockSize + 20);
+    if ($signatureTop > ($pageHeight - $bottomMargin - $signatureBlockSize + 20)) {
+        $pages[] = $page['image'];
+        $page = $newPage();
+        $black = imagecolorallocate($page['image'], 17, 24, 39);
+        $muted = imagecolorallocate($page['image'], 75, 85, 99);
+        $lineColor = imagecolorallocate($page['image'], 209, 213, 219);
+        $signatureTop = $pageHeight - $bottomMargin - $signatureBlockSize + 20;
+    }
+
+    imageline($page['image'], $marginX, $signatureTop - 16, $pageWidth - $marginX, $signatureTop - 16, $lineColor);
+    serviceAuthorizationRenderTextLine($page['image'], $titleFont, 18, $marginX, $signatureTop + 18, $black, 'Customer Signature', 5);
+
+    $signaturePath = serviceAuthorizationResolveSignaturePath((string) ($certificate['signature_path'] ?? ''));
+    $signatureImage = @imagecreatefrompng($signaturePath);
+    if ($signatureImage === false) {
+        throw new RuntimeException('Stored signature image is unavailable.');
+    }
+
+    $customerBoxX = $marginX;
+    $customerBoxY = $signatureTop + 42;
+    $customerBoxW = 530;
+    $customerBoxH = 120;
+    imagerectangle($page['image'], $customerBoxX, $customerBoxY, $customerBoxX + $customerBoxW, $customerBoxY + $customerBoxH, $lineColor);
+
+    $srcW = imagesx($signatureImage);
+    $srcH = imagesy($signatureImage);
+    $destW = $customerBoxW - 24;
+    $destH = max(1, (int) round(($srcH / max(1, $srcW)) * $destW));
+    if ($destH > ($customerBoxH - 24)) {
+        $destH = $customerBoxH - 24;
+        $destW = max(1, (int) round(($srcW / max(1, $srcH)) * $destH));
+    }
+    $destX = $customerBoxX + (int) floor(($customerBoxW - $destW) / 2);
+    $destY = $customerBoxY + (int) floor(($customerBoxH - $destH) / 2);
+    imagealphablending($page['image'], true);
+    imagesavealpha($page['image'], true);
+    imagecopyresampled($page['image'], $signatureImage, $destX, $destY, 0, 0, $destW, $destH, $srcW, $srcH);
+    imagedestroy($signatureImage);
+
+    serviceAuthorizationRenderTextLine(
+        $page['image'],
+        $bodyFont,
+        14,
+        $customerBoxX,
+        $customerBoxY + $customerBoxH + 28,
+        $muted,
+        'Date: ' . serviceAuthorizationFormatSignedAtDisplay($certificate['signed_at'] ?? ''),
+        3
+    );
+
+    $techLabelY = $customerBoxY + $customerBoxH + 80;
+    serviceAuthorizationRenderTextLine($page['image'], $titleFont, 18, $marginX, $techLabelY, $black, 'Technician Signature', 5);
+
+    $techLineY = $techLabelY + 36;
+    imageline($page['image'], $marginX, $techLineY, $marginX + 530, $techLineY, $lineColor);
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $marginX, $techLineY + 28, $muted, 'Date: ________________________', 3);
+
+    $stampX = $marginX + 580;
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 16, $stampX, $customerBoxY + 18, $black, 'Captured Details', 4);
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $stampX, $customerBoxY + 52, $muted, 'Timestamp: ' . serviceAuthorizationFormatSignedAtDisplay($certificate['signed_at'] ?? ''), 3);
+
+    $lat = $certificate['signed_latitude'] ?? null;
+    $lng = $certificate['signed_longitude'] ?? null;
+    $gpsText = ($lat !== null && $lng !== null)
+        ? sprintf('GPS: %.6f, %.6f', (float) $lat, (float) $lng)
+        : 'GPS: Not captured';
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $stampX, $customerBoxY + 86, $muted, $gpsText, 3);
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $stampX, $customerBoxY + 120, $muted, 'Document: Completion Certificate', 3);
+
+    $pages[] = $page['image'];
+
+    $jpegPages = [];
+    foreach ($pages as $image) {
+        ob_start();
+        imagejpeg($image, null, 92);
+        $jpegPages[] = (string) ob_get_clean();
+        imagedestroy($image);
+    }
+
+    return $jpegPages;
+}
+
+function completionCertificateGeneratePdf(PDO $pdo, int $authorizationId): array
+{
+    $certificate = serviceAuthorizationFetchById($pdo, $authorizationId);
+    if (!$certificate || ($certificate['agreement_type'] ?? '') !== 'completion_certificate') {
+        throw new RuntimeException('Completion certificate record not found.');
+    }
+
+    $jpegPages = completionCertificateRenderPages($certificate);
+    $pdfBinary = serviceAuthorizationRenderPdfFromJpegs($jpegPages);
+
+    return [
+        'filename' => sprintf('completion-certificate-%d.pdf', (int) $certificate['service_request_id']),
+        'content' => $pdfBinary,
+        'certificate' => $certificate,
+    ];
+}
+
+function completionCertificatePdfRoot(): string
+{
+    return serviceAuthorizationStorageRoot() . '/completion-certificates';
+}
+
+function completionCertificateWritePdfFile(int $serviceRequestId, string $pdfBinary): string
+{
+    serviceAuthorizationEnsureDirectory(completionCertificatePdfRoot());
+
+    $fileName = sprintf(
+        'completion-certificate-%d-%s-%s.pdf',
+        $serviceRequestId,
+        gmdate('YmdHis'),
+        bin2hex(random_bytes(6))
+    );
+    $relativePath = 'uploads/service-authorizations/completion-certificates/' . $fileName;
+    $absolutePath = dirname(__DIR__) . '/' . $relativePath;
+
+    if (file_put_contents($absolutePath, $pdfBinary, LOCK_EX) === false) {
+        throw new RuntimeException('Unable to write completion certificate PDF.');
+    }
+
+    return $relativePath;
+}
+
+function completionCertificatePersistFilePath(PDO $pdo, int $serviceRequestId, string $relativePath): void
+{
+    $stmt = $pdo->prepare(
+        "UPDATE service_requests
+         SET completion_certificate = :completion_certificate
+         WHERE id = :id
+         LIMIT 1"
+    );
+    $stmt->execute([
+        ':completion_certificate' => $relativePath,
+        ':id' => $serviceRequestId,
+    ]);
+}
+
+function completionCertificateGenerateAndStoreByServiceRequest(PDO $pdo, int $serviceRequestId): array
+{
+    $certificate = completionCertificateFetchLatestByServiceRequestId($pdo, $serviceRequestId);
+    if (!$certificate) {
+        throw new RuntimeException('Completion certificate record not found.');
+    }
+
+    $pdf = completionCertificateGeneratePdf($pdo, (int) $certificate['id']);
+    $relativePath = completionCertificateWritePdfFile($serviceRequestId, $pdf['content']);
+    completionCertificatePersistFilePath($pdo, $serviceRequestId, $relativePath);
+
+    return [
+        'filename' => $pdf['filename'],
+        'content' => $pdf['content'],
+        'certificate' => $pdf['certificate'],
+        'path' => $relativePath,
+    ];
+}
