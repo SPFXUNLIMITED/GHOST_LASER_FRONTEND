@@ -420,7 +420,7 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
     $blocks = array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== ''));
     $blocks = array_values(array_filter(
         $blocks,
-        static fn ($block): bool => trim((string) $block) !== $technicianNotes
+        static fn ($block): bool => completionCertificateNormalizeInlineTechnicianNotesBlock((string) $block) !== $technicianNotes
     ));
     foreach ($blocks as $index => $block) {
         if (completionCertificateIsStructuredIssueSummaryBlock((string) $block)) {
@@ -439,6 +439,21 @@ function completionCertificateIsStructuredIssueSummaryBlock(string $block): bool
     return $block !== ''
         && !str_contains($block, "\n")
         && stripos($block, 'Issue summary:') === 0;
+}
+
+function completionCertificateNormalizeInlineTechnicianNotesBlock(string $block): ?string
+{
+    $block = trim(str_replace(["\r\n", "\r"], "\n", $block));
+    if ($block === '' || str_contains($block, "\n") || stripos($block, 'Technician notes:') !== 0) {
+        return null;
+    }
+
+    $value = serviceAuthorizationNormalizeWhitespace(substr($block, strlen('Technician notes:')));
+    if ($value === '') {
+        return 'Technician notes:';
+    }
+
+    return 'Technician notes: ' . $value;
 }
 
 function completionCertificatePdfRoot(): string
