@@ -206,6 +206,20 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 7. Existing scope technician notes are replaced instead of duplicated ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes\nOld saved note\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => 'Fresh note from request',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Fresh note from request.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate should replace legacy technician notes blocks instead of duplicating them'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {

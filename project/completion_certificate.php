@@ -381,11 +381,13 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
     if ($technicianNotes !== '' && !preg_match('/[.!?]$/', $technicianNotes)) {
         $technicianNotes .= '.';
     }
-    if ($scopeText === '' || $technicianNotes === '') {
-        return $scopeText;
-    }
 
     $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
+    $blocks = array_values(array_filter($blocks, static fn ($block): bool => !preg_match('/^Technician notes(?:\s|:|$)/i', trim((string) $block))));
+    if ($scopeText === '' || $technicianNotes === '') {
+        return implode("\n\n", $blocks);
+    }
+
     foreach ($blocks as $index => $block) {
         if (stripos(trim($block), 'Issue summary:') === 0) {
             array_splice($blocks, $index + 1, 0, [$technicianNotes]);
