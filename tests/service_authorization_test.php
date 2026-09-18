@@ -247,6 +247,19 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 10. Completion certificate scope storage strips empty technician notes headings ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTechnician notes\n\nJob description: Machine shuts down after five minutes."
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope storage should strip empty technician notes headings'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {

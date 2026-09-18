@@ -384,7 +384,7 @@ function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeTex
     $blocks = array_values(array_filter(
         $blocks,
         static fn ($block): bool => trim((string) $block) !== ''
-            && !preg_match('/^Technician notes:?\s*\n/i', trim((string) $block))
+            && !preg_match('/^Technician notes:?(?:\s*\n|$)/i', trim((string) $block))
     ));
 
     return implode("\n\n", $blocks);
