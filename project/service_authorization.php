@@ -579,7 +579,8 @@ function serviceAuthorizationPersistJobPhotos(PDO $pdo, int $serviceRequestId, a
     $encoded = serviceAuthorizationEncodeJobPhotos($paths);
     $stmt = $pdo->prepare(
         "UPDATE service_requests
-         SET job_photos = :job_photos
+         SET job_photos = :job_photos,
+             completion_certificate = NULL
          WHERE id = :id
          LIMIT 1"
     );
@@ -590,6 +591,39 @@ function serviceAuthorizationPersistJobPhotos(PDO $pdo, int $serviceRequestId, a
     }
     $stmt->bindValue(':id', $serviceRequestId, PDO::PARAM_INT);
     $stmt->execute();
+}
+
+function serviceAuthorizationFetchJobPhotoState(PDO $pdo, int $serviceRequestId, bool $forUpdate = false): ?array
+{
+    $sql = "SELECT job_photos, completion_certificate
+            FROM service_requests
+            WHERE id = :id
+            LIMIT 1";
+    if ($forUpdate && (string) $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') {
+        $sql .= ' FOR UPDATE';
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':id' => $serviceRequestId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $row ?: null;
+}
+
+function serviceAuthorizationDeleteStoredFileIfPresent(?string $relativePath): void
+{
+    $relativePath = trim((string) $relativePath);
+    if ($relativePath === '') {
+        return;
+    }
+
+    try {
+        $absolutePath = serviceAuthorizationResolveStoragePath($relativePath);
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
+    } catch (Throwable $e) {
+    }
 }
 
 function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, array $uploadedFiles, array $job): array
@@ -609,12 +643,9 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
         throw new InvalidArgumentException('Upload up to 10 photos at a time.');
     }
 
-    $existingPaths = serviceAuthorizationDecodeJobPhotos($job['job_photos'] ?? null);
-    if ((count($existingPaths) + count($uploadedFiles)) > 20) {
-        throw new InvalidArgumentException('Each job can have up to 20 photos.');
-    }
-
     $createdPaths = [];
+    $startedTransaction = false;
+    $previousCertificatePath = null;
     try {
         foreach ($uploadedFiles as $file) {
             $decoded = serviceAuthorizationDecodeUploadedPhoto($file);
@@ -622,28 +653,68 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
             if (file_put_contents($paths['temp'], $decoded['binary'], LOCK_EX) === false) {
                 throw new RuntimeException('Unable to save one of the photos.');
             }
-            if (!rename($paths['temp'], $paths['absolute'])) {
-                @unlink($paths['temp']);
-                throw new RuntimeException('Unable to finalize one of the photos.');
-            }
-            $createdPaths[] = $paths['relative'];
+            $createdPaths[] = $paths;
         }
 
-        $allPaths = array_values(array_unique(array_merge($existingPaths, $createdPaths)));
+        if (!$pdo->inTransaction()) {
+            $pdo->beginTransaction();
+            $startedTransaction = true;
+        }
+
+        $state = serviceAuthorizationFetchJobPhotoState($pdo, $serviceRequestId, true);
+        if (!$state) {
+            throw new RuntimeException('Service request not found.');
+        }
+
+        $existingPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null);
+        if ((count($existingPaths) + count($createdPaths)) > 20) {
+            throw new InvalidArgumentException('Each job can have up to 20 photos.');
+        }
+
+        foreach ($createdPaths as $pathSet) {
+            if (!rename($pathSet['temp'], $pathSet['absolute'])) {
+                @unlink($pathSet['temp']);
+                throw new RuntimeException('Unable to finalize one of the photos.');
+            }
+        }
+
+        $allPaths = array_values(array_unique(array_merge(
+            $existingPaths,
+            array_column($createdPaths, 'relative')
+        )));
+        $previousCertificatePath = $state['completion_certificate'] ?? null;
         serviceAuthorizationPersistJobPhotos($pdo, $serviceRequestId, $allPaths);
+
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
     } catch (Throwable $e) {
+        if ($startedTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         foreach ($createdPaths as $path) {
-            $absolutePath = dirname(__DIR__) . '/' . $path;
-            if (is_file($absolutePath)) {
-                @unlink($absolutePath);
+            if (is_array($path)) {
+                if (is_file($path['temp'] ?? '')) {
+                    @unlink($path['temp']);
+                }
+                if (is_file($path['absolute'] ?? '')) {
+                    @unlink($path['absolute']);
+                }
+            } else {
+                $absolutePath = dirname(__DIR__) . '/' . $path;
+                if (is_file($absolutePath)) {
+                    @unlink($absolutePath);
+                }
             }
         }
         throw $e;
     }
 
+    serviceAuthorizationDeleteStoredFileIfPresent($previousCertificatePath);
+
     return [
         'service_request_id' => $serviceRequestId,
-        'photos' => serviceAuthorizationBuildJobPhotoPayloads(array_merge($existingPaths, $createdPaths)),
+        'photos' => serviceAuthorizationBuildJobPhotoPayloads($allPaths),
     ];
 }
 
@@ -658,24 +729,45 @@ function serviceAuthorizationRemoveJobPhoto(PDO $pdo, int $serviceRequestId, str
         throw new InvalidArgumentException('Invalid photo path.');
     }
 
-    $existingPaths = serviceAuthorizationDecodeJobPhotos($job['job_photos'] ?? null);
-    if (!in_array($photoPath, $existingPaths, true)) {
-        throw new InvalidArgumentException('Photo not found.');
-    }
-
-    $remainingPaths = array_values(array_filter(
-        $existingPaths,
-        static fn (string $path): bool => $path !== $photoPath
-    ));
-    serviceAuthorizationPersistJobPhotos($pdo, $serviceRequestId, $remainingPaths);
+    $remainingPaths = [];
+    $previousCertificatePath = null;
+    $startedTransaction = false;
 
     try {
-        $absolutePath = serviceAuthorizationResolveStoragePath($photoPath);
-        if (is_file($absolutePath)) {
-            @unlink($absolutePath);
+        if (!$pdo->inTransaction()) {
+            $pdo->beginTransaction();
+            $startedTransaction = true;
+        }
+
+        $state = serviceAuthorizationFetchJobPhotoState($pdo, $serviceRequestId, true);
+        if (!$state) {
+            throw new RuntimeException('Service request not found.');
+        }
+
+        $existingPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null);
+        if (!in_array($photoPath, $existingPaths, true)) {
+            throw new InvalidArgumentException('Photo not found.');
+        }
+
+        $remainingPaths = array_values(array_filter(
+            $existingPaths,
+            static fn (string $path): bool => $path !== $photoPath
+        ));
+        $previousCertificatePath = $state['completion_certificate'] ?? null;
+        serviceAuthorizationPersistJobPhotos($pdo, $serviceRequestId, $remainingPaths);
+
+        if ($startedTransaction) {
+            $pdo->commit();
         }
     } catch (Throwable $e) {
+        if ($startedTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
     }
+
+    serviceAuthorizationDeleteStoredFileIfPresent($photoPath);
+    serviceAuthorizationDeleteStoredFileIfPresent($previousCertificatePath);
 
     return [
         'service_request_id' => $serviceRequestId,

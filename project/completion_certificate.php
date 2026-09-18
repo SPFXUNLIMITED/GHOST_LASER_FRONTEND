@@ -723,5 +723,23 @@ function completionCertificateLoadOrGenerateByServiceRequest(PDO $pdo, int $serv
         throw new RuntimeException('Completion certificate record not found.');
     }
 
-    return completionCertificateGenerateAndStoreById($pdo, (int) ($latestCertificate['id'] ?? 0));
+    $latestCertificateId = (int) ($latestCertificate['id'] ?? 0);
+    $expectedPath = completionCertificateExpectedPdfPath($serviceRequestId, $latestCertificateId);
+    $storedPath = completionCertificateFetchStoredFilePath($pdo, $serviceRequestId);
+    if ($storedPath !== null && $storedPath === $expectedPath) {
+        try {
+            $resolved = completionCertificateResolvePdfPath($storedPath);
+            $content = @file_get_contents($resolved);
+            if (is_string($content) && $content !== '') {
+                return [
+                    'filename' => basename($resolved),
+                    'content' => $content,
+                    'path' => $storedPath,
+                ];
+            }
+        } catch (Throwable $e) {
+        }
+    }
+
+    return completionCertificateGenerateAndStoreById($pdo, $latestCertificateId);
 }
