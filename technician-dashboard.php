@@ -757,8 +757,7 @@ $extraHead       = <<<'HTML'
             gap: 0.8rem;
         }
         .service-auth-contract {
-            flex: 1;
-            min-height: 0;
+            flex: 0 0 auto;
             overflow-y: auto;
             border-radius: 0.9rem;
             border: 1px solid rgba(63, 63, 70, 0.7);
