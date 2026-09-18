@@ -450,7 +450,18 @@ function completionCertificateGenerateAndStoreById(PDO $pdo, int $authorizationI
 
     $pdf = completionCertificateGeneratePdf($pdo, (int) $certificate['id']);
     $relativePath = completionCertificateWritePdfFile($serviceRequestId, $pdf['content']);
-    completionCertificatePersistFilePath($pdo, $serviceRequestId, $relativePath);
+    try {
+        completionCertificatePersistFilePath($pdo, $serviceRequestId, $relativePath);
+    } catch (Throwable $e) {
+        try {
+            $resolvedNewPath = completionCertificateResolvePdfPath($relativePath);
+            if (is_file($resolvedNewPath)) {
+                @unlink($resolvedNewPath);
+            }
+        } catch (Throwable $cleanupError) {
+        }
+        throw $e;
+    }
 
     return [
         'filename' => $pdf['filename'],

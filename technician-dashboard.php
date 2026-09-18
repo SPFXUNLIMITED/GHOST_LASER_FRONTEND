@@ -1496,6 +1496,8 @@ require_once __DIR__ . '/templates/header.php';
                                         data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
                                         data-authorize-scope="<?= htmlspecialchars($completionCertificateScope, ENT_QUOTES, 'UTF-8') ?>"
                                         data-authorize-doc-type="completion_certificate"
+                                        title="<?= $existingAuthorization ? 'Capture customer completion signature' : 'Complete service authorization first' ?>"
+                                        <?= $existingAuthorization ? '' : 'disabled' ?>
                                     >
                                         Generate completion certificate
                                     </button>
@@ -1510,7 +1512,7 @@ require_once __DIR__ . '/templates/header.php';
                                             class="authorization-download"
                                         >Download PDF</a>
                                     <?php else: ?>
-                                        <span>Not generated yet.</span>
+                                        <span><?= $existingAuthorization ? 'Not generated yet.' : 'Complete service authorization first.' ?></span>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -2704,6 +2706,7 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
     document.addEventListener('click', function (e) {
         var authorizeBtn = e.target.closest('.authorize-btn');
         if (authorizeBtn) {
+            if (authorizeBtn.disabled) return;
             openAuthorizationModal(authorizeBtn);
             return;
         }

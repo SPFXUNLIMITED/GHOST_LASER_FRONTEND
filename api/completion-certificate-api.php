@@ -86,9 +86,15 @@ try {
         $signedAt,
         $scopeOfWork
     );
-    completionCertificateGenerateAndStoreById($pdo, (int) ($certificate['id'] ?? 0));
+    $warning = null;
+    try {
+        completionCertificateGenerateAndStoreById($pdo, (int) ($certificate['id'] ?? 0));
+    } catch (Throwable $e) {
+        error_log('completion-certificate-api PDF generation failed: ' . $e->getMessage());
+        $warning = 'Certificate saved. PDF will be generated when downloaded.';
+    }
 
-    echo json_encode([
+    $response = [
         'success' => true,
         'certificate' => [
             'id' => (int) ($certificate['id'] ?? 0),
@@ -99,7 +105,11 @@ try {
             'longitude' => $certificate['signed_longitude'] !== null ? (float) $certificate['signed_longitude'] : null,
             'download_url' => '/api/completion-certificate-pdf.php?service_request_id=' . $serviceRequestId,
         ],
-    ]);
+    ];
+    if ($warning !== null) {
+        $response['warning'] = $warning;
+    }
+    echo json_encode($response);
 } catch (InvalidArgumentException $e) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
