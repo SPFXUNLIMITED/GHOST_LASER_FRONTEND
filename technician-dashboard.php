@@ -1722,6 +1722,18 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         if (!authCanvas || !authCtx) return;
         var rect = authCanvas.getBoundingClientRect();
         if (!rect.width || !rect.height) return;
+        var snapshot = null;
+        if (authState.dirty && authCanvas.width && authCanvas.height) {
+            snapshot = document.createElement('canvas');
+            snapshot.width = authCanvas.width;
+            snapshot.height = authCanvas.height;
+            var snapshotCtx = snapshot.getContext('2d');
+            if (snapshotCtx) {
+                snapshotCtx.drawImage(authCanvas, 0, 0);
+            } else {
+                snapshot = null;
+            }
+        }
         var dpr = Math.max(window.devicePixelRatio || 1, 1);
         authCanvas.width = Math.round(rect.width * dpr);
         authCanvas.height = Math.round(rect.height * dpr);
@@ -1731,6 +1743,9 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         authCtx.lineWidth = 2.75;
         authCtx.strokeStyle = '#111827';
         authCtx.clearRect(0, 0, rect.width, rect.height);
+        if (snapshot) {
+            authCtx.drawImage(snapshot, 0, 0, rect.width, rect.height);
+        }
     }
 
     function clearAuthorizationCanvas() {
@@ -1855,6 +1870,8 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         authCanvas.addEventListener('pointermove', authorizationMoveDrawing);
         authCanvas.addEventListener('pointerup', authorizationStopDrawing);
         authCanvas.addEventListener('pointercancel', authorizationStopDrawing);
+        authCanvas.addEventListener('pointerleave', authorizationStopDrawing);
+        authCanvas.addEventListener('lostpointercapture', authorizationStopDrawing);
     }
 
     if (authClearBtn) {

@@ -4,4 +4,3 @@ api/.env
 .env.local
 .env.*.local
 uploads/service-authorizations/
-project/.service-authorization-signing.key

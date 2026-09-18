@@ -32,14 +32,7 @@ function serviceAuthorizationSummaryLine(): string
 
 function serviceAuthorizationSessionKey(): string
 {
-    $signingSecret = serviceAuthorizationSigningSecret();
-    $adminId = (string) ($_SESSION['admin_id'] ?? '0');
-    return hash('sha256', 'service-authorization|' . $signingSecret . '|' . $adminId);
-}
-
-function serviceAuthorizationKeyPath(): string
-{
-    return dirname(__DIR__) . '/project/.service-authorization-signing.key';
+    return hash('sha256', 'service-authorization|' . serviceAuthorizationSigningSecret());
 }
 
 function serviceAuthorizationSigningSecret(): string
@@ -62,23 +55,7 @@ function serviceAuthorizationSigningSecret(): string
         }
     }
 
-    $keyPath = serviceAuthorizationKeyPath();
-    if (is_file($keyPath) && is_readable($keyPath)) {
-        $candidate = trim((string) file_get_contents($keyPath));
-        if ($candidate !== '') {
-            $secret = $candidate;
-            return $secret;
-        }
-    }
-
-    $generated = bin2hex(random_bytes(32));
-    if (file_put_contents($keyPath, $generated, LOCK_EX) === false) {
-        throw new RuntimeException('Unable to initialize service authorization signing key.');
-    }
-    @chmod($keyPath, 0600);
-
-    $secret = $generated;
-    return $secret;
+    throw new RuntimeException('A service authorization signing secret must be configured.');
 }
 
 function serviceAuthorizationJobAccessToken(int $serviceRequestId): string
