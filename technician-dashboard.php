@@ -1309,20 +1309,6 @@ require_once __DIR__ . '/templates/header.php';
                         $existingAuthorization = $serviceAuthorizations[(int) $job['service_request_id']] ?? null;
                         $existingCompletionCertificate = $completionCertificates[(int) $job['service_request_id']] ?? null;
                         $completionCertificateScope = $authorizationScope;
-                        $hasCurrentCompletionCertificate = false;
-                        if ($existingCompletionCertificate) {
-                            if ($existingAuthorization) {
-                                $completionSignedAtTs = strtotime((string) ($existingCompletionCertificate['signed_at'] ?? ''));
-                                $authorizationSignedAtTs = strtotime((string) ($existingAuthorization['signed_at'] ?? ''));
-                                $hasCurrentCompletionCertificate = $completionSignedAtTs !== false
-                                    && $authorizationSignedAtTs !== false
-                                    && $completionSignedAtTs >= $authorizationSignedAtTs;
-                            } else {
-                                $hasCurrentCompletionCertificate = true;
-                            }
-                        }
-                        $displayCompletionCertificate = $hasCurrentCompletionCertificate ? $existingCompletionCertificate : null;
-                        $canGenerateCompletionCertificate = $existingAuthorization && !$hasCurrentCompletionCertificate;
                         $customerProblem = str_replace(["\r\n", "\r"], "\n", serviceAuthorizationPrimaryProblemText($job));
                         $technicianNotes = str_replace(["\r\n", "\r"], "\n", (string) ($job['technician_notes'] ?? ''));
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
@@ -1508,15 +1494,15 @@ require_once __DIR__ . '/templates/header.php';
                                         data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
                                         data-authorize-scope="<?= htmlspecialchars($completionCertificateScope, ENT_QUOTES, 'UTF-8') ?>"
                                         data-authorize-doc-type="completion_certificate"
-                                        title="<?= $canGenerateCompletionCertificate ? 'Capture customer completion signature' : ($existingAuthorization ? 'Completion certificate is already current' : 'Complete service authorization first') ?>"
-                                        <?= $canGenerateCompletionCertificate ? '' : 'disabled' ?>
+                                        title="<?= $existingAuthorization ? 'Capture customer completion signature' : 'Complete service authorization first' ?>"
+                                        <?= $existingAuthorization ? '' : 'disabled' ?>
                                     >
                                         Generate completion certificate
                                     </button>
                                 </div>
-                                <div class="authorization-status<?= $displayCompletionCertificate ? ' is-signed' : '' ?>" data-cert-job="<?= (int) $job['service_request_id'] ?>">
-                                    <?php if ($displayCompletionCertificate): ?>
-                                        <span>Generated <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $displayCompletionCertificate['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
+                                <div class="authorization-status<?= $existingCompletionCertificate ? ' is-signed' : '' ?>" data-cert-job="<?= (int) $job['service_request_id'] ?>">
+                                    <?php if ($existingCompletionCertificate): ?>
+                                        <span>Generated <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $existingCompletionCertificate['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
                                         <a
                                             href="/api/completion-certificate-pdf.php?service_request_id=<?= (int) $job['service_request_id'] ?>"
                                             target="_blank"
@@ -1524,7 +1510,7 @@ require_once __DIR__ . '/templates/header.php';
                                             class="authorization-download"
                                         >Download PDF</a>
                                     <?php else: ?>
-                                        <span><?= !$existingAuthorization ? 'Complete service authorization first.' : ($existingCompletionCertificate ? 'A newer authorization requires a new certificate.' : 'Not generated yet.') ?></span>
+                                        <span><?= !$existingAuthorization ? 'Complete service authorization first.' : 'Not generated yet.' ?></span>
                                     <?php endif; ?>
                                 </div>
                             </div>

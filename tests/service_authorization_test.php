@@ -159,8 +159,8 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     ]);
 
     ghostLaserAuthAssert(
-        !completionCertificateCanCreateForServiceRequest($pdo, 10),
-        'Should block duplicate completion certificate while the latest one is current'
+        completionCertificateCanCreateForServiceRequest($pdo, 10),
+        'Should still allow completion certificate regeneration when one already exists'
     );
 
     $insert->execute([

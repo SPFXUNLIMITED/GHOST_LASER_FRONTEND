@@ -70,12 +70,6 @@ if (!completionCertificateHasPrerequisiteAuthorization($pdo, $serviceRequestId))
     exit;
 }
 
-if (!completionCertificateCanCreateForServiceRequest($pdo, $serviceRequestId)) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'A completion certificate already exists for the latest service authorization.']);
-    exit;
-}
-
 if ($latitude === null || $longitude === null || $latitude === false || $longitude === false) {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Valid GPS coordinates are required when signing.']);
