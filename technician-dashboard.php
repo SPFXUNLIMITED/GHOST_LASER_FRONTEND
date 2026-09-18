@@ -1418,7 +1418,7 @@ require_once __DIR__ . '/templates/header.php';
                                     type="button"
                                     class="job-note-edit"
                                     data-tech-notes-job-id="<?= $serviceRequestId ?>"
-                                    data-technician-notes="<?= htmlspecialchars($technicianNotes, ENT_QUOTES, 'UTF-8') ?>"
+                                    data-technician-notes-encoded="<?= htmlspecialchars(rawurlencode($technicianNotes), ENT_QUOTES, 'UTF-8') ?>"
                                     aria-haspopup="dialog"
                                     aria-controls="technicianNotesModal"
                                     aria-label="Edit technician notes for <?= htmlspecialchars($technicianNotesLabelTarget, ENT_QUOTES, 'UTF-8') ?>"
@@ -1824,6 +1824,15 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         techNotesStatus.className = 'tech-notes-status' + (type ? ' ' + type : '');
     }
 
+    function decodeTechnicianNotesValue(value) {
+        if (!value) return '';
+        try {
+            return decodeURIComponent(value);
+        } catch (err) {
+            return '';
+        }
+    }
+
     function modalFocusableElements(container) {
         if (!container) return [];
         return Array.prototype.slice.call(
@@ -1860,7 +1869,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
 
     function refreshTechnicianNotesCard(jobId, notes, scopeOfWork) {
         document.querySelectorAll('[data-tech-notes-job-id="' + jobId + '"]').forEach(function (trigger) {
-            trigger.dataset.technicianNotes = notes;
+            trigger.dataset.technicianNotesEncoded = encodeURIComponent(notes);
             var valueEl = trigger.querySelector('[data-tech-notes-value]');
             if (valueEl) {
                 var hasNotes = notes.trim() !== '';
@@ -1872,6 +1881,10 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         document.querySelectorAll('[data-authorize-job-id="' + jobId + '"]').forEach(function (authorizeBtn) {
             authorizeBtn.dataset.authorizeScope = scopeOfWork;
         });
+
+        if (authState.jobId === jobId && authScope) {
+            authScope.textContent = scopeOfWork || 'Perform the service request currently listed for this visit.';
+        }
     }
 
     function setTripButtons(jobId, state) {
@@ -2137,7 +2150,7 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         techNotesState.btn = btn;
         techNotesState.jobId = parseInt(btn.dataset.techNotesJobId, 10) || 0;
         techNotesState.submitting = false;
-        techNotesTextarea.value = btn.dataset.technicianNotes || '';
+        techNotesTextarea.value = decodeTechnicianNotesValue(btn.dataset.technicianNotesEncoded || '');
         techNotesTextarea.disabled = false;
         if (techNotesSaveBtn) techNotesSaveBtn.disabled = false;
         if (techNotesCancelBtn) techNotesCancelBtn.disabled = false;

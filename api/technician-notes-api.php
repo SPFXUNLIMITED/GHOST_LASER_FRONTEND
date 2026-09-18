@@ -75,9 +75,11 @@ try {
         echo json_encode(['success' => false, 'error' => 'Service request not found.']);
         exit;
     }
+    error_log('technician-notes-api runtime error: ' . $e->getMessage());
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => 'Unable to save technician notes.']);
 } catch (Throwable $e) {
+    error_log('technician-notes-api error: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'Unable to save technician notes right now.']);
 }
