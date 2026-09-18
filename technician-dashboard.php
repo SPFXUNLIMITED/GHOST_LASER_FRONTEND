@@ -1979,6 +1979,13 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
         return (btn.dataset.problem || '').trim();
     }
 
+    function redirectToAdminLogin() {
+        try {
+            sessionStorage.setItem('return_url', window.location.href);
+        } catch (e) { /* private mode / storage disabled */ }
+        window.location.href = 'admin-login.php';
+    }
+
     // ── API call ──────────────────────────────────────────────────────────────
     function callMileageApi(payload, btn, jobId) {
         btn.disabled = true;
@@ -2018,6 +2025,10 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
                     var errorMsg = (data && data.error)
                         ? data.error
                         : ('Server error (' + res.status + ')');
+                    if (res.status === 401 || errorMsg === 'Unauthorized') {
+                        redirectToAdminLogin();
+                        throw new Error('Unauthorized');
+                    }
                     throw new Error(errorMsg);
                 }
 
@@ -2029,6 +2040,10 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
             });
         }).then(function (data) {
             if (!data.success) {
+                if (data.error === 'Unauthorized') {
+                    redirectToAdminLogin();
+                    return;
+                }
                 setStatus(jobId, '✗ ' + (data.error || 'Error saving'), 'err');
                 btn.disabled = false;
                 return;

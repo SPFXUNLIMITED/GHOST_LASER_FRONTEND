@@ -25,7 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             session_regenerate_id(true);
             $_SESSION['admin_id']       = $user['id'];
             $_SESSION['admin_username'] = $username;
-            header('Location: dashboard.php');
+            echo '<!doctype html><html><head><meta charset="UTF-8"><title>Redirecting…</title></head><body>';
+            echo '<script>(function(){var fallback="dashboard.php";try{var returnUrl=sessionStorage.getItem("return_url");if(returnUrl){sessionStorage.removeItem("return_url");window.location.replace(returnUrl);return;}}catch(e){}window.location.replace(fallback);}());</script>';
+            echo '</body></html>';
             exit;
         } else {
             $error = 'Invalid username or password.';

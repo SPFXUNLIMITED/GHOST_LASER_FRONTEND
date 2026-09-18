@@ -9,10 +9,14 @@
  * All timestamps are stored in America/Los_Angeles timezone.
  */
 
-if (session_status() === PHP_SESSION_NONE) {
-    ini_set('session.gc_maxlifetime', 43200); // 12 hours — matches technician-dashboard.php
-    session_start();
-}
+ini_set('session.gc_maxlifetime', 43200);
+session_set_cookie_params([
+    'lifetime' => 43200,
+    'path'     => '/',
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+session_start();
 
 header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
