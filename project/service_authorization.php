@@ -385,10 +385,6 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
         ]);
         $authorizationId = (int) $pdo->lastInsertId();
 
-        if ($startedTransaction) {
-            $pdo->commit();
-        }
-
         if (!rename($signaturePaths['temp'], $signaturePaths['absolute'])) {
             throw new RuntimeException('Unable to finalize signature image.');
         }
@@ -403,6 +399,10 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
             ':signature_path' => $signaturePaths['relative'],
             ':id' => $authorizationId,
         ]);
+
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
     } catch (Throwable $e) {
         if ($startedTransaction && $pdo->inTransaction()) {
             $pdo->rollBack();
@@ -676,9 +676,14 @@ function serviceAuthorizationRenderPdfFromJpegs(array $jpegPages): string
             $page->readImageBlob($jpeg);
             $page->setImageFormat('jpeg');
             $imagick->addImage($page);
+            $page->clear();
+            $page->destroy();
         }
         $imagick->setImageFormat('pdf');
-        return $imagick->getImagesBlob();
+        $blob = $imagick->getImagesBlob();
+        $imagick->clear();
+        $imagick->destroy();
+        return $blob;
     }
 
     $objects = [];

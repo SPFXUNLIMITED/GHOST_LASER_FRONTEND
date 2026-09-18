@@ -1781,12 +1781,18 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         window.requestAnimationFrame(function () {
             resizeAuthorizationCanvas();
             clearAuthorizationCanvas();
+            if (authSignBtn) {
+                authSignBtn.focus();
+            } else if (authCloseBtn) {
+                authCloseBtn.focus();
+            }
         });
     }
 
     function closeAuthorizationModal(force) {
         if (!authModal) return;
         if (authState.submitting && !force) return;
+        var restoreFocusTarget = authState.btn;
         authModal.classList.remove('open');
         document.body.style.overflow = '';
         authState.btn = null;
@@ -1796,6 +1802,9 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         authState.pointerId = null;
         authState.submitting = false;
         setAuthorizationModalStatus('', '');
+        if (restoreFocusTarget && typeof restoreFocusTarget.focus === 'function') {
+            restoreFocusTarget.focus();
+        }
     }
 
     function authorizationCanvasPoint(event) {
