@@ -716,6 +716,21 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 27. Job photo API method-not-allowed contract advertises POST ---
+(function (): void {
+    $response = serviceAuthorizationJobPhotoMethodNotAllowedResponse();
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 405,
+        'Job photo API method-not-allowed response should use HTTP 405'
+    );
+    ghostLaserAuthAssertSame(
+        'POST',
+        (string) (($response['headers']['Allow'] ?? '')),
+        'Job photo API method-not-allowed response should advertise POST in the Allow header'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {

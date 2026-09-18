@@ -11,9 +11,12 @@ header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    header('Allow: POST');
-    echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+    $response = serviceAuthorizationJobPhotoMethodNotAllowedResponse();
+    http_response_code((int) $response['status']);
+    foreach (($response['headers'] ?? []) as $headerName => $headerValue) {
+        header($headerName . ': ' . $headerValue);
+    }
+    echo json_encode($response['body']);
     exit;
 }
 

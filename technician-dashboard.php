@@ -2187,19 +2187,19 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
             return;
         }
 
+        var formData = new FormData();
+        formData.append('action', 'remove');
+        formData.append('service_request_id', String(jobId));
+        formData.append('photo_path', photoPath);
+        formData.append('csrf_token', SERVICE_AUTH_CSRF);
+
         setJobPhotoBusy(jobId, true);
         setJobPhotoStatus(jobId, 'Removing photo…', '');
 
         fetch('/api/technician-job-photos-api.php', {
             method: 'POST',
             credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'remove',
-                service_request_id: jobId,
-                photo_path: photoPath,
-                csrf_token: SERVICE_AUTH_CSRF
-            })
+            body: formData
         }).then(parseJsonResponse).then(function (data) {
             setJobPhotoBusy(jobId, false);
             renderJobPhotos(jobId, data.photos || []);

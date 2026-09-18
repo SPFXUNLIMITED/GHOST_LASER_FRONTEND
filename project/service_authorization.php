@@ -957,6 +957,15 @@ function serviceAuthorizationHandleJobPhotoApiRequest(
     }
 }
 
+function serviceAuthorizationJobPhotoMethodNotAllowedResponse(): array
+{
+    return [
+        'status' => 405,
+        'headers' => ['Allow' => 'POST'],
+        'body' => ['success' => false, 'error' => 'Method not allowed'],
+    ];
+}
+
 function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
 {
     $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
