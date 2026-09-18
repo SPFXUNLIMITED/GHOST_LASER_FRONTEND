@@ -296,22 +296,30 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
     $summaryLine     = serviceAuthorizationSummaryLine();
     $signatureSha256 = hash('sha256', $signatureBinary);
 
-    $stmt = $pdo->prepare(
-        "INSERT INTO service_authorizations
-            (service_request_id, agreement_type, agreement_summary, scope_of_work, signature_path, signature_sha256, signed_at, signed_latitude, signed_longitude)
-         VALUES
-            (:service_request_id, 'service_authorization', :agreement_summary, :scope_of_work, :signature_path, :signature_sha256, :signed_at, :signed_latitude, :signed_longitude)"
-    );
-    $stmt->execute([
-        ':service_request_id' => $serviceRequestId,
-        ':agreement_summary'  => $summaryLine,
-        ':scope_of_work'      => $scopeOfWork,
-        ':signature_path'     => $signaturePath,
-        ':signature_sha256'   => $signatureSha256,
-        ':signed_at'          => $signedAt,
-        ':signed_latitude'    => $latitude,
-        ':signed_longitude'   => $longitude,
-    ]);
+    try {
+        $stmt = $pdo->prepare(
+            "INSERT INTO service_authorizations
+                (service_request_id, agreement_type, agreement_summary, scope_of_work, signature_path, signature_sha256, signed_at, signed_latitude, signed_longitude)
+             VALUES
+                (:service_request_id, 'service_authorization', :agreement_summary, :scope_of_work, :signature_path, :signature_sha256, :signed_at, :signed_latitude, :signed_longitude)"
+        );
+        $stmt->execute([
+            ':service_request_id' => $serviceRequestId,
+            ':agreement_summary'  => $summaryLine,
+            ':scope_of_work'      => $scopeOfWork,
+            ':signature_path'     => $signaturePath,
+            ':signature_sha256'   => $signatureSha256,
+            ':signed_at'          => $signedAt,
+            ':signed_latitude'    => $latitude,
+            ':signed_longitude'   => $longitude,
+        ]);
+    } catch (Throwable $e) {
+        $absolutePath = dirname(__DIR__) . '/' . ltrim($signaturePath, '/');
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
+        throw $e;
+    }
 
     return serviceAuthorizationFetchById($pdo, (int) $pdo->lastInsertId()) ?? [];
 }

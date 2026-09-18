@@ -1753,14 +1753,16 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         if (authSignBtn) authSignBtn.disabled = false;
         if (authClearBtn) authClearBtn.disabled = false;
         if (authCancelBtn) authCancelBtn.disabled = false;
+        if (authCloseBtn) authCloseBtn.disabled = false;
         resizeAuthorizationCanvas();
         clearAuthorizationCanvas();
         authModal.classList.add('open');
         document.body.style.overflow = 'hidden';
     }
 
-    function closeAuthorizationModal() {
+    function closeAuthorizationModal(force) {
         if (!authModal) return;
+        if (authState.submitting && !force) return;
         authModal.classList.remove('open');
         document.body.style.overflow = '';
         authState.btn = null;
@@ -1888,6 +1890,7 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
             authSignBtn.disabled = true;
             if (authClearBtn) authClearBtn.disabled = true;
             if (authCancelBtn) authCancelBtn.disabled = true;
+            if (authCloseBtn) authCloseBtn.disabled = true;
             setAuthorizationModalStatus('Getting GPS location…', '');
 
             var signedAt = new Date().toISOString();
@@ -1932,12 +1935,15 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
                 });
             }).then(function (authorization) {
                 setAuthorizationCardStatus(authState.jobId, authorization);
-                closeAuthorizationModal();
+                authState.submitting = false;
+                if (authCloseBtn) authCloseBtn.disabled = false;
+                closeAuthorizationModal(true);
             }).catch(function (err) {
                 authState.submitting = false;
                 authSignBtn.disabled = false;
                 if (authClearBtn) authClearBtn.disabled = false;
                 if (authCancelBtn) authCancelBtn.disabled = false;
+                if (authCloseBtn) authCloseBtn.disabled = false;
                 setAuthorizationModalStatus('✗ ' + err.message, 'err');
             });
         });
