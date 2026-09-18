@@ -656,6 +656,13 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
             $createdPaths[] = $paths;
         }
 
+        foreach ($createdPaths as $pathSet) {
+            if (!rename($pathSet['temp'], $pathSet['absolute'])) {
+                @unlink($pathSet['temp']);
+                throw new RuntimeException('Unable to finalize one of the photos.');
+            }
+        }
+
         if (!$pdo->inTransaction()) {
             $pdo->beginTransaction();
             $startedTransaction = true;
@@ -669,13 +676,6 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
         $existingPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null);
         if ((count($existingPaths) + count($createdPaths)) > 20) {
             throw new InvalidArgumentException('Each job can have up to 20 photos.');
-        }
-
-        foreach ($createdPaths as $pathSet) {
-            if (!rename($pathSet['temp'], $pathSet['absolute'])) {
-                @unlink($pathSet['temp']);
-                throw new RuntimeException('Unable to finalize one of the photos.');
-            }
         }
 
         $allPaths = array_values(array_unique(array_merge(

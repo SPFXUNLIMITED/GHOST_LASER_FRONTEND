@@ -484,6 +484,40 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     }
 })();
 
+// --- 22. Completion certificate photo appendix skips missing or invalid entries ---
+(function (): void {
+    $photoDir = __DIR__ . '/../uploads/service-authorizations/job-photos';
+    if (!is_dir($photoDir) && !mkdir($photoDir, 0775, true) && !is_dir($photoDir)) {
+        throw new RuntimeException('Unable to create job photo test directory.');
+    }
+
+    $photoPath = $photoDir . '/test-job-photo-filtered.png';
+    $image = imagecreatetruecolor(8, 8);
+    $fill = imagecolorallocate($image, 6, 182, 212);
+    imagefilledrectangle($image, 0, 0, 7, 7, $fill);
+    imagepng($image, $photoPath);
+    imagedestroy($image);
+
+    try {
+        $jpegPages = completionCertificateRenderPhotoJpegs([
+            'job_photos' => json_encode([
+                'uploads/service-authorizations/job-photos/test-job-photo-filtered.png',
+                'uploads/service-authorizations/job-photos/missing.png',
+                'uploads/service-authorizations/signatures/not-a-job-photo.png',
+            ]),
+        ]);
+
+        ghostLaserAuthAssert(
+            count($jpegPages) === 1,
+            'Completion certificate photo appendix should skip missing or invalid stored photo entries'
+        );
+    } finally {
+        if (is_file($photoPath)) {
+            unlink($photoPath);
+        }
+    }
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
