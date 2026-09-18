@@ -32,15 +32,53 @@ function serviceAuthorizationSummaryLine(): string
 
 function serviceAuthorizationSessionKey(): string
 {
-    $signingSecret = trim((string) (
-        getenv('SERVICE_AUTHORIZATION_SIGNING_KEY')
-        ?: getenv('APP_KEY')
-        ?: getenv('APP_SECRET')
-        ?: getenv('DB_PASSWORD')
-        ?: 'ghost-laser-service-authorization'
-    ));
+    $signingSecret = serviceAuthorizationSigningSecret();
     $adminId = (string) ($_SESSION['admin_id'] ?? '0');
     return hash('sha256', 'service-authorization|' . $signingSecret . '|' . $adminId);
+}
+
+function serviceAuthorizationKeyPath(): string
+{
+    return dirname(__DIR__) . '/project/.service-authorization-signing.key';
+}
+
+function serviceAuthorizationSigningSecret(): string
+{
+    static $secret = null;
+    if ($secret !== null) {
+        return $secret;
+    }
+
+    foreach ([
+        getenv('SERVICE_AUTHORIZATION_SIGNING_KEY'),
+        getenv('APP_KEY'),
+        getenv('APP_SECRET'),
+        getenv('DB_PASSWORD'),
+    ] as $candidate) {
+        $candidate = trim((string) $candidate);
+        if ($candidate !== '') {
+            $secret = $candidate;
+            return $secret;
+        }
+    }
+
+    $keyPath = serviceAuthorizationKeyPath();
+    if (is_file($keyPath) && is_readable($keyPath)) {
+        $candidate = trim((string) file_get_contents($keyPath));
+        if ($candidate !== '') {
+            $secret = $candidate;
+            return $secret;
+        }
+    }
+
+    $generated = bin2hex(random_bytes(32));
+    if (file_put_contents($keyPath, $generated, LOCK_EX) === false) {
+        throw new RuntimeException('Unable to initialize service authorization signing key.');
+    }
+    @chmod($keyPath, 0600);
+
+    $secret = $generated;
+    return $secret;
 }
 
 function serviceAuthorizationJobAccessToken(int $serviceRequestId): string
@@ -299,7 +337,7 @@ function serviceAuthorizationDecodeSignaturePng(string $signatureDataUrl): strin
     return $binary;
 }
 
-function serviceAuthorizationPersistSignaturePng(int $serviceRequestId, string $binary): string
+function serviceAuthorizationPrepareSignaturePaths(int $serviceRequestId): array
 {
     serviceAuthorizationEnsureDirectory(serviceAuthorizationSignatureRoot());
 
@@ -309,13 +347,21 @@ function serviceAuthorizationPersistSignaturePng(int $serviceRequestId, string $
         gmdate('YmdHis'),
         bin2hex(random_bytes(6))
     );
-    $absolutePath = serviceAuthorizationSignatureRoot() . '/' . $fileName;
+    $relativePath = 'uploads/service-authorizations/signatures/' . $fileName;
+    $absolutePath = dirname(__DIR__) . '/' . $relativePath;
 
-    if (file_put_contents($absolutePath, $binary, LOCK_EX) === false) {
+    return [
+        'relative' => $relativePath,
+        'absolute' => $absolutePath,
+        'temp' => $absolutePath . '.tmp',
+    ];
+}
+
+function serviceAuthorizationWriteTempSignature(string $tempPath, string $binary): void
+{
+    if (file_put_contents($tempPath, $binary, LOCK_EX) === false) {
         throw new RuntimeException('Unable to save signature image.');
     }
-
-    return 'uploads/service-authorizations/signatures/' . $fileName;
 }
 
 function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
@@ -328,13 +374,20 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
     }
 
     $signatureBinary = serviceAuthorizationDecodeSignaturePng($signatureDataUrl);
-    $signaturePath   = serviceAuthorizationPersistSignaturePng($serviceRequestId, $signatureBinary);
+    $signaturePaths  = serviceAuthorizationPrepareSignaturePaths($serviceRequestId);
+    serviceAuthorizationWriteTempSignature($signaturePaths['temp'], $signatureBinary);
     $signedAt        = serviceAuthorizationParseSignedAt($signedAtInput)->setTimezone(new DateTimeZone('UTC'))->format(DATE_ATOM);
     $scopeOfWork     = serviceAuthorizationBuildScopeOfWork($pdo, $job);
     $summaryLine     = serviceAuthorizationSummaryLine();
     $signatureSha256 = hash('sha256', $signatureBinary);
+    $startedTransaction = false;
 
     try {
+        if (!$pdo->inTransaction()) {
+            $pdo->beginTransaction();
+            $startedTransaction = true;
+        }
+
         $stmt = $pdo->prepare(
             "INSERT INTO service_authorizations
                 (service_request_id, agreement_type, agreement_summary, scope_of_work, signature_path, signature_sha256, signed_at, signed_latitude, signed_longitude)
@@ -345,16 +398,29 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
             ':service_request_id' => $serviceRequestId,
             ':agreement_summary'  => $summaryLine,
             ':scope_of_work'      => $scopeOfWork,
-            ':signature_path'     => $signaturePath,
+            ':signature_path'     => $signaturePaths['relative'],
             ':signature_sha256'   => $signatureSha256,
             ':signed_at'          => $signedAt,
             ':signed_latitude'    => $latitude,
             ':signed_longitude'   => $longitude,
         ]);
+
+        if (!rename($signaturePaths['temp'], $signaturePaths['absolute'])) {
+            throw new RuntimeException('Unable to finalize signature image.');
+        }
+
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
     } catch (Throwable $e) {
-        $absolutePath = dirname(__DIR__) . '/' . ltrim($signaturePath, '/');
-        if (is_file($absolutePath)) {
-            @unlink($absolutePath);
+        if ($startedTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        if (is_file($signaturePaths['temp'])) {
+            @unlink($signaturePaths['temp']);
+        }
+        if (is_file($signaturePaths['absolute'])) {
+            @unlink($signaturePaths['absolute']);
         }
         throw $e;
     }

@@ -1722,7 +1722,6 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         if (!authCanvas || !authCtx) return;
         var rect = authCanvas.getBoundingClientRect();
         if (!rect.width || !rect.height) return;
-        var existingSignature = authState.dirty ? authCanvas.toDataURL('image/png') : '';
         var dpr = Math.max(window.devicePixelRatio || 1, 1);
         authCanvas.width = Math.round(rect.width * dpr);
         authCanvas.height = Math.round(rect.height * dpr);
@@ -1732,13 +1731,6 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         authCtx.lineWidth = 2.75;
         authCtx.strokeStyle = '#111827';
         authCtx.clearRect(0, 0, rect.width, rect.height);
-        if (existingSignature) {
-            var img = new Image();
-            img.onload = function () {
-                authCtx.drawImage(img, 0, 0, rect.width, rect.height);
-            };
-            img.src = existingSignature;
-        }
     }
 
     function clearAuthorizationCanvas() {

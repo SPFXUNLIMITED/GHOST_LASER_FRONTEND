@@ -55,13 +55,25 @@ if (!serviceAuthorizationVerifyJobAccessToken($serviceRequestId, $accessToken)) 
     exit;
 }
 
+if ($latitude === null || $longitude === null || $latitude === false || $longitude === false) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Valid GPS coordinates are required when signing.']);
+    exit;
+}
+
+if ($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'GPS coordinates are out of range.']);
+    exit;
+}
+
 try {
     $authorization = serviceAuthorizationSave(
         $pdo,
         $serviceRequestId,
         $signature,
-        $latitude === false ? null : $latitude,
-        $longitude === false ? null : $longitude,
+        (float) $latitude,
+        (float) $longitude,
         $signedAt
     );
 
