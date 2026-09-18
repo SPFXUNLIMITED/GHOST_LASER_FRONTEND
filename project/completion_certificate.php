@@ -420,7 +420,10 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
     $blocks = array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== ''));
     foreach ($blocks as $index => $block) {
         if (completionCertificateIsStructuredIssueSummaryBlock((string) $block)) {
-            while (isset($blocks[$index + 1]) && stripos(trim((string) $blocks[$index + 1]), 'Technician notes:') === 0) {
+            while (
+                isset($blocks[$index + 1])
+                && trim((string) $blocks[$index + 1]) === $technicianNotes
+            ) {
                 array_splice($blocks, $index + 1, 1);
             }
 
@@ -431,7 +434,7 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
 
     $blocks = array_values(array_filter(
         $blocks,
-        static fn ($block): bool => stripos(trim((string) $block), 'Technician notes:') !== 0
+        static fn ($block): bool => trim((string) $block) !== $technicianNotes
     ));
     $blocks[] = $technicianNotes;
     return implode("\n\n", array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== '')));

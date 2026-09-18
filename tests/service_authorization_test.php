@@ -287,36 +287,31 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
-// --- 13. Rendered technician notes replace inline scope technician notes when present ---
+// --- 13. Rendered technician notes deduplicate identical inline scope technician notes ---
 (function (): void {
     $text = completionCertificateBuildCompletedWorkText([
-        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
+        'scope_of_work' => "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
         'technician_notes' => 'Bring replacement PSU',
     ]);
 
     ghostLaserAuthAssertSame(
         "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
         $text,
-        'Completion certificate should replace inline technician notes blocks when request notes are present'
-    );
-    ghostLaserAuthAssertNotContains(
-        'Customer requested a follow-up call.',
-        $text,
-        'Completion certificate should remove the previous inline technician note text when replacing it'
+        'Completion certificate should deduplicate identical inline technician notes blocks when request notes are present'
     );
 })();
 
-// --- 14. Fallback note insertion replaces inline technician notes without issue summary ---
+// --- 14. Fallback note insertion deduplicates identical inline technician notes without issue summary ---
 (function (): void {
     $text = completionCertificateBuildCompletedWorkText([
-        'scope_of_work' => "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
+        'scope_of_work' => "Requested services: Diagnosis.\n\nTechnician notes: Bring replacement PSU\n\nJob description: Machine shuts down after five minutes.",
         'technician_notes' => 'Bring replacement PSU',
     ]);
 
     ghostLaserAuthAssertSame(
         "Requested services: Diagnosis.\n\nJob description: Machine shuts down after five minutes.\n\nTechnician notes: Bring replacement PSU",
         $text,
-        'Completion certificate fallback insertion should replace existing inline technician notes blocks'
+        'Completion certificate fallback insertion should deduplicate identical inline technician notes blocks'
     );
 })();
 
