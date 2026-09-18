@@ -352,10 +352,9 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
         throw new RuntimeException('Service request not found.');
     }
 
-    function serviceAuthorizationSaveTechnicianNotes(PDO $pdo, int $serviceRequestId, string $technicianNotes, ?array $job = null): array
+    function serviceAuthorizationSaveTechnicianNotes(PDO $pdo, int $serviceRequestId, string $technicianNotes, array $job): array
     {
-        $job = $job ?? serviceAuthorizationFetchJob($pdo, $serviceRequestId);
-        if (!$job) {
+        if ((int) ($job['id'] ?? 0) !== $serviceRequestId) {
             throw new RuntimeException('Service request not found.');
         }
 
