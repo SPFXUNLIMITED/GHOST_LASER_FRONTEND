@@ -128,7 +128,6 @@ function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $sign
     $signatureSha256 = hash('sha256', $signatureBinary);
     $startedTransaction = false;
     $authorizationId = 0;
-    $pendingSignaturePath = $signaturePaths['relative'] . '.tmp';
 
     try {
         if (!$pdo->inTransaction()) {
@@ -146,7 +145,7 @@ function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $sign
             ':service_request_id' => $serviceRequestId,
             ':agreement_summary'  => $summaryLine,
             ':scope_of_work'      => $completionBody,
-            ':signature_path'     => $pendingSignaturePath,
+            ':signature_path'     => $signaturePaths['relative'],
             ':signature_sha256'   => $signatureSha256,
             ':signed_at'          => $signedAt,
             ':signed_latitude'    => $latitude,
@@ -157,17 +156,6 @@ function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $sign
         if (!rename($signaturePaths['temp'], $signaturePaths['absolute'])) {
             throw new RuntimeException('Unable to finalize signature image.');
         }
-
-        $update = $pdo->prepare(
-            "UPDATE service_authorizations
-             SET signature_path = :signature_path
-             WHERE id = :id
-             LIMIT 1"
-        );
-        $update->execute([
-            ':signature_path' => $signaturePaths['relative'],
-            ':id' => $authorizationId,
-        ]);
 
         if ($startedTransaction) {
             $pdo->commit();
@@ -346,7 +334,7 @@ function completionCertificateGeneratePdf(PDO $pdo, int $authorizationId): array
     $pdfBinary = serviceAuthorizationRenderPdfFromJpegs($jpegPages);
 
     return [
-        'filename' => sprintf('completion-certificate-%d.pdf', (int) $certificate['service_request_id']),
+        'filename' => sprintf('completion-certificate-%d-%d.pdf', (int) $certificate['service_request_id'], (int) $certificate['id']),
         'content' => $pdfBinary,
         'certificate' => $certificate,
     ];
@@ -357,12 +345,20 @@ function completionCertificatePdfRoot(): string
     return serviceAuthorizationStorageRoot() . '/completion-certificates';
 }
 
-function completionCertificateWritePdfFile(int $serviceRequestId, string $pdfBinary): string
+function completionCertificateExpectedPdfPath(int $serviceRequestId, int $certificateId): string
+{
+    return sprintf(
+        'uploads/service-authorizations/completion-certificates/completion-certificate-%d-%d.pdf',
+        $serviceRequestId,
+        $certificateId
+    );
+}
+
+function completionCertificateWritePdfFile(int $serviceRequestId, int $certificateId, string $pdfBinary): string
 {
     serviceAuthorizationEnsureDirectory(completionCertificatePdfRoot());
 
-    $fileName = sprintf('completion-certificate-%d.pdf', $serviceRequestId);
-    $relativePath = 'uploads/service-authorizations/completion-certificates/' . $fileName;
+    $relativePath = completionCertificateExpectedPdfPath($serviceRequestId, $certificateId);
     $absolutePath = dirname(__DIR__) . '/' . $relativePath;
 
     if (file_put_contents($absolutePath, $pdfBinary, LOCK_EX) === false) {
@@ -453,8 +449,9 @@ function completionCertificateGenerateAndStoreById(PDO $pdo, int $authorizationI
         throw new RuntimeException('Completion certificate record not found.');
     }
 
-    $pdf = completionCertificateGeneratePdf($pdo, (int) $certificate['id']);
-    $relativePath = completionCertificateWritePdfFile($serviceRequestId, $pdf['content']);
+    $certificateId = (int) $certificate['id'];
+    $pdf = completionCertificateGeneratePdf($pdo, $certificateId);
+    $relativePath = completionCertificateWritePdfFile($serviceRequestId, $certificateId, $pdf['content']);
     try {
         completionCertificatePersistFilePath($pdo, $serviceRequestId, $relativePath);
     } catch (Throwable $e) {
@@ -478,8 +475,15 @@ function completionCertificateGenerateAndStoreById(PDO $pdo, int $authorizationI
 
 function completionCertificateLoadOrGenerateByServiceRequest(PDO $pdo, int $serviceRequestId): array
 {
+    $latestCertificate = completionCertificateFetchLatestByServiceRequestId($pdo, $serviceRequestId);
+    if (!$latestCertificate) {
+        throw new RuntimeException('Completion certificate record not found.');
+    }
+
+    $latestCertificateId = (int) ($latestCertificate['id'] ?? 0);
+    $expectedPath = completionCertificateExpectedPdfPath($serviceRequestId, $latestCertificateId);
     $storedPath = completionCertificateFetchStoredFilePath($pdo, $serviceRequestId);
-    if ($storedPath !== null) {
+    if ($storedPath !== null && $storedPath === $expectedPath) {
         try {
             $resolved = completionCertificateResolvePdfPath($storedPath);
             $content = @file_get_contents($resolved);
@@ -494,5 +498,5 @@ function completionCertificateLoadOrGenerateByServiceRequest(PDO $pdo, int $serv
         }
     }
 
-    return completionCertificateGenerateAndStoreByServiceRequest($pdo, $serviceRequestId);
+    return completionCertificateGenerateAndStoreById($pdo, $latestCertificateId);
 }

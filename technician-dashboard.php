@@ -1308,9 +1308,20 @@ require_once __DIR__ . '/templates/header.php';
                         $authorizationScope = serviceAuthorizationBuildScopeOfWork($pdo, $job);
                         $existingAuthorization = $serviceAuthorizations[(int) $job['service_request_id']] ?? null;
                         $existingCompletionCertificate = $completionCertificates[(int) $job['service_request_id']] ?? null;
-                        $completionCertificateScope = trim((string) ($existingCompletionCertificate['scope_of_work'] ?? '')) !== ''
-                            ? (string) $existingCompletionCertificate['scope_of_work']
-                            : $authorizationScope;
+                        $completionCertificateScope = $authorizationScope;
+                        $hasCurrentCompletionCertificate = false;
+                        if ($existingCompletionCertificate) {
+                            if ($existingAuthorization) {
+                                $completionSignedAtTs = strtotime((string) ($existingCompletionCertificate['signed_at'] ?? ''));
+                                $authorizationSignedAtTs = strtotime((string) ($existingAuthorization['signed_at'] ?? ''));
+                                $hasCurrentCompletionCertificate = $completionSignedAtTs !== false
+                                    && $authorizationSignedAtTs !== false
+                                    && $completionSignedAtTs >= $authorizationSignedAtTs;
+                            } else {
+                                $hasCurrentCompletionCertificate = true;
+                            }
+                        }
+                        $displayCompletionCertificate = $hasCurrentCompletionCertificate ? $existingCompletionCertificate : null;
                         $customerProblem = str_replace(["\r\n", "\r"], "\n", serviceAuthorizationPrimaryProblemText($job));
                         $technicianNotes = str_replace(["\r\n", "\r"], "\n", (string) ($job['technician_notes'] ?? ''));
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
@@ -1502,9 +1513,9 @@ require_once __DIR__ . '/templates/header.php';
                                         Generate completion certificate
                                     </button>
                                 </div>
-                                <div class="authorization-status<?= $existingCompletionCertificate ? ' is-signed' : '' ?>" data-cert-job="<?= (int) $job['service_request_id'] ?>">
-                                    <?php if ($existingCompletionCertificate): ?>
-                                        <span>Generated <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $existingCompletionCertificate['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
+                                <div class="authorization-status<?= $displayCompletionCertificate ? ' is-signed' : '' ?>" data-cert-job="<?= (int) $job['service_request_id'] ?>">
+                                    <?php if ($displayCompletionCertificate): ?>
+                                        <span>Generated <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $displayCompletionCertificate['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
                                         <a
                                             href="/api/completion-certificate-pdf.php?service_request_id=<?= (int) $job['service_request_id'] ?>"
                                             target="_blank"
@@ -2122,7 +2133,7 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
         });
     }
 
-    function setAuthorizationCardStatus(jobId, documentType, authorization) {
+    function setAuthorizationCardStatus(jobId, documentType, authorization, warning) {
         var config = getAuthorizationDocumentConfig(documentType);
         var el = document.querySelector('[' + config.statusSelectorPrefix + '="' + jobId + '"]');
         if (!el) return;
@@ -2134,6 +2145,21 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
             var empty = document.createElement('span');
             empty.textContent = config.emptyCardStatus;
             el.appendChild(empty);
+            return;
+        }
+
+        if (warning) {
+            var warningText = document.createElement('span');
+            warningText.textContent = warning;
+            el.appendChild(warningText);
+
+            var warningLink = document.createElement('a');
+            warningLink.href = authorization.download_url;
+            warningLink.target = '_blank';
+            warningLink.rel = 'noopener noreferrer';
+            warningLink.className = 'authorization-download';
+            warningLink.textContent = 'Download PDF';
+            el.appendChild(warningLink);
             return;
         }
 
@@ -2491,10 +2517,12 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
                         throw new Error((data && data.error) ? data.error : docConfig.saveError);
                     }
 
-                    return data[docConfig.responseKey];
+                    return data;
                 });
-            }).then(function (authorization) {
-                setAuthorizationCardStatus(authState.jobId, authState.documentType, authorization);
+            }).then(function (payload) {
+                var authorization = payload[docConfig.responseKey];
+                var warning = payload.warning || '';
+                setAuthorizationCardStatus(authState.jobId, authState.documentType, authorization, warning);
                 authState.submitting = false;
                 if (authCloseBtn) authCloseBtn.disabled = false;
                 closeAuthorizationModal(true);
