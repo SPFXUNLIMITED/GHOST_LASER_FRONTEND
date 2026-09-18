@@ -647,6 +647,25 @@ function serviceAuthorizationPublishStoredJobPhotos(array $storedPaths, array $c
     return $publishedPaths;
 }
 
+function serviceAuthorizationFilterActiveStoredJobPhotos(array $paths): array
+{
+    $filtered = [];
+    foreach (serviceAuthorizationDecodeJobPhotos($paths, true) as $path) {
+        if (strpos($path, 'uploads/service-authorizations/tmp/') === 0) {
+            $absolutePath = dirname(__DIR__) . '/' . $path;
+            if (!is_file($absolutePath)) {
+                continue;
+            }
+        }
+
+        if (!in_array($path, $filtered, true)) {
+            $filtered[] = $path;
+        }
+    }
+
+    return $filtered;
+}
+
 function serviceAuthorizationFinalizeStoredPhoto(string $tempPath, string $absolutePath): void
 {
     if (@rename($tempPath, $absolutePath)) {
@@ -703,13 +722,15 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
             throw new RuntimeException('Service request not found.');
         }
 
-        $visibleExistingPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null);
-        if ((count($visibleExistingPaths) + count($createdPaths)) > 20) {
+        $activeStoredPaths = serviceAuthorizationFilterActiveStoredJobPhotos(
+            serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null, true)
+        );
+        if ((count($activeStoredPaths) + count($createdPaths)) > 20) {
             throw new InvalidArgumentException('Each job can have up to 20 photos.');
         }
 
         $pendingPaths = array_values(array_unique(array_merge(
-            $visibleExistingPaths,
+            $activeStoredPaths,
             array_column($createdPaths, 'temp_relative')
         )));
         $previousCertificatePath = $state['completion_certificate'] ?? null;

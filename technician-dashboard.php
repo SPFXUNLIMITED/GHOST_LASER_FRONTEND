@@ -1590,7 +1590,7 @@ require_once __DIR__ . '/templates/header.php';
                                         >
                                     <?php endif; ?>
                                 </div>
-                                <div class="job-photo-grid" data-job-photo-grid="<?= $serviceRequestId ?>">
+                                <div class="job-photo-grid"<?= $serviceRequestId > 0 ? ' data-job-photo-grid="' . $serviceRequestId . '"' : '' ?>>
                                     <?php if ($jobPhotoItems !== []): ?>
                                         <?php foreach ($jobPhotoItems as $photoIndex => $jobPhoto): ?>
                                             <div class="job-photo-tile">
@@ -1622,7 +1622,9 @@ require_once __DIR__ . '/templates/header.php';
                                         <div class="job-photo-empty">No photos yet.</div>
                                     <?php endif; ?>
                                 </div>
-                                <div class="job-photo-status" data-job-photo-status="<?= $serviceRequestId ?>" role="status" aria-live="polite"></div>
+                                <?php if ($serviceRequestId > 0): ?>
+                                    <div class="job-photo-status" data-job-photo-status="<?= $serviceRequestId ?>" role="status" aria-live="polite"></div>
+                                <?php endif; ?>
                             </div>
 
                             <div class="mt-3 pt-3 border-t border-zinc-700/40">

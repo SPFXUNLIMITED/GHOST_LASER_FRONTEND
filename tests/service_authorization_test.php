@@ -603,6 +603,65 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 25. Job photo API helper rejects uploads beyond the 20-photo limit ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 3, 'name' => 'Diagnosis', 'duration' => 60],
+    ]);
+
+    $existingPaths = [];
+    for ($i = 1; $i <= 20; $i++) {
+        $existingPaths[] = sprintf('uploads/service-authorizations/job-photos/existing-%02d.jpg', $i);
+    }
+
+    $stmt = $pdo->prepare('INSERT INTO service_requests (id, services, job_photos) VALUES (:id, :services, :job_photos)');
+    $stmt->execute([
+        ':id' => 27,
+        ':services' => '[3]',
+        ':job_photos' => json_encode($existingPaths),
+    ]);
+
+    $tmpUpload = tempnam(sys_get_temp_dir(), 'gl-photo-limit-');
+    $image = imagecreatetruecolor(10, 10);
+    $fill = imagecolorallocate($image, 249, 115, 22);
+    imagefilledrectangle($image, 0, 0, 9, 9, $fill);
+    imagepng($image, $tmpUpload);
+    imagedestroy($image);
+
+    $job = serviceAuthorizationFetchJob($pdo, 27);
+    $response = serviceAuthorizationHandleJobPhotoApiRequest(
+        $pdo,
+        true,
+        true,
+        27,
+        'upload',
+        'csrf-123',
+        'csrf-123',
+        $job,
+        [[
+            'name' => 'overflow.png',
+            'type' => 'image/png',
+            'tmp_name' => $tmpUpload,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tmpUpload),
+        ]]
+    );
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 400,
+        'Job photo API helper should return HTTP 400 when the 20-photo limit is exceeded'
+    );
+    ghostLaserAuthAssertSame(
+        'Each job can have up to 20 photos.',
+        (string) ($response['body']['error'] ?? ''),
+        'Job photo API helper should return the expected 20-photo limit message'
+    );
+
+    if (is_file($tmpUpload)) {
+        unlink($tmpUpload);
+    }
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
