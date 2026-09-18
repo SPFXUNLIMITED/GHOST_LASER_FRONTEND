@@ -46,32 +46,6 @@ function ensureServiceAuthorizationSchema(PDO $pdo): void
     }
 }
 
-function serviceAuthorizationEnsureJobPhotosColumn(PDO $pdo): void
-{
-    static $checked = [];
-
-    $key = spl_object_id($pdo);
-    if (isset($checked[$key])) {
-        return;
-    }
-    $checked[$key] = true;
-
-    if ((string) $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') {
-        return;
-    }
-
-    $stmt = $pdo->query("
-        SELECT COUNT(*)
-        FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = 'service_requests'
-          AND COLUMN_NAME = 'job_photos'
-    ");
-    if ((int) $stmt->fetchColumn() === 0) {
-        $pdo->exec("ALTER TABLE service_requests ADD COLUMN job_photos JSON NULL AFTER technician_notes");
-    }
-}
-
 function serviceAuthorizationSummaryLine(): string
 {
     return 'The customer authorizes the technician to perform the listed work described below.';
@@ -301,8 +275,6 @@ function serviceAuthorizationBuildScopeOfWork(PDO $pdo, array $job): string
 
 function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId): ?array
 {
-    serviceAuthorizationEnsureJobPhotosColumn($pdo);
-
     $stmt = $pdo->prepare(
         "SELECT
             sr.id,
@@ -566,11 +538,15 @@ function serviceAuthorizationPreparePhotoPaths(int $serviceRequestId, string $ex
     );
     $relativePath = 'uploads/service-authorizations/job-photos/' . $fileName;
     $absolutePath = dirname(__DIR__) . '/' . $relativePath;
+    $tempPath = tempnam(sys_get_temp_dir(), 'gl-job-photo-');
+    if ($tempPath === false) {
+        throw new RuntimeException('Unable to prepare temporary photo storage.');
+    }
 
     return [
         'relative' => $relativePath,
         'absolute' => $absolutePath,
-        'temp' => $absolutePath . '.tmp',
+        'temp' => $tempPath,
     ];
 }
 
@@ -626,6 +602,17 @@ function serviceAuthorizationDeleteStoredFileIfPresent(?string $relativePath): v
     }
 }
 
+function serviceAuthorizationFinalizeStoredPhoto(string $tempPath, string $absolutePath): void
+{
+    if (@rename($tempPath, $absolutePath)) {
+        return;
+    }
+
+    if (!@copy($tempPath, $absolutePath) || !@unlink($tempPath)) {
+        throw new RuntimeException('Unable to finalize one of the photos.');
+    }
+}
+
 function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, array $uploadedFiles, array $job): array
 {
     if ((int) ($job['id'] ?? 0) !== $serviceRequestId) {
@@ -645,7 +632,9 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
 
     $createdPaths = [];
     $startedTransaction = false;
+    $committedPhotoUpdate = false;
     $previousCertificatePath = null;
+    $allPaths = [];
     try {
         foreach ($uploadedFiles as $file) {
             $decoded = serviceAuthorizationDecodeUploadedPhoto($file);
@@ -654,13 +643,6 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
                 throw new RuntimeException('Unable to save one of the photos.');
             }
             $createdPaths[] = $paths;
-        }
-
-        foreach ($createdPaths as $pathSet) {
-            if (!rename($pathSet['temp'], $pathSet['absolute'])) {
-                @unlink($pathSet['temp']);
-                throw new RuntimeException('Unable to finalize one of the photos.');
-            }
         }
 
         if (!$pdo->inTransaction()) {
@@ -688,23 +670,46 @@ function serviceAuthorizationSaveJobPhotos(PDO $pdo, int $serviceRequestId, arra
         if ($startedTransaction) {
             $pdo->commit();
         }
+        $committedPhotoUpdate = true;
+
+        foreach ($createdPaths as $pathSet) {
+            serviceAuthorizationFinalizeStoredPhoto($pathSet['temp'], $pathSet['absolute']);
+        }
     } catch (Throwable $e) {
         if ($startedTransaction && $pdo->inTransaction()) {
             $pdo->rollBack();
         }
+        if ($committedPhotoUpdate && $allPaths !== []) {
+            try {
+                $cleanupTransaction = false;
+                if (!$pdo->inTransaction()) {
+                    $pdo->beginTransaction();
+                    $cleanupTransaction = true;
+                }
+                $state = serviceAuthorizationFetchJobPhotoState($pdo, $serviceRequestId, true);
+                if ($state) {
+                    $currentPaths = serviceAuthorizationDecodeJobPhotos($state['job_photos'] ?? null);
+                    $currentPaths = array_values(array_filter(
+                        $currentPaths,
+                        static fn (string $path): bool => !in_array($path, array_column($createdPaths, 'relative'), true)
+                    ));
+                    serviceAuthorizationPersistJobPhotos($pdo, $serviceRequestId, $currentPaths);
+                }
+                if ($cleanupTransaction) {
+                    $pdo->commit();
+                }
+            } catch (Throwable $cleanupError) {
+                if ($cleanupTransaction && $pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+            }
+        }
         foreach ($createdPaths as $path) {
-            if (is_array($path)) {
-                if (is_file($path['temp'] ?? '')) {
-                    @unlink($path['temp']);
-                }
-                if (is_file($path['absolute'] ?? '')) {
-                    @unlink($path['absolute']);
-                }
-            } else {
-                $absolutePath = dirname(__DIR__) . '/' . $path;
-                if (is_file($absolutePath)) {
-                    @unlink($absolutePath);
-                }
+            if (is_file($path['temp'] ?? '')) {
+                @unlink($path['temp']);
+            }
+            if (is_file($path['absolute'] ?? '')) {
+                @unlink($path['absolute']);
             }
         }
         throw $e;
@@ -773,6 +778,87 @@ function serviceAuthorizationRemoveJobPhoto(PDO $pdo, int $serviceRequestId, str
         'service_request_id' => $serviceRequestId,
         'photos' => serviceAuthorizationBuildJobPhotoPayloads($remainingPaths),
     ];
+}
+
+function serviceAuthorizationHandleJobPhotoApiRequest(
+    PDO $pdo,
+    bool $hasDashboardAccess,
+    bool $canAccessServiceRequest,
+    int $serviceRequestId,
+    string $action,
+    string $csrfToken,
+    string $sessionCsrf,
+    ?array $job,
+    array $uploadedFiles = [],
+    ?string $photoPath = null
+): array {
+    if (!$hasDashboardAccess) {
+        return [
+            'status' => 401,
+            'body' => ['success' => false, 'error' => 'Unauthorized'],
+        ];
+    }
+
+    if ($serviceRequestId <= 0) {
+        return [
+            'status' => 400,
+            'body' => ['success' => false, 'error' => 'Missing service_request_id'],
+        ];
+    }
+
+    if ($sessionCsrf === '' || $csrfToken === '' || !hash_equals($sessionCsrf, $csrfToken)) {
+        return [
+            'status' => 403,
+            'body' => ['success' => false, 'error' => 'Invalid security token. Reload the dashboard and try again.'],
+        ];
+    }
+
+    if (!$canAccessServiceRequest) {
+        return [
+            'status' => 403,
+            'body' => ['success' => false, 'error' => 'You do not have access to update this job.'],
+        ];
+    }
+
+    if (!$job) {
+        return [
+            'status' => 404,
+            'body' => ['success' => false, 'error' => 'Service request not found.'],
+        ];
+    }
+
+    if ($action !== 'upload' && $action !== 'remove') {
+        return [
+            'status' => 400,
+            'body' => ['success' => false, 'error' => 'Unsupported action.'],
+        ];
+    }
+
+    try {
+        $result = $action === 'remove'
+            ? serviceAuthorizationRemoveJobPhoto($pdo, $serviceRequestId, (string) $photoPath, $job)
+            : serviceAuthorizationSaveJobPhotos($pdo, $serviceRequestId, $uploadedFiles, $job);
+
+        return [
+            'status' => 200,
+            'body' => [
+                'success' => true,
+                'service_request_id' => (int) $result['service_request_id'],
+                'photos' => $result['photos'],
+            ],
+        ];
+    } catch (InvalidArgumentException $e) {
+        return [
+            'status' => 400,
+            'body' => ['success' => false, 'error' => $e->getMessage()],
+        ];
+    } catch (Throwable $e) {
+        error_log('technician-job-photos-api error: ' . $e->getMessage());
+        return [
+            'status' => 500,
+            'body' => ['success' => false, 'error' => 'Unable to update job photos right now.'],
+        ];
+    }
 }
 
 function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
@@ -853,8 +939,6 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
 
 function serviceAuthorizationFetchById(PDO $pdo, int $authorizationId): ?array
 {
-    serviceAuthorizationEnsureJobPhotosColumn($pdo);
-
     $stmt = $pdo->prepare(
         "SELECT
             sa.*,

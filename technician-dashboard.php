@@ -32,7 +32,6 @@ require_once __DIR__ . '/scheduling_settings.php';
 require_once __DIR__ . '/mileage_schema.php';
 
 ensureMileageVehicleSchema($pdo);
-serviceAuthorizationEnsureJobPhotosColumn($pdo);
 
 // ── Date navigation ────────────────────────────────────────────────────────
 $dateParam = trim((string) ($_GET['date'] ?? ''));
@@ -1594,6 +1593,7 @@ require_once __DIR__ . '/templates/header.php';
                                                         class="job-photo-remove"
                                                         data-job-photo-remove="<?= $serviceRequestId ?>"
                                                         data-photo-path="<?= htmlspecialchars($jobPhoto['path'], ENT_QUOTES, 'UTF-8') ?>"
+                                                        aria-label="Remove job photo <?= $photoIndex + 1 ?>"
                                                     >Remove</button>
                                                 <?php endif; ?>
                                             </div>
@@ -2091,6 +2091,7 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
             removeBtn.textContent = 'Remove';
             removeBtn.dataset.jobPhotoRemove = String(jobId);
             removeBtn.dataset.photoPath = photo.path || '';
+            removeBtn.setAttribute('aria-label', 'Remove job photo ' + (index + 1));
             removeBtn.disabled = !!jobPhotoBusyByJob[jobId];
             tile.appendChild(removeBtn);
 

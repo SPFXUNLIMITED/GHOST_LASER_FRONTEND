@@ -518,6 +518,91 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     }
 })();
 
+// --- 23. Job photo API helper returns success payloads for uploads ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 3, 'name' => 'Diagnosis', 'duration' => 60],
+    ]);
+    $pdo->exec("INSERT INTO service_requests (id, services) VALUES (25, '[3]')");
+
+    $tmpUpload = tempnam(sys_get_temp_dir(), 'gl-photo-upload-');
+    $image = imagecreatetruecolor(10, 10);
+    $fill = imagecolorallocate($image, 34, 211, 238);
+    imagefilledrectangle($image, 0, 0, 9, 9, $fill);
+    imagepng($image, $tmpUpload);
+    imagedestroy($image);
+
+    $job = serviceAuthorizationFetchJob($pdo, 25);
+    $response = serviceAuthorizationHandleJobPhotoApiRequest(
+        $pdo,
+        true,
+        true,
+        25,
+        'upload',
+        'csrf-123',
+        'csrf-123',
+        $job,
+        [[
+            'name' => 'camera.png',
+            'type' => 'image/png',
+            'tmp_name' => $tmpUpload,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tmpUpload),
+        ]]
+    );
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 200,
+        'Job photo API helper should return HTTP 200 for a successful upload'
+    );
+    ghostLaserAuthAssert(
+        !empty($response['body']['success']) && count($response['body']['photos'] ?? []) === 1,
+        'Job photo API helper should return the uploaded photo payload on success'
+    );
+
+    $storedPath = (string) ($response['body']['photos'][0]['path'] ?? '');
+    if ($storedPath !== '') {
+        $absolutePath = __DIR__ . '/../' . $storedPath;
+        if (is_file($absolutePath)) {
+            unlink($absolutePath);
+        }
+    }
+    if (is_file($tmpUpload)) {
+        unlink($tmpUpload);
+    }
+})();
+
+// --- 24. Job photo API helper returns validation failures with status codes ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 3, 'name' => 'Diagnosis', 'duration' => 60],
+    ]);
+    $pdo->exec("INSERT INTO service_requests (id, services) VALUES (26, '[3]')");
+
+    $job = serviceAuthorizationFetchJob($pdo, 26);
+    $response = serviceAuthorizationHandleJobPhotoApiRequest(
+        $pdo,
+        true,
+        true,
+        26,
+        'upload',
+        '',
+        'csrf-123',
+        $job,
+        []
+    );
+
+    ghostLaserAuthAssert(
+        (int) $response['status'] === 403,
+        'Job photo API helper should return HTTP 403 for an invalid CSRF token'
+    );
+    ghostLaserAuthAssertSame(
+        'Invalid security token. Reload the dashboard and try again.',
+        (string) ($response['body']['error'] ?? ''),
+        'Job photo API helper should return the expected invalid CSRF error message'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
