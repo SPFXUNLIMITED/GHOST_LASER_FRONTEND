@@ -299,6 +299,11 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
         $text,
         'Completion certificate should replace inline technician notes blocks when request notes are present'
     );
+    ghostLaserAuthAssertNotContains(
+        'Customer requested a follow-up call.',
+        $text,
+        'Completion certificate should remove the previous inline technician note text when replacing it'
+    );
 })();
 
 // --- 14. Fallback note insertion replaces inline technician notes without issue summary ---

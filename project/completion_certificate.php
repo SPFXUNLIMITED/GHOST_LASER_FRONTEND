@@ -420,8 +420,7 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
     $blocks = array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== ''));
     foreach ($blocks as $index => $block) {
         if (completionCertificateIsStructuredIssueSummaryBlock((string) $block)) {
-            $nextBlock = $blocks[$index + 1] ?? null;
-            if (is_string($nextBlock) && stripos(trim($nextBlock), 'Technician notes:') === 0) {
+            while (isset($blocks[$index + 1]) && stripos(trim((string) $blocks[$index + 1]), 'Technician notes:') === 0) {
                 array_splice($blocks, $index + 1, 1);
             }
 
