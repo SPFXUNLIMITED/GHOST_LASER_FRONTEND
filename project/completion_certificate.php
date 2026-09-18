@@ -449,7 +449,7 @@ function completionCertificateNormalizeInlineTechnicianNotesBlock(string $block)
         return null;
     }
 
-    if (!preg_match('/^Technician notes:?\s*(.*)$/i', $block, $matches)) {
+    if (!preg_match('/^Technician notes(?:\s*:\s*|\s+)(.*)$/i', $block, $matches)) {
         return null;
     }
 
