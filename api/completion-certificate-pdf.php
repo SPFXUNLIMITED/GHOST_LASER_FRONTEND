@@ -40,6 +40,13 @@ if (!technicianDashboardCanAccessServiceRequest($pdo, $serviceRequestId)) {
     exit;
 }
 
+if (!completionCertificateIsCurrentForServiceRequest($pdo, $serviceRequestId)) {
+    http_response_code(409);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo 'A new service authorization requires a new completion certificate.';
+    exit;
+}
+
 try {
     $pdf = completionCertificateLoadOrGenerateByServiceRequest($pdo, $serviceRequestId);
     header('Content-Type: application/pdf');

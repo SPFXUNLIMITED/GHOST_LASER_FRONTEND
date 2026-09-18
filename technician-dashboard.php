@@ -1322,6 +1322,7 @@ require_once __DIR__ . '/templates/header.php';
                             }
                         }
                         $displayCompletionCertificate = $hasCurrentCompletionCertificate ? $existingCompletionCertificate : null;
+                        $canGenerateCompletionCertificate = $existingAuthorization && !$hasCurrentCompletionCertificate;
                         $customerProblem = str_replace(["\r\n", "\r"], "\n", serviceAuthorizationPrimaryProblemText($job));
                         $technicianNotes = str_replace(["\r\n", "\r"], "\n", (string) ($job['technician_notes'] ?? ''));
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
@@ -1507,8 +1508,8 @@ require_once __DIR__ . '/templates/header.php';
                                         data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
                                         data-authorize-scope="<?= htmlspecialchars($completionCertificateScope, ENT_QUOTES, 'UTF-8') ?>"
                                         data-authorize-doc-type="completion_certificate"
-                                        title="<?= $existingAuthorization ? 'Capture customer completion signature' : 'Complete service authorization first' ?>"
-                                        <?= $existingAuthorization ? '' : 'disabled' ?>
+                                        title="<?= $canGenerateCompletionCertificate ? 'Capture customer completion signature' : ($existingAuthorization ? 'Completion certificate is already current' : 'Complete service authorization first') ?>"
+                                        <?= $canGenerateCompletionCertificate ? '' : 'disabled' ?>
                                     >
                                         Generate completion certificate
                                     </button>
@@ -1523,7 +1524,7 @@ require_once __DIR__ . '/templates/header.php';
                                             class="authorization-download"
                                         >Download PDF</a>
                                     <?php else: ?>
-                                        <span><?= $existingAuthorization ? 'Not generated yet.' : 'Complete service authorization first.' ?></span>
+                                        <span><?= !$existingAuthorization ? 'Complete service authorization first.' : ($existingCompletionCertificate ? 'A newer authorization requires a new certificate.' : 'Not generated yet.') ?></span>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -2148,6 +2149,8 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
             return;
         }
 
+        el.classList.add('is-signed');
+
         if (warning) {
             var warningText = document.createElement('span');
             warningText.textContent = warning;
@@ -2163,7 +2166,6 @@ var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, 
             return;
         }
 
-        el.classList.add('is-signed');
         var signedText = document.createElement('span');
         signedText.textContent = config.signedCardPrefix + (authorization.signed_at_display || authorization.signed_at || '');
         el.appendChild(signedText);

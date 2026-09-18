@@ -65,14 +65,14 @@ function completionCertificateFetchLatestByServiceRequestId(PDO $pdo, int $servi
     return $row ?: null;
 }
 
-function completionCertificateHasPrerequisiteAuthorization(PDO $pdo, int $serviceRequestId): bool
+function completionCertificateFetchLatestServiceAuthorization(PDO $pdo, int $serviceRequestId): ?array
 {
     if ($serviceRequestId <= 0) {
-        return false;
+        return null;
     }
 
     $stmt = $pdo->prepare(
-        "SELECT 1
+        "SELECT id, signed_at
          FROM service_authorizations
          WHERE service_request_id = :service_request_id
            AND agreement_type = 'service_authorization'
@@ -82,8 +82,41 @@ function completionCertificateHasPrerequisiteAuthorization(PDO $pdo, int $servic
     $stmt->execute([
         ':service_request_id' => $serviceRequestId,
     ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return (bool) $stmt->fetchColumn();
+    return $row ?: null;
+}
+
+function completionCertificateIsCurrentForServiceRequest(PDO $pdo, int $serviceRequestId): bool
+{
+    $latestAuthorization = completionCertificateFetchLatestServiceAuthorization($pdo, $serviceRequestId);
+    $latestCertificate = completionCertificateFetchLatestByServiceRequestId($pdo, $serviceRequestId);
+    if (!$latestAuthorization || !$latestCertificate) {
+        return false;
+    }
+
+    $authorizationTs = strtotime((string) ($latestAuthorization['signed_at'] ?? ''));
+    $certificateTs = strtotime((string) ($latestCertificate['signed_at'] ?? ''));
+    if ($authorizationTs === false || $certificateTs === false) {
+        return false;
+    }
+
+    return $certificateTs >= $authorizationTs;
+}
+
+function completionCertificateCanCreateForServiceRequest(PDO $pdo, int $serviceRequestId): bool
+{
+    $latestAuthorization = completionCertificateFetchLatestServiceAuthorization($pdo, $serviceRequestId);
+    if (!$latestAuthorization) {
+        return false;
+    }
+
+    return !completionCertificateIsCurrentForServiceRequest($pdo, $serviceRequestId);
+}
+
+function completionCertificateHasPrerequisiteAuthorization(PDO $pdo, int $serviceRequestId): bool
+{
+    return completionCertificateFetchLatestServiceAuthorization($pdo, $serviceRequestId) !== null;
 }
 
 function completionCertificatePrepareSignaturePaths(int $serviceRequestId): array

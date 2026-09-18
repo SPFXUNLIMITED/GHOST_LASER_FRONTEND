@@ -9,6 +9,7 @@
 
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/../project/service_authorization.php';
+require __DIR__ . '/../project/completion_certificate.php';
 
 $failures = [];
 $passCount = 0;
@@ -96,6 +97,76 @@ function ghostLaserAuthAssertNotContains(string $needle, string $haystack, strin
         'Job description: Legacy description from older requests.',
         $scope,
         'Legacy rows should fall back to problem_details when problem is blank'
+    );
+})();
+
+// --- 4. Completion certificate generation is blocked when already current ---
+(function (): void {
+    $pdo = ghostLaserMakeTestPdo([
+        ['id' => 1, 'name' => 'Inspection', 'duration' => 30],
+    ]);
+    $pdo->exec('CREATE TABLE service_authorizations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service_request_id INTEGER NOT NULL,
+        agreement_type TEXT NOT NULL,
+        agreement_summary TEXT NOT NULL,
+        scope_of_work TEXT NOT NULL,
+        signature_path TEXT NOT NULL,
+        signature_sha256 TEXT NOT NULL,
+        signed_at TEXT NOT NULL,
+        signed_latitude REAL NULL,
+        signed_longitude REAL NULL
+    )');
+    $pdo->exec("INSERT INTO service_requests (id, services) VALUES (10, '[1]')");
+
+    $insert = $pdo->prepare(
+        'INSERT INTO service_authorizations
+            (service_request_id, agreement_type, agreement_summary, scope_of_work, signature_path, signature_sha256, signed_at)
+         VALUES
+            (:service_request_id, :agreement_type, :agreement_summary, :scope_of_work, :signature_path, :signature_sha256, :signed_at)'
+    );
+
+    $insert->execute([
+        ':service_request_id' => 10,
+        ':agreement_type' => 'service_authorization',
+        ':agreement_summary' => 'Authorized',
+        ':scope_of_work' => 'Initial scope',
+        ':signature_path' => 'uploads/service-authorizations/signatures/a.png',
+        ':signature_sha256' => str_repeat('a', 64),
+        ':signed_at' => '2026-09-18T01:00:00+00:00',
+    ]);
+    ghostLaserAuthAssert(
+        completionCertificateCanCreateForServiceRequest($pdo, 10),
+        'Should allow completion certificate when one does not yet exist'
+    );
+
+    $insert->execute([
+        ':service_request_id' => 10,
+        ':agreement_type' => 'completion_certificate',
+        ':agreement_summary' => 'Completed',
+        ':scope_of_work' => 'Initial scope',
+        ':signature_path' => 'uploads/service-authorizations/signatures/b.png',
+        ':signature_sha256' => str_repeat('b', 64),
+        ':signed_at' => '2026-09-18T02:00:00+00:00',
+    ]);
+
+    ghostLaserAuthAssert(
+        !completionCertificateCanCreateForServiceRequest($pdo, 10),
+        'Should block duplicate completion certificate while the latest one is current'
+    );
+
+    $insert->execute([
+        ':service_request_id' => 10,
+        ':agreement_type' => 'service_authorization',
+        ':agreement_summary' => 'Re-authorized',
+        ':scope_of_work' => 'Updated scope',
+        ':signature_path' => 'uploads/service-authorizations/signatures/c.png',
+        ':signature_sha256' => str_repeat('c', 64),
+        ':signed_at' => '2026-09-18T03:00:00+00:00',
+    ]);
+    ghostLaserAuthAssert(
+        completionCertificateCanCreateForServiceRequest($pdo, 10),
+        'Should allow a new completion certificate when a newer authorization exists'
     );
 })();
 
