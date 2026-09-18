@@ -150,7 +150,7 @@ function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $sign
     $signaturePaths  = completionCertificatePrepareSignaturePaths($serviceRequestId);
     serviceAuthorizationWriteTempSignature($signaturePaths['temp'], $signatureBinary);
     $signedAt        = serviceAuthorizationParseSignedAt($signedAtInput)->setTimezone(new DateTimeZone('UTC'))->format(DATE_ATOM);
-    $completionBody  = serviceAuthorizationBuildScopeOfWork($pdo, $job);
+    $completionBody  = completionCertificateRemoveLegacyTechnicianNotesBlocks(serviceAuthorizationBuildScopeOfWork($pdo, $job));
     if ($scopeOverride !== null) {
         $normalizedScope = serviceAuthorizationNormalizeTextarea($scopeOverride);
         if ($normalizedScope !== '') {
@@ -373,6 +373,23 @@ function completionCertificateGeneratePdf(PDO $pdo, int $authorizationId): array
     ];
 }
 
+function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeText): string
+{
+    $scopeText = trim(str_replace(["\r\n", "\r"], "\n", $scopeText));
+    if ($scopeText === '') {
+        return '';
+    }
+
+    $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
+    $blocks = array_values(array_filter(
+        $blocks,
+        static fn ($block): bool => trim((string) $block) !== ''
+            && !preg_match('/^Technician notes\s*\n/i', trim((string) $block))
+    ));
+
+    return implode("\n\n", $blocks);
+}
+
 function completionCertificateBuildCompletedWorkText(array $certificate): string
 {
     $scopeText = trim(str_replace(["\r\n", "\r"], "\n", (string) ($certificate['scope_of_work'] ?? '')));
@@ -382,18 +399,12 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
         $technicianNotes .= '.';
     }
 
-    $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
-    $legacyNotesPattern = '/^Technician notes\s*\n/i';
-    $notesBlockPattern = '/^Technician notes(?::|\s*\n)/i';
-    $blocks = array_values(array_filter(
-        $blocks,
-        static fn ($block): bool => trim((string) $block) !== ''
-            && !preg_match($technicianNotes === '' ? $legacyNotesPattern : $notesBlockPattern, trim((string) $block))
-    ));
     if ($scopeText === '' || $technicianNotes === '') {
-        return implode("\n\n", $blocks);
+        return $scopeText;
     }
 
+    $blocks = preg_split("/\n{2,}/", completionCertificateRemoveLegacyTechnicianNotesBlocks($scopeText)) ?: [];
+    $blocks = array_values(array_filter($blocks, static fn ($block): bool => trim((string) $block) !== '' && stripos(trim((string) $block), 'Technician notes:') !== 0));
     foreach ($blocks as $index => $block) {
         if (stripos(trim($block), 'Issue summary:') === 0) {
             array_splice($blocks, $index + 1, 0, [$technicianNotes]);

@@ -234,6 +234,19 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 9. Completion certificate scope storage strips legacy multiline technician notes blocks ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes\nLegacy saved note\n\nJob description: Machine shuts down after five minutes."
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope storage should strip legacy multiline technician notes blocks'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
