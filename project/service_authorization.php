@@ -90,6 +90,12 @@ function serviceAuthorizationNormalizeWhitespace(string $value): string
     return trim($value);
 }
 
+function serviceAuthorizationNormalizeTextarea(string $value): string
+{
+    $value = trim(str_replace(["\r\n", "\r"], "\n", $value));
+    return preg_replace("/\n{3,}/", "\n\n", $value) ?? $value;
+}
+
 function serviceAuthorizationEnsureSentence(string $label, string $value): string
 {
     $value = serviceAuthorizationNormalizeWhitespace($value);
@@ -103,6 +109,16 @@ function serviceAuthorizationEnsureSentence(string $label, string $value): strin
     }
 
     return $sentence;
+}
+
+function serviceAuthorizationBuildHeadingBlock(string $heading, string $value): string
+{
+    $value = serviceAuthorizationNormalizeTextarea($value);
+    if ($value === '') {
+        return '';
+    }
+
+    return $heading . "\n" . $value;
 }
 
 function serviceAuthorizationFormatServices(PDO $pdo, $services): string
@@ -155,6 +171,12 @@ function serviceAuthorizationBuildScopeOfWork(PDO $pdo, array $job): string
         $parts[] = serviceAuthorizationEnsureSentence('Job description', $problemDetails);
     }
 
+    $technicianNotes = (string) ($job['technician_notes'] ?? '');
+    $technicianNotesBlock = serviceAuthorizationBuildHeadingBlock('Technician notes', $technicianNotes);
+    if ($technicianNotesBlock !== '') {
+        $parts[] = $technicianNotesBlock;
+    }
+
     $equipment = implode(' ', array_filter([
         trim((string) ($job['laser_brand'] ?? '')),
         trim((string) ($job['laser_model'] ?? '')),
@@ -184,6 +206,7 @@ function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId): ?array
             sr.problem_summary,
             sr.problem,
             sr.problem_details,
+            sr.technician_notes,
             sr.services,
             sr.laser_brand,
             sr.laser_model,
@@ -317,6 +340,37 @@ function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signa
     $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
     if (!$job) {
         throw new RuntimeException('Service request not found.');
+    }
+
+    function serviceAuthorizationSaveTechnicianNotes(PDO $pdo, int $serviceRequestId, string $technicianNotes): array
+    {
+        $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
+        if (!$job) {
+            throw new RuntimeException('Service request not found.');
+        }
+
+        $normalizedNotes = serviceAuthorizationNormalizeTextarea($technicianNotes);
+        $stmt = $pdo->prepare(
+            "UPDATE service_requests
+             SET technician_notes = :technician_notes
+             WHERE id = :id
+             LIMIT 1"
+        );
+        if ($normalizedNotes === '') {
+            $stmt->bindValue(':technician_notes', null, PDO::PARAM_NULL);
+        } else {
+            $stmt->bindValue(':technician_notes', $normalizedNotes, PDO::PARAM_STR);
+        }
+        $stmt->bindValue(':id', $serviceRequestId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $job['technician_notes'] = $normalizedNotes;
+
+        return [
+            'service_request_id' => $serviceRequestId,
+            'technician_notes' => $normalizedNotes,
+            'scope_of_work' => serviceAuthorizationBuildScopeOfWork($pdo, $job),
+        ];
     }
 
     $signatureBinary = serviceAuthorizationDecodeSignaturePng($signatureDataUrl);

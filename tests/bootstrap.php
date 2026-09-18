@@ -68,7 +68,8 @@ function ghostLaserMakeTestPdo(array $services): PDO
     )');
     $pdo->exec('CREATE TABLE service_requests (
         id INTEGER PRIMARY KEY,
-        services TEXT
+        services TEXT,
+        technician_notes TEXT
     )');
 
     $stmt = $pdo->prepare('INSERT INTO services (id, service_name, duration_minutes) VALUES (:id, :name, :duration)');

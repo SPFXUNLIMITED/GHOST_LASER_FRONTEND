@@ -80,6 +80,7 @@ try {
             sr.laser_age,
             sr.problem_summary,
             sr.problem,
+            sr.technician_notes,
             sr.services,
             sr.service_speed,
             sr.speed,
@@ -267,7 +268,6 @@ function techDashBookingDetailEntries(array $job): array
         'Laser model' => $job['laser_model'] ?? '',
         'Laser watts' => $job['laser_watts'] ?? '',
         'Laser age' => $job['laser_age'] ?? '',
-        'Problem' => $job['problem'] ?? '',
         'Services' => techDashFormatServices($job['services'] ?? null),
         'Service speed' => $job['service_speed'] ?? '',
         'Service total' => $job['service_total'] ?? '',
@@ -858,6 +858,140 @@ $extraHead       = <<<'HTML'
         .service-auth-status.ok { color: #86efac; }
         .service-auth-status.err { color: #fca5a5; }
 
+        .job-note-row,
+        .job-note-edit {
+            width: 100%;
+            margin-top: 0.75rem;
+            padding: 0.8rem 0.9rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.72);
+            background: rgba(9, 9, 11, 0.58);
+        }
+        .job-note-row-label,
+        .job-note-edit-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #71717a;
+        }
+        .job-note-row-value,
+        .job-note-edit-value {
+            margin-top: 0.45rem;
+            font-size: 0.86rem;
+            line-height: 1.5;
+            color: #e4e4e7;
+            white-space: pre-wrap;
+        }
+        .job-note-edit {
+            display: block;
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease;
+        }
+        .job-note-edit:hover,
+        .job-note-edit:focus-visible {
+            border-color: rgba(103, 232, 249, 0.4);
+            background: rgba(9, 9, 11, 0.82);
+            outline: none;
+        }
+        .job-note-edit-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: #a1a1aa;
+            letter-spacing: 0.04em;
+            text-transform: none;
+        }
+        .job-note-edit-icon {
+            width: 0.9rem;
+            height: 0.9rem;
+            color: rgba(161, 161, 170, 0.88);
+            flex-shrink: 0;
+        }
+        .job-note-edit-value.is-placeholder {
+            color: #a1a1aa;
+        }
+
+        .tech-notes-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10010;
+            padding: 0.85rem;
+            background: rgba(0, 0, 0, 0.92);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            align-items: center;
+            justify-content: center;
+        }
+        .tech-notes-modal.open { display: flex; }
+        .tech-notes-modal-inner {
+            width: min(100%, 34rem);
+            border-radius: 1rem;
+            border: 1px solid rgba(34, 211, 238, 0.24);
+            background: linear-gradient(180deg, rgba(12, 14, 18, 0.98), rgba(5, 7, 9, 0.98));
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+            overflow: hidden;
+        }
+        .tech-notes-modal-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1rem 0.75rem;
+        }
+        .tech-notes-modal-kicker {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: rgba(103, 232, 249, 0.72);
+        }
+        .tech-notes-modal-title {
+            margin-top: 0.35rem;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #f4f4f5;
+        }
+        .tech-notes-modal-body {
+            padding: 0 1rem 1rem;
+        }
+        .tech-notes-textarea {
+            width: 100%;
+            min-height: 16rem;
+            resize: vertical;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.78);
+            background: rgba(9, 9, 11, 0.9);
+            color: #f4f4f5;
+            padding: 0.95rem 1rem;
+            font-size: 0.92rem;
+            line-height: 1.5;
+            outline: none;
+        }
+        .tech-notes-textarea:focus {
+            border-color: rgba(103, 232, 249, 0.55);
+            box-shadow: 0 0 0 1px rgba(103, 232, 249, 0.16);
+        }
+        .tech-notes-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.7rem;
+            margin-top: 0.85rem;
+        }
+        .tech-notes-status {
+            min-height: 1rem;
+            margin-top: 0.75rem;
+            font-size: 0.78rem;
+            color: #a1a1aa;
+        }
+        .tech-notes-status.err { color: #fca5a5; }
+
         .mileage-modal-inner {
             width: 100%;
             max-width: 360px;
@@ -1165,6 +1299,8 @@ require_once __DIR__ . '/templates/header.php';
                         $bookingDetailEntries = techDashBookingDetailEntries($job);
                         $authorizationScope = serviceAuthorizationBuildScopeOfWork($pdo, $job);
                         $existingAuthorization = $serviceAuthorizations[(int) $job['service_request_id']] ?? null;
+                        $customerProblem = str_replace(["\r\n", "\r"], "\n", (string) ($job['problem'] ?? $job['problem_details'] ?? ''));
+                        $technicianNotes = str_replace(["\r\n", "\r"], "\n", (string) ($job['technician_notes'] ?? ''));
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
                         if ($customerName === '') {
                             // Fall back to task_contact (company or contact name) for task-type rows.
@@ -1266,6 +1402,31 @@ require_once __DIR__ . '/templates/header.php';
                                     </div>
                                 </div>
                             <?php endif; ?>
+                            <?php if (trim($customerProblem) !== ''): ?>
+                                <div class="job-note-row">
+                                    <div class="job-note-row-label">Customer problem</div>
+                                    <div class="job-note-row-value"><?= htmlspecialchars($customerProblem, ENT_QUOTES, 'UTF-8') ?></div>
+                                </div>
+                            <?php endif; ?>
+                            <button
+                                type="button"
+                                class="job-note-edit"
+                                data-tech-notes-job-id="<?= (int) $job['service_request_id'] ?>"
+                                data-technician-notes="<?= htmlspecialchars($technicianNotes, ENT_QUOTES, 'UTF-8') ?>"
+                                title="Edit technician notes"
+                            >
+                                <span class="job-note-edit-label">
+                                    <span>Technician notes</span>
+                                    <span class="job-note-edit-hint">
+                                        <svg class="job-note-edit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.768-6.768a2.5 2.5 0 113.536 3.536L12.536 16.536A4 4 0 019.707 17.707L7 18l.293-2.707A4 4 0 018.464 12.536z"/></svg>
+                                        Edit
+                                    </span>
+                                </span>
+                                <span
+                                    class="job-note-edit-value<?= trim($technicianNotes) === '' ? ' is-placeholder' : '' ?>"
+                                    data-tech-notes-value
+                                ><?= htmlspecialchars(trim($technicianNotes) !== '' ? $technicianNotes : 'Tap to add notes', ENT_QUOTES, 'UTF-8') ?></span>
+                            </button>
 
                             <div class="mt-3 pt-3 border-t border-zinc-700/40">
                                 <div class="flex items-center justify-between gap-3">
@@ -1381,6 +1542,26 @@ require_once __DIR__ . '/templates/header.php';
                         <div id="serviceAuthorizationStatus" class="service-auth-status"></div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div id="technicianNotesModal" class="tech-notes-modal" role="dialog" aria-modal="true" aria-labelledby="technicianNotesModalTitle">
+            <div class="tech-notes-modal-inner">
+                <div class="tech-notes-modal-header">
+                    <div>
+                        <div class="tech-notes-modal-kicker">Technician Notes</div>
+                        <div id="technicianNotesModalTitle" class="tech-notes-modal-title">Update notes</div>
+                    </div>
+                    <button type="button" id="technicianNotesClose" class="service-auth-close" aria-label="Close">&times;</button>
+                </div>
+                <form id="technicianNotesForm" class="tech-notes-modal-body">
+                    <textarea id="technicianNotesTextarea" class="tech-notes-textarea" placeholder="Add notes, parts, or scope updates here."></textarea>
+                    <div class="tech-notes-actions">
+                        <button type="button" id="technicianNotesCancel" class="service-auth-secondary">Cancel</button>
+                        <button type="submit" id="technicianNotesSave" class="service-auth-primary">Save</button>
+                    </div>
+                    <div id="technicianNotesStatus" class="tech-notes-status"></div>
+                </form>
             </div>
         </div>
 
@@ -1575,6 +1756,18 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         pointerId: null,
         submitting: false
     };
+    var techNotesModal = document.getElementById('technicianNotesModal');
+    var techNotesForm = document.getElementById('technicianNotesForm');
+    var techNotesTextarea = document.getElementById('technicianNotesTextarea');
+    var techNotesStatus = document.getElementById('technicianNotesStatus');
+    var techNotesCancelBtn = document.getElementById('technicianNotesCancel');
+    var techNotesCloseBtn = document.getElementById('technicianNotesClose');
+    var techNotesSaveBtn = document.getElementById('technicianNotesSave');
+    var techNotesState = {
+        btn: null,
+        jobId: 0,
+        submitting: false
+    };
 
     // ── GPS helper ────────────────────────────────────────────────────────────
     function getCoords() {
@@ -1608,6 +1801,30 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         if (!el) return;
         el.textContent = msg;
         el.className = 'eta-status' + (type ? ' ' + type : '');
+    }
+
+    function setTechNotesModalStatus(msg, type) {
+        if (!techNotesStatus) return;
+        techNotesStatus.textContent = msg;
+        techNotesStatus.className = 'tech-notes-status' + (type ? ' ' + type : '');
+    }
+
+    function refreshTechnicianNotesCard(jobId, notes, scopeOfWork) {
+        var trigger = document.querySelector('[data-tech-notes-job-id="' + jobId + '"]');
+        if (trigger) {
+            trigger.dataset.technicianNotes = notes;
+            var valueEl = trigger.querySelector('[data-tech-notes-value]');
+            if (valueEl) {
+                var hasNotes = notes.trim() !== '';
+                valueEl.textContent = hasNotes ? notes : 'Tap to add notes';
+                valueEl.classList.toggle('is-placeholder', !hasNotes);
+            }
+        }
+
+        var authorizeBtn = document.querySelector('[data-authorize-job-id="' + jobId + '"]');
+        if (authorizeBtn) {
+            authorizeBtn.dataset.authorizeScope = scopeOfWork;
+        }
     }
 
     function setTripButtons(jobId, state) {
@@ -1868,6 +2085,40 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         }
     }
 
+    function openTechnicianNotesModal(btn) {
+        if (!techNotesModal || !techNotesTextarea) return;
+        techNotesState.btn = btn;
+        techNotesState.jobId = parseInt(btn.dataset.techNotesJobId, 10) || 0;
+        techNotesState.submitting = false;
+        techNotesTextarea.value = btn.dataset.technicianNotes || '';
+        techNotesTextarea.disabled = false;
+        if (techNotesSaveBtn) techNotesSaveBtn.disabled = false;
+        if (techNotesCancelBtn) techNotesCancelBtn.disabled = false;
+        if (techNotesCloseBtn) techNotesCloseBtn.disabled = false;
+        setTechNotesModalStatus('', '');
+        techNotesModal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        window.requestAnimationFrame(function () {
+            techNotesTextarea.focus();
+            techNotesTextarea.setSelectionRange(techNotesTextarea.value.length, techNotesTextarea.value.length);
+        });
+    }
+
+    function closeTechnicianNotesModal(force) {
+        if (!techNotesModal) return;
+        if (techNotesState.submitting && !force) return;
+        var restoreFocusTarget = techNotesState.btn;
+        techNotesModal.classList.remove('open');
+        document.body.style.overflow = '';
+        techNotesState.btn = null;
+        techNotesState.jobId = 0;
+        techNotesState.submitting = false;
+        setTechNotesModalStatus('', '');
+        if (restoreFocusTarget && typeof restoreFocusTarget.focus === 'function') {
+            restoreFocusTarget.focus();
+        }
+    }
+
     function authorizationCanvasPoint(event) {
         var rect = authCanvas.getBoundingClientRect();
         return {
@@ -1988,6 +2239,32 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         });
     }
 
+    document.querySelectorAll('[data-tech-notes-job-id]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            openTechnicianNotesModal(btn);
+        });
+    });
+
+    if (techNotesCancelBtn) {
+        techNotesCancelBtn.addEventListener('click', function () {
+            closeTechnicianNotesModal();
+        });
+    }
+
+    if (techNotesCloseBtn) {
+        techNotesCloseBtn.addEventListener('click', function () {
+            closeTechnicianNotesModal();
+        });
+    }
+
+    if (techNotesModal) {
+        techNotesModal.addEventListener('click', function (event) {
+            if (event.target === techNotesModal) {
+                closeTechnicianNotesModal();
+            }
+        });
+    }
+
     if (authForm) {
         authForm.addEventListener('submit', function (event) {
             event.preventDefault();
@@ -2057,6 +2334,68 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
                 if (authCancelBtn) authCancelBtn.disabled = false;
                 if (authCloseBtn) authCloseBtn.disabled = false;
                 setAuthorizationModalStatus('✗ ' + err.message, 'err');
+            });
+        });
+    }
+
+    if (techNotesForm) {
+        techNotesForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            if (!techNotesState.jobId || techNotesState.submitting || !techNotesTextarea) return;
+
+            techNotesState.submitting = true;
+            techNotesTextarea.disabled = true;
+            if (techNotesSaveBtn) techNotesSaveBtn.disabled = true;
+            if (techNotesCancelBtn) techNotesCancelBtn.disabled = true;
+            if (techNotesCloseBtn) techNotesCloseBtn.disabled = true;
+            setTechNotesModalStatus('Saving notes…', '');
+
+            fetch('/api/technician-notes-api.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    service_request_id: techNotesState.jobId,
+                    technician_notes: techNotesTextarea.value,
+                    csrf_token: SERVICE_AUTH_CSRF
+                })
+            }).then(function (res) {
+                return res.text().then(function (text) {
+                    var data = null;
+                    if (text) {
+                        try {
+                            data = JSON.parse(text);
+                        } catch (err) {
+                            if (!res.ok) {
+                                throw new Error('Server error (' + res.status + ')');
+                            }
+                            throw new Error('Invalid server response');
+                        }
+                    }
+
+                    if (!res.ok) {
+                        throw new Error((data && data.error) ? data.error : ('Server error (' + res.status + ')'));
+                    }
+
+                    if (!data || !data.success) {
+                        throw new Error((data && data.error) ? data.error : 'Unable to save technician notes.');
+                    }
+
+                    return data;
+                });
+            }).then(function (data) {
+                refreshTechnicianNotesCard(
+                    techNotesState.jobId,
+                    data.technician_notes || '',
+                    data.scope_of_work || ''
+                );
+                closeTechnicianNotesModal(true);
+            }).catch(function (err) {
+                techNotesState.submitting = false;
+                techNotesTextarea.disabled = false;
+                if (techNotesSaveBtn) techNotesSaveBtn.disabled = false;
+                if (techNotesCancelBtn) techNotesCancelBtn.disabled = false;
+                if (techNotesCloseBtn) techNotesCloseBtn.disabled = false;
+                setTechNotesModalStatus('✗ ' + err.message, 'err');
             });
         });
     }
