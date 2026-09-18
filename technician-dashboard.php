@@ -1313,6 +1313,7 @@ require_once __DIR__ . '/templates/header.php';
                         if ($customerName === '') {
                             $customerName = 'Internal Task';
                         }
+                        $technicianNotesLabelTarget = $customerName !== '' ? $customerName : ('request #' . $serviceRequestId);
                         ?>
                         <div class="job-card">
                             <!-- Row 1: stop number + priority + time -->
@@ -1418,7 +1419,7 @@ require_once __DIR__ . '/templates/header.php';
                                     class="job-note-edit"
                                     data-tech-notes-job-id="<?= $serviceRequestId ?>"
                                     data-technician-notes="<?= htmlspecialchars($technicianNotes, ENT_QUOTES, 'UTF-8') ?>"
-                                    aria-label="Edit technician notes for <?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                    aria-label="Edit technician notes for <?= htmlspecialchars($technicianNotesLabelTarget, ENT_QUOTES, 'UTF-8') ?>"
                                     title="Edit technician notes"
                                 >
                                     <span class="job-note-edit-label">

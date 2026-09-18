@@ -47,10 +47,16 @@ if ($sessionCsrf === '' || $csrfToken === '' || !hash_equals($sessionCsrf, $csrf
     exit;
 }
 
-$job = technicianDashboardFetchAccessibleServiceRequest($pdo, $serviceRequestId);
-if (!$job) {
+if (!technicianDashboardCanAccessServiceRequest($pdo, $serviceRequestId)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'You do not have access to update this job.']);
+    exit;
+}
+
+$job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
+if (!$job) {
+    http_response_code(404);
+    echo json_encode(['success' => false, 'error' => 'Service request not found.']);
     exit;
 }
 
