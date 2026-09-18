@@ -209,7 +209,8 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
 // --- 7. Legacy multiline technician notes with a colon are stripped from stored scope text ---
 (function (): void {
     $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
-        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes:\nOld saved note\n\nJob description: Machine shuts down after five minutes."
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes:\nOld saved note\n\nJob description: Machine shuts down after five minutes.",
+        'Old saved note'
     );
 
     ghostLaserAuthAssertSame(
@@ -236,7 +237,8 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
 // --- 9. Completion certificate scope storage strips legacy multiline technician notes blocks ---
 (function (): void {
     $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
-        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes\nLegacy saved note\n\nJob description: Machine shuts down after five minutes."
+        "Requested services: Diagnosis.\n\nIssue summary: Power issue.\n\nTechnician notes\nLegacy saved note\n\nJob description: Machine shuts down after five minutes.",
+        'Legacy saved note'
     );
 
     ghostLaserAuthAssertSame(
@@ -283,6 +285,20 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
         "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
         $text,
         'Completion certificate scope cleanup should preserve inline technician notes content'
+    );
+})();
+
+// --- 12b. Legacy scope cleanup preserves user-authored multiline technician notes content with different body ---
+(function (): void {
+    $text = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        "Requested services: Diagnosis.\n\nTechnician notes:\nCustomer requested a follow-up call.\nDo not remove this custom scope text.\n\nJob description: Machine shuts down after five minutes.",
+        'Bring replacement PSU'
+    );
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nTechnician notes:\nCustomer requested a follow-up call.\nDo not remove this custom scope text.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Completion certificate scope cleanup should preserve user-authored multiline technician notes content when it does not match the request notes'
     );
 })();
 

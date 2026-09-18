@@ -150,7 +150,10 @@ function completionCertificateSave(PDO $pdo, int $serviceRequestId, string $sign
     $signaturePaths  = completionCertificatePrepareSignaturePaths($serviceRequestId);
     serviceAuthorizationWriteTempSignature($signaturePaths['temp'], $signatureBinary);
     $signedAt        = serviceAuthorizationParseSignedAt($signedAtInput)->setTimezone(new DateTimeZone('UTC'))->format(DATE_ATOM);
-    $completionBody  = completionCertificateRemoveLegacyTechnicianNotesBlocks(serviceAuthorizationBuildScopeOfWork($pdo, $job));
+    $completionBody  = completionCertificateRemoveLegacyTechnicianNotesBlocks(
+        serviceAuthorizationBuildScopeOfWork($pdo, $job),
+        (string) ($job['technician_notes'] ?? '')
+    );
     if ($scopeOverride !== null) {
         $normalizedScope = serviceAuthorizationNormalizeTextarea($scopeOverride);
         if ($normalizedScope !== '') {
@@ -373,22 +376,25 @@ function completionCertificateGeneratePdf(PDO $pdo, int $authorizationId): array
     ];
 }
 
-function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeText): string
+function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeText, ?string $technicianNotes = null): string
 {
     $scopeText = trim(str_replace(["\r\n", "\r"], "\n", $scopeText));
     if ($scopeText === '') {
         return '';
     }
 
+    $normalizedNotes = serviceAuthorizationNormalizeTextarea((string) $technicianNotes);
     $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
     $blocks = array_values(array_filter(
         $blocks,
         static function ($block): bool {
+            return trim((string) $block) !== '';
+        }
+    ));
+    $blocks = array_values(array_filter(
+        $blocks,
+        static function ($block) use ($normalizedNotes): bool {
             $block = trim((string) $block);
-            if ($block === '') {
-                return false;
-            }
-
             $newlinePos = strpos($block, "\n");
             if ($newlinePos === false) {
                 $normalized = strtolower($block);
@@ -396,7 +402,16 @@ function completionCertificateRemoveLegacyTechnicianNotesBlocks(string $scopeTex
             }
 
             $firstLine = strtolower(trim(substr($block, 0, $newlinePos)));
-            return $firstLine !== 'technician notes' && $firstLine !== 'technician notes:';
+            if ($firstLine !== 'technician notes' && $firstLine !== 'technician notes:') {
+                return true;
+            }
+
+            $body = serviceAuthorizationNormalizeTextarea(substr($block, $newlinePos + 1));
+            if ($body === '') {
+                return false;
+            }
+
+            return $normalizedNotes === '' || $body !== $normalizedNotes;
         }
     ));
 
