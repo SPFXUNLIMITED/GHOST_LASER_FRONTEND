@@ -383,7 +383,13 @@ function completionCertificateBuildCompletedWorkText(array $certificate): string
     }
 
     $blocks = preg_split("/\n{2,}/", $scopeText) ?: [];
-    $blocks = array_values(array_filter($blocks, static fn ($block): bool => !preg_match('/^Technician notes(?:\s|:|$)/i', trim((string) $block))));
+    $legacyNotesPattern = '/^Technician notes\s*\n/i';
+    $notesBlockPattern = '/^Technician notes(?::|\s*\n)/i';
+    $blocks = array_values(array_filter(
+        $blocks,
+        static fn ($block): bool => trim((string) $block) !== ''
+            && !preg_match($technicianNotes === '' ? $legacyNotesPattern : $notesBlockPattern, trim((string) $block))
+    ));
     if ($scopeText === '' || $technicianNotes === '') {
         return implode("\n\n", $blocks);
     }

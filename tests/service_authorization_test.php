@@ -220,6 +220,20 @@ function ghostLaserAuthAssertSame(string $expected, string $actual, string $mess
     );
 })();
 
+// --- 8. Blank request notes keep unrelated inline scope text intact ---
+(function (): void {
+    $text = completionCertificateBuildCompletedWorkText([
+        'scope_of_work' => "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
+        'technician_notes' => '',
+    ]);
+
+    ghostLaserAuthAssertSame(
+        "Requested services: Diagnosis.\n\nTechnician notes: Customer requested a follow-up call.\n\nJob description: Machine shuts down after five minutes.",
+        $text,
+        'Blank request notes should not strip unrelated inline scope text that merely starts with Technician notes:'
+    );
+})();
+
 if ($failures !== []) {
     fwrite(STDERR, sprintf("FAILED %d assertion(s) (%d passed):\n", count($failures), $passCount));
     foreach ($failures as $failure) {
