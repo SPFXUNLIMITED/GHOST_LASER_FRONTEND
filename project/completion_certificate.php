@@ -30,7 +30,8 @@ function completionCertificateFetchLatestByJobIds(PDO $pdo, array $serviceReques
             WHERE agreement_type = 'completion_certificate'
               AND service_request_id IN ($placeholders)
             GROUP BY service_request_id
-         ) latest ON latest.latest_id = sa.id"
+         ) latest ON latest.latest_id = sa.id
+         WHERE sa.agreement_type = 'completion_certificate'"
     );
     $stmt->execute($serviceRequestIds);
 
@@ -357,6 +358,7 @@ function completionCertificateWritePdfFile(int $serviceRequestId, string $pdfBin
 
 function completionCertificatePersistFilePath(PDO $pdo, int $serviceRequestId, string $relativePath): void
 {
+    $previousPath = completionCertificateFetchStoredFilePath($pdo, $serviceRequestId);
     $stmt = $pdo->prepare(
         "UPDATE service_requests
          SET completion_certificate = :completion_certificate
@@ -367,6 +369,16 @@ function completionCertificatePersistFilePath(PDO $pdo, int $serviceRequestId, s
         ':completion_certificate' => $relativePath,
         ':id' => $serviceRequestId,
     ]);
+
+    if ($previousPath !== null && $previousPath !== $relativePath) {
+        try {
+            $resolvedOldPath = completionCertificateResolvePdfPath($previousPath);
+            if (is_file($resolvedOldPath)) {
+                @unlink($resolvedOldPath);
+            }
+        } catch (Throwable $e) {
+        }
+    }
 }
 
 function completionCertificateResolvePdfPath(string $relativePath): string
