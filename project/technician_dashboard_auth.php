@@ -22,12 +22,10 @@ function technicianDashboardCanAccessServiceRequest(PDO $pdo, int $serviceReques
          FROM scheduled_cluster_jobs scj
          JOIN scheduled_clusters sc ON sc.id = scj.scheduled_cluster_id
          WHERE scj.service_request_id = :service_request_id
-           AND (sc.created_by_admin_id = :admin_id OR sc.created_by_admin_id IS NULL)
          LIMIT 1"
     );
     $stmt->execute([
         ':service_request_id' => $serviceRequestId,
-        ':admin_id' => $adminId,
     ]);
 
     return (bool) $stmt->fetchColumn();
@@ -50,14 +48,12 @@ function technicianDashboardCanAccessAuthorization(PDO $pdo, int $authorizationI
                 FROM scheduled_cluster_jobs scj
                 JOIN scheduled_clusters sc ON sc.id = scj.scheduled_cluster_id
                 WHERE scj.service_request_id = sa.service_request_id
-                  AND (sc.created_by_admin_id = :admin_id OR sc.created_by_admin_id IS NULL)
                 LIMIT 1
               )
          )"
     );
     $stmt->execute([
         ':authorization_id' => $authorizationId,
-        ':admin_id' => $adminId,
     ]);
 
     return (bool) $stmt->fetchColumn();
