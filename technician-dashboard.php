@@ -1284,17 +1284,6 @@ require_once __DIR__ . '/templates/header.php';
                                         Authorize
                                     </button>
                                 </div>
-                                <div class="mt-3 rounded-lg border border-zinc-700/40 bg-zinc-900/50 p-3">
-                                    <div class="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-cyan-300/85">Scope of Work</div>
-                                    <p class="mt-1 text-xs leading-relaxed text-zinc-200 whitespace-pre-line"><?= htmlspecialchars($authorizationScope, ENT_QUOTES, 'UTF-8') ?></p>
-
-                                    <div class="mt-3 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-cyan-300/85">Terms</div>
-                                    <ol class="mt-1 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-zinc-300">
-                                        <?php foreach ($serviceAgreementTerms as $serviceAgreementTerm): ?>
-                                            <li><?= htmlspecialchars($serviceAgreementTerm, ENT_QUOTES, 'UTF-8') ?></li>
-                                        <?php endforeach; ?>
-                                    </ol>
-                                </div>
                                 <div class="authorization-status<?= $existingAuthorization ? ' is-signed' : '' ?>" data-auth-job="<?= (int) $job['service_request_id'] ?>">
                                     <?php if ($existingAuthorization): ?>
                                         <span>Signed <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $existingAuthorization['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
