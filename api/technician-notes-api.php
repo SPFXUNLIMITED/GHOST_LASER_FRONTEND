@@ -49,8 +49,8 @@ if ($sessionCsrf === '' || $csrfToken === '' || !hash_equals($sessionCsrf, $csrf
 
 $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
 if (!$job) {
-    http_response_code(404);
-    echo json_encode(['success' => false, 'error' => 'Service request not found.']);
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'You do not have access to update this job.']);
     exit;
 }
 
