@@ -1,5 +1,6 @@
 <?php
 
+require_once dirname(__DIR__) . '/bootstrap_env.php';
 require_once __DIR__ . '/service_display.php';
 
 function ensureServiceAuthorizationSchema(PDO $pdo): void
@@ -31,9 +32,15 @@ function serviceAuthorizationSummaryLine(): string
 
 function serviceAuthorizationSessionKey(): string
 {
-    $sessionId = session_id();
+    $signingSecret = trim((string) (
+        getenv('SERVICE_AUTHORIZATION_SIGNING_KEY')
+        ?: getenv('APP_KEY')
+        ?: getenv('APP_SECRET')
+        ?: getenv('DB_PASSWORD')
+        ?: 'ghost-laser-service-authorization'
+    ));
     $adminId = (string) ($_SESSION['admin_id'] ?? '0');
-    return hash('sha256', 'service-authorization|' . $sessionId . '|' . $adminId);
+    return hash('sha256', 'service-authorization|' . $signingSecret . '|' . $adminId);
 }
 
 function serviceAuthorizationJobAccessToken(int $serviceRequestId): string

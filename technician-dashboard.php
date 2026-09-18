@@ -1767,10 +1767,12 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         if (authClearBtn) authClearBtn.disabled = false;
         if (authCancelBtn) authCancelBtn.disabled = false;
         if (authCloseBtn) authCloseBtn.disabled = false;
-        resizeAuthorizationCanvas();
-        clearAuthorizationCanvas();
         authModal.classList.add('open');
         document.body.style.overflow = 'hidden';
+        window.requestAnimationFrame(function () {
+            resizeAuthorizationCanvas();
+            clearAuthorizationCanvas();
+        });
     }
 
     function closeAuthorizationModal(force) {
