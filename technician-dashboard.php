@@ -9,13 +9,21 @@ session_set_cookie_params([
 ]);
 session_start();
 
-if (empty($_SESSION['admin_id'])) {
+require_once __DIR__ . '/project/technician_dashboard_auth.php';
+
+if (!technicianDashboardHasAccess()) {
     header('Location: admin-login.php');
     exit;
 }
 
+if (empty($_SESSION['technician_dashboard_csrf'])) {
+    $_SESSION['technician_dashboard_csrf'] = bin2hex(random_bytes(16));
+}
+$technicianDashboardCsrf = (string) $_SESSION['technician_dashboard_csrf'];
+
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/project/service_display.php';
+require_once __DIR__ . '/project/service_authorization.php';
 require_once __DIR__ . '/scheduling_settings.php';
 require_once __DIR__ . '/mileage_schema.php';
 
@@ -78,12 +86,16 @@ $scheduledJobsStmt = $pdo->prepare("
     JOIN service_requests sr ON sr.id = scj.service_request_id
     LEFT JOIN customers c ON c.id = sr.customer_id
     WHERE sc.scheduled_date = :date
+      AND sc.created_by_admin_id = :admin_id
     ORDER BY
         FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
         sc.cluster_label ASC,
         scj.time_window_start ASC
 ");
-$scheduledJobsStmt->execute([':date' => $dateKey]);
+$scheduledJobsStmt->execute([
+    ':date' => $dateKey,
+    ':admin_id' => technicianDashboardAdminId(),
+]);
 $rawJobs = $scheduledJobsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // ── Group jobs by cluster ─────────────────────────────────────────────────
@@ -100,6 +112,13 @@ foreach ($rawJobs as $job) {
     $clusters[$cid]['jobs'][] = $job;
 }
 $clusters = array_values($clusters);
+$jobIdsForAuthorizations = !empty($rawJobs) ? array_map('intval', array_column($rawJobs, 'service_request_id')) : [];
+$serviceAuthorizations   = [];
+try {
+    $serviceAuthorizations = serviceAuthorizationFetchLatestByJobIds($pdo, $jobIdsForAuthorizations);
+} catch (Throwable $e) {
+    $serviceAuthorizations = [];
+}
 
 // ── Load scheduling settings (provides shop_address for Returning Home card) ─
 $schedSettings = getSchedulingSettings($pdo);
@@ -495,6 +514,47 @@ $extraHead       = <<<'HTML'
         .mileage-btn:active { transform: scale(0.96); }
         .mileage-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+        .authorize-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 6.25rem;
+            padding: 0.42rem 0.8rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(34, 211, 238, 0.75);
+            background: rgba(34, 211, 238, 0.16);
+            color: #67e8f9;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.15s, border-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .authorize-btn:active { transform: scale(0.96); }
+        .authorize-btn:hover {
+            background: rgba(34, 211, 238, 0.24);
+            border-color: rgba(103, 232, 249, 0.95);
+        }
+
+        .authorization-status {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem 0.75rem;
+            align-items: center;
+            margin-top: 0.7rem;
+            font-size: 0.78rem;
+            color: #a1a1aa;
+        }
+        .authorization-status.is-signed { color: #86efac; }
+        .authorization-download {
+            color: #67e8f9;
+            font-weight: 700;
+            text-decoration: none;
+        }
+        .authorization-download:hover { color: #a5f3fc; }
+
         .btn-on-way {
             background: rgba(103, 232, 249, 0.25);
             border: 1px solid rgba(103, 232, 249, 0.75);
@@ -590,6 +650,181 @@ $extraHead       = <<<'HTML'
             -webkit-backdrop-filter: blur(6px);
         }
         .mileage-modal.open { display: flex; }
+
+        .service-auth-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.92);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        .service-auth-modal.open { display: block; }
+        .service-auth-modal-inner {
+            height: calc(100dvh - 1rem);
+            width: min(100%, 42rem);
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            border-radius: 1.1rem;
+            border: 1px solid rgba(34, 211, 238, 0.24);
+            background: linear-gradient(180deg, rgba(12, 14, 18, 0.98), rgba(5, 7, 9, 0.98));
+            box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.06), 0 24px 70px rgba(0, 0, 0, 0.45);
+            overflow: hidden;
+        }
+        .service-auth-modal-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1rem 0.75rem;
+        }
+        .service-auth-modal-kicker {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: rgba(103, 232, 249, 0.72);
+        }
+        .service-auth-modal-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #f4f4f5;
+            margin-top: 0.35rem;
+        }
+        .service-auth-close {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(113, 113, 122, 0.55);
+            background: rgba(39, 39, 42, 0.5);
+            color: #d4d4d8;
+            font-size: 1.35rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .service-auth-summary {
+            margin: 0 1rem;
+            padding: 0.85rem 0.95rem;
+            border-radius: 0.85rem;
+            background: rgba(34, 211, 238, 0.09);
+            border: 1px solid rgba(34, 211, 238, 0.18);
+            color: #e4e4e7;
+            font-size: 0.86rem;
+            line-height: 1.4;
+        }
+        .service-auth-layout {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 0.9rem 1rem 1rem;
+            gap: 0.8rem;
+        }
+        .service-auth-contract {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.7);
+            background: rgba(9, 9, 11, 0.68);
+            padding: 1rem;
+            color: #e4e4e7;
+        }
+        .service-auth-contract h3 {
+            margin: 0 0 0.6rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #67e8f9;
+        }
+        .service-auth-contract p,
+        .service-auth-contract li {
+            font-size: 0.88rem;
+            line-height: 1.55;
+            color: #e4e4e7;
+        }
+        .service-auth-contract p { white-space: pre-line; }
+        .service-auth-contract ol {
+            margin: 0;
+            padding-left: 1.15rem;
+            display: grid;
+            gap: 0.7rem;
+        }
+        .service-auth-signature-panel {
+            flex: none;
+            padding: 0.95rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.78);
+            background: rgba(9, 9, 11, 0.9);
+        }
+        .service-auth-signature-copy {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #f4f4f5;
+        }
+        .service-auth-meta {
+            margin-top: 0.3rem;
+            font-size: 0.75rem;
+            color: #a1a1aa;
+        }
+        .service-auth-canvas {
+            display: block;
+            width: 100%;
+            height: 11rem;
+            margin-top: 0.8rem;
+            border-radius: 0.8rem;
+            border: 1px solid rgba(103, 232, 249, 0.24);
+            background: #ffffff;
+            touch-action: none;
+        }
+        .service-auth-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.7rem;
+            margin-top: 0.8rem;
+        }
+        .service-auth-primary-actions {
+            display: flex;
+            gap: 0.7rem;
+        }
+        .service-auth-secondary,
+        .service-auth-primary {
+            min-height: 2.85rem;
+            padding: 0.65rem 1rem;
+            border-radius: 0.8rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .service-auth-secondary {
+            border: 1px solid rgba(113, 113, 122, 0.75);
+            background: rgba(39, 39, 42, 0.7);
+            color: #e4e4e7;
+        }
+        .service-auth-primary {
+            border: 1px solid rgba(34, 211, 238, 0.85);
+            background: linear-gradient(135deg, rgba(34, 211, 238, 0.48), rgba(6, 182, 212, 0.28));
+            color: #ffffff;
+            min-width: 6rem;
+        }
+        .service-auth-secondary:disabled,
+        .service-auth-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .service-auth-status {
+            min-height: 1rem;
+            margin-top: 0.75rem;
+            font-size: 0.78rem;
+            color: #a1a1aa;
+        }
+        .service-auth-status.ok { color: #86efac; }
+        .service-auth-status.err { color: #fca5a5; }
 
         .mileage-modal-inner {
             width: 100%;
@@ -771,6 +1006,19 @@ $extraHead       = <<<'HTML'
             80%       { transform: translateX(4px); }
         }
         .nixie-display.shake { animation: nixie-shake 0.32s ease; }
+
+        @media (max-width: 480px) {
+            .service-auth-actions,
+            .service-auth-primary-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .service-auth-primary,
+            .service-auth-secondary,
+            .authorize-btn {
+                width: 100%;
+            }
+        }
     </style>
 HTML;
 $headerRight     = <<<'HTML'
@@ -865,6 +1113,8 @@ require_once __DIR__ . '/templates/header.php';
                         $gmapsUrl    = techDashGoogleMapsUrl($job);
                         $timeWindow  = techDashTimeWindow($job['time_window_start'] ?? null, $job['time_window_end'] ?? null);
                         $bookingDetailEntries = techDashBookingDetailEntries($job);
+                        $authorizationScope = serviceAuthorizationBuildScopeOfWork($pdo, $job);
+                        $existingAuthorization = $serviceAuthorizations[(int) $job['service_request_id']] ?? null;
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
                         if ($customerName === '') {
                             // Fall back to task_contact (company or contact name) for task-type rows.
@@ -967,6 +1217,37 @@ require_once __DIR__ . '/templates/header.php';
                                 </div>
                             <?php endif; ?>
 
+                            <div class="mt-3 pt-3 border-t border-zinc-700/40">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-zinc-500">Service Agreement</div>
+                                        <div class="mt-1 text-xs text-zinc-400">Customer approval for the listed work before service begins.</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="authorize-btn"
+                                        data-authorize-job-id="<?= (int) $job['service_request_id'] ?>"
+                                        data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-scope="<?= htmlspecialchars($authorizationScope, ENT_QUOTES, 'UTF-8') ?>"
+                                    >
+                                        Authorize
+                                    </button>
+                                </div>
+                                <div class="authorization-status<?= $existingAuthorization ? ' is-signed' : '' ?>" data-auth-job="<?= (int) $job['service_request_id'] ?>">
+                                    <?php if ($existingAuthorization): ?>
+                                        <span>Signed <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $existingAuthorization['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
+                                        <a
+                                            href="/api/service-authorization-pdf.php?authorization_id=<?= (int) $existingAuthorization['id'] ?>"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="authorization-download"
+                                        >Download PDF</a>
+                                    <?php else: ?>
+                                        <span>Not signed yet.</span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
                             <!-- Row 5: mileage tracking buttons -->
                             <div class="mt-3 pt-3 border-t border-zinc-700/40">
                                 <div class="flex items-center gap-2">
@@ -1010,6 +1291,49 @@ require_once __DIR__ . '/templates/header.php';
                 </div>
             </div>
         <?php endforeach; ?>
+
+        <div id="serviceAuthorizationModal" class="service-auth-modal" role="dialog" aria-modal="true" aria-labelledby="serviceAuthorizationModalTitle">
+            <div class="service-auth-modal-inner">
+                <div class="service-auth-modal-header">
+                    <div>
+                        <div class="service-auth-modal-kicker">Service Authorization</div>
+                        <div id="serviceAuthorizationModalTitle" class="service-auth-modal-title">Authorize Work</div>
+                    </div>
+                    <button type="button" id="serviceAuthorizationClose" class="service-auth-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="service-auth-summary">The customer authorizes the technician to perform the listed work described below.</div>
+                <div class="service-auth-layout">
+                    <div class="service-auth-contract">
+                        <h3>Scope of Work</h3>
+                        <p id="serviceAuthorizationScope"></p>
+
+                        <h3>Terms</h3>
+                        <ol>
+                            <li>The customer authorizes Ghost Laser to inspect, diagnose, and perform the approved service described in the Scope of Work.</li>
+                            <li>The customer agrees to pay for all parts, labor, travel, and related service charges required to complete the authorized work.</li>
+                            <li>The customer acknowledges that the equipment may have pre-existing wear, cosmetic issues, or damage that is unrelated to the authorized service.</li>
+                            <li>The customer waives claims arising solely from normal wear, hidden defects, or conditions discovered during service that are not caused by Ghost Laser negligence.</li>
+                        </ol>
+                    </div>
+
+                    <div class="service-auth-signature-panel">
+                        <div class="service-auth-signature-copy">Customer signature</div>
+                        <div id="serviceAuthorizationMeta" class="service-auth-meta">Draw with a finger, then tap Sign to capture the signature, timestamp, and GPS.</div>
+                        <canvas id="serviceAuthorizationCanvas" class="service-auth-canvas"></canvas>
+                        <form id="serviceAuthorizationForm">
+                            <div class="service-auth-actions">
+                                <button type="button" id="serviceAuthorizationClear" class="service-auth-secondary">Clear</button>
+                                <div class="service-auth-primary-actions">
+                                    <button type="button" id="serviceAuthorizationCancel" class="service-auth-secondary">Cancel</button>
+                                    <button type="submit" id="serviceAuthorizationSign" class="service-auth-primary">Sign</button>
+                                </div>
+                            </div>
+                        </form>
+                        <div id="serviceAuthorizationStatus" class="service-auth-status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- ── Returning Home card ──────────────────────────────────────────── -->
         <?php
@@ -1110,6 +1434,7 @@ require_once __DIR__ . '/templates/header.php';
 var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 var HAS_ACTIVE_VEHICLES = <?= $hasActiveVehicles ? 'true' : 'false' ?>;
 var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleId : 'null' ?>;
+var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
 
 <!-- ── Mileage Entry Modal ───────────────────────────────────────────────── -->
@@ -1182,6 +1507,25 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
 
     // Starting odometer per job, used to validate the ending reading client-side.
     var _startMileageByJob = {};
+    var authModal = document.getElementById('serviceAuthorizationModal');
+    var authScope = document.getElementById('serviceAuthorizationScope');
+    var authMeta = document.getElementById('serviceAuthorizationMeta');
+    var authStatus = document.getElementById('serviceAuthorizationStatus');
+    var authClearBtn = document.getElementById('serviceAuthorizationClear');
+    var authCancelBtn = document.getElementById('serviceAuthorizationCancel');
+    var authCloseBtn = document.getElementById('serviceAuthorizationClose');
+    var authSignBtn = document.getElementById('serviceAuthorizationSign');
+    var authForm = document.getElementById('serviceAuthorizationForm');
+    var authCanvas = document.getElementById('serviceAuthorizationCanvas');
+    var authCtx = authCanvas ? authCanvas.getContext('2d') : null;
+    var authState = {
+        btn: null,
+        jobId: 0,
+        dirty: false,
+        drawing: false,
+        pointerId: null,
+        submitting: false
+    };
 
     // ── GPS helper ────────────────────────────────────────────────────────────
     function getCoords() {
@@ -1354,6 +1698,177 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         return value !== null && value !== undefined && value !== '';
     }
 
+    function setAuthorizationCardStatus(jobId, authorization) {
+        var el = document.querySelector('[data-auth-job="' + jobId + '"]');
+        if (!el) return;
+
+        el.textContent = '';
+        el.classList.remove('is-signed');
+
+        if (!authorization || !authorization.download_url) {
+            var empty = document.createElement('span');
+            empty.textContent = 'Not signed yet.';
+            el.appendChild(empty);
+            return;
+        }
+
+        el.classList.add('is-signed');
+        var signedText = document.createElement('span');
+        signedText.textContent = 'Signed ' + (authorization.signed_at_display || authorization.signed_at || '');
+        el.appendChild(signedText);
+
+        var link = document.createElement('a');
+        link.href = authorization.download_url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'authorization-download';
+        link.textContent = 'Download PDF';
+        el.appendChild(link);
+    }
+
+    function setAuthorizationModalStatus(msg, type) {
+        if (!authStatus) return;
+        authStatus.textContent = msg;
+        authStatus.className = 'service-auth-status' + (type ? ' ' + type : '');
+    }
+
+    function resizeAuthorizationCanvas() {
+        if (!authCanvas || !authCtx) return;
+        var rect = authCanvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        var snapshot = null;
+        if (authState.dirty && authCanvas.width && authCanvas.height) {
+            snapshot = document.createElement('canvas');
+            snapshot.width = authCanvas.width;
+            snapshot.height = authCanvas.height;
+            var snapshotCtx = snapshot.getContext('2d');
+            if (snapshotCtx) {
+                snapshotCtx.drawImage(authCanvas, 0, 0);
+            } else {
+                snapshot = null;
+            }
+        }
+        var dpr = Math.max(window.devicePixelRatio || 1, 1);
+        authCanvas.width = Math.round(rect.width * dpr);
+        authCanvas.height = Math.round(rect.height * dpr);
+        authCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        authCtx.lineCap = 'round';
+        authCtx.lineJoin = 'round';
+        authCtx.lineWidth = 2.75;
+        authCtx.strokeStyle = '#111827';
+        authCtx.clearRect(0, 0, rect.width, rect.height);
+        if (snapshot) {
+            authCtx.drawImage(snapshot, 0, 0, rect.width, rect.height);
+        }
+    }
+
+    function clearAuthorizationCanvas() {
+        if (!authCanvas || !authCtx) return;
+        var rect = authCanvas.getBoundingClientRect();
+        authCtx.clearRect(0, 0, rect.width, rect.height);
+        authState.dirty = false;
+    }
+
+    function openAuthorizationModal(btn) {
+        authState.btn = btn;
+        authState.jobId = parseInt(btn.dataset.authorizeJobId, 10) || 0;
+        authState.dirty = false;
+        authState.drawing = false;
+        authState.pointerId = null;
+        authState.submitting = false;
+        if (authScope) {
+            authScope.textContent = btn.dataset.authorizeScope || 'Perform the service request currently listed for this visit.';
+        }
+        if (authMeta) {
+            var customer = btn.dataset.authorizeCustomer || 'Customer';
+            authMeta.textContent = customer + ' signs below. Timestamp and GPS are captured when Sign is tapped.';
+        }
+        setAuthorizationModalStatus('', '');
+        if (authSignBtn) authSignBtn.disabled = false;
+        if (authClearBtn) authClearBtn.disabled = false;
+        if (authCancelBtn) authCancelBtn.disabled = false;
+        if (authCloseBtn) authCloseBtn.disabled = false;
+        authModal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        window.requestAnimationFrame(function () {
+            resizeAuthorizationCanvas();
+            clearAuthorizationCanvas();
+            if (authCloseBtn) {
+                authCloseBtn.focus();
+            } else if (authSignBtn) {
+                authSignBtn.focus();
+            }
+        });
+    }
+
+    function closeAuthorizationModal(force) {
+        if (!authModal) return;
+        if (authState.submitting && !force) return;
+        var restoreFocusTarget = authState.btn;
+        authModal.classList.remove('open');
+        document.body.style.overflow = '';
+        authState.btn = null;
+        authState.jobId = 0;
+        authState.dirty = false;
+        authState.drawing = false;
+        authState.pointerId = null;
+        authState.submitting = false;
+        setAuthorizationModalStatus('', '');
+        if (restoreFocusTarget && typeof restoreFocusTarget.focus === 'function') {
+            restoreFocusTarget.focus();
+        }
+    }
+
+    function authorizationCanvasPoint(event) {
+        var rect = authCanvas.getBoundingClientRect();
+        return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        };
+    }
+
+    function authorizationStartDrawing(event) {
+        if (!authCanvas || !authCtx) return;
+        event.preventDefault();
+        authState.drawing = true;
+        authState.pointerId = event.pointerId;
+        authCanvas.setPointerCapture(event.pointerId);
+        var point = authorizationCanvasPoint(event);
+        authCtx.beginPath();
+        authCtx.moveTo(point.x, point.y);
+        authCtx.lineTo(point.x + 0.01, point.y + 0.01);
+        authCtx.stroke();
+        authState.dirty = true;
+        setAuthorizationModalStatus('', '');
+    }
+
+    function authorizationMoveDrawing(event) {
+        if (!authState.drawing || authState.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        var point = authorizationCanvasPoint(event);
+        authCtx.lineTo(point.x, point.y);
+        authCtx.stroke();
+    }
+
+    function authorizationStopDrawing(event) {
+        if (!authState.drawing || authState.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        authState.drawing = false;
+        authState.pointerId = null;
+        authCtx.closePath();
+        if (authCanvas.hasPointerCapture(event.pointerId)) {
+            authCanvas.releasePointerCapture(event.pointerId);
+        }
+    }
+
+    function authorizationResetDrawingState() {
+        authState.drawing = false;
+        authState.pointerId = null;
+        if (authCtx) {
+            authCtx.closePath();
+        }
+    }
+
     function initTripStates() {
         var states = window.TRIP_STATES;
         if (!states) { return; }
@@ -1380,6 +1895,122 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
     }
 
     initTripStates();
+
+    if (authCanvas) {
+        authCanvas.addEventListener('pointerdown', authorizationStartDrawing);
+        authCanvas.addEventListener('pointermove', authorizationMoveDrawing);
+        authCanvas.addEventListener('pointerup', authorizationStopDrawing);
+        authCanvas.addEventListener('pointercancel', authorizationStopDrawing);
+        authCanvas.addEventListener('lostpointercapture', authorizationResetDrawingState);
+    }
+
+    function syncAuthorizationCanvasToViewport() {
+        if (authModal && authModal.classList.contains('open')) {
+            if (authState.dirty) {
+                return;
+            }
+            resizeAuthorizationCanvas();
+        }
+    }
+
+    window.addEventListener('resize', syncAuthorizationCanvasToViewport);
+    window.addEventListener('orientationchange', syncAuthorizationCanvasToViewport);
+
+    if (authClearBtn) {
+        authClearBtn.addEventListener('click', function () {
+            clearAuthorizationCanvas();
+            setAuthorizationModalStatus('', '');
+        });
+    }
+
+    if (authCancelBtn) {
+        authCancelBtn.addEventListener('click', closeAuthorizationModal);
+    }
+
+    if (authCloseBtn) {
+        authCloseBtn.addEventListener('click', closeAuthorizationModal);
+    }
+
+    if (authModal) {
+        authModal.addEventListener('click', function (event) {
+            if (event.target === authModal) {
+                closeAuthorizationModal();
+            }
+        });
+    }
+
+    if (authForm) {
+        authForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            if (!authState.jobId || authState.submitting) return;
+            if (!authState.dirty || !authCanvas) {
+                setAuthorizationModalStatus('Signature required before continuing.', 'err');
+                return;
+            }
+
+            authState.submitting = true;
+            authSignBtn.disabled = true;
+            if (authClearBtn) authClearBtn.disabled = true;
+            if (authCancelBtn) authCancelBtn.disabled = true;
+            if (authCloseBtn) authCloseBtn.disabled = true;
+            setAuthorizationModalStatus('Getting GPS location…', '');
+
+            var signedAt = new Date().toISOString();
+            var signaturePng = authCanvas.toDataURL('image/png');
+
+            getCoords().then(function (coords) {
+                setAuthorizationModalStatus('Saving authorization…', '');
+                return fetch('/api/service-authorization-api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        service_request_id: authState.jobId,
+                        signature_png: signaturePng,
+                        signed_at: signedAt,
+                        csrf_token: SERVICE_AUTH_CSRF,
+                        latitude: coords.lat,
+                        longitude: coords.lng
+                    })
+                });
+            }).then(function (res) {
+                return res.text().then(function (text) {
+                    var data = null;
+                    if (text) {
+                        try {
+                            data = JSON.parse(text);
+                        } catch (err) {
+                            if (!res.ok) {
+                                throw new Error('Server error (' + res.status + ')');
+                            }
+                            throw new Error('Invalid server response');
+                        }
+                    }
+
+                    if (!res.ok) {
+                        throw new Error((data && data.error) ? data.error : ('Server error (' + res.status + ')'));
+                    }
+
+                    if (!data || !data.success || !data.authorization) {
+                        throw new Error((data && data.error) ? data.error : 'Unable to save authorization.');
+                    }
+
+                    return data.authorization;
+                });
+            }).then(function (authorization) {
+                setAuthorizationCardStatus(authState.jobId, authorization);
+                authState.submitting = false;
+                if (authCloseBtn) authCloseBtn.disabled = false;
+                closeAuthorizationModal(true);
+            }).catch(function (err) {
+                authState.submitting = false;
+                authSignBtn.disabled = false;
+                if (authClearBtn) authClearBtn.disabled = false;
+                if (authCancelBtn) authCancelBtn.disabled = false;
+                if (authCloseBtn) authCloseBtn.disabled = false;
+                setAuthorizationModalStatus('✗ ' + err.message, 'err');
+            });
+        });
+    }
 
     // ── Mileage Modal ─────────────────────────────────────────────────────────
     var _modalData   = null; // { btn, jobId, payload }
@@ -1513,6 +2144,12 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
 
     // ── Attach listeners ──────────────────────────────────────────────────────
     document.addEventListener('click', function (e) {
+        var authorizeBtn = e.target.closest('.authorize-btn');
+        if (authorizeBtn) {
+            openAuthorizationModal(authorizeBtn);
+            return;
+        }
+
         var btn = e.target.closest('.mileage-btn');
         if (!btn || btn.disabled) return;
 
@@ -1593,6 +2230,12 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
 		var message = 'Ghost Laser Technician: I just got here. Let me log into the system and take out my tools and I\'ll be right in.';
 		window.location.href = 'sms:' + phone + '?body=' + encodeURIComponent(message);
 	};
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && authModal && authModal.classList.contains('open')) {
+            closeAuthorizationModal();
+        }
+    });
 }());
 
 function saveContact(btn) {

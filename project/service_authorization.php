@@ -1,0 +1,716 @@
+<?php
+
+require_once __DIR__ . '/service_display.php';
+
+function ensureServiceAuthorizationSchema(PDO $pdo): void
+{
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS service_authorizations (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            service_request_id INT UNSIGNED NOT NULL,
+            agreement_type VARCHAR(50) NOT NULL DEFAULT 'service_authorization',
+            agreement_summary VARCHAR(255) NOT NULL,
+            scope_of_work MEDIUMTEXT NOT NULL,
+            signature_path VARCHAR(255) NOT NULL,
+            signature_sha256 CHAR(64) NOT NULL,
+            signed_at VARCHAR(40) NOT NULL,
+            signed_latitude DECIMAL(10,7) NULL,
+            signed_longitude DECIMAL(10,7) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_service_authorizations_request (service_request_id),
+            INDEX idx_service_authorizations_type (agreement_type)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    );
+
+    $uniqueIndexExistsStmt = $pdo->query("
+        SELECT COUNT(*)
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'service_authorizations'
+          AND INDEX_NAME = 'uniq_service_authorization_request_type'
+    ");
+    if ((int) $uniqueIndexExistsStmt->fetchColumn() > 0) {
+        $pdo->exec("ALTER TABLE service_authorizations DROP INDEX uniq_service_authorization_request_type");
+    }
+
+    $requestIndexExistsStmt = $pdo->query("
+        SELECT COUNT(*)
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'service_authorizations'
+          AND INDEX_NAME = 'idx_service_authorizations_request'
+    ");
+    if ((int) $requestIndexExistsStmt->fetchColumn() === 0) {
+        $pdo->exec("ALTER TABLE service_authorizations ADD INDEX idx_service_authorizations_request (service_request_id)");
+    }
+}
+
+function serviceAuthorizationSummaryLine(): string
+{
+    return 'The customer authorizes the technician to perform the listed work described below.';
+}
+
+function serviceAuthorizationClauses(): array
+{
+    return [
+        'The customer authorizes Ghost Laser to inspect, diagnose, and perform the approved service described in the Scope of Work.',
+        'The customer agrees to pay for all parts, labor, travel, and related service charges required to complete the authorized work.',
+        'The customer acknowledges that the equipment may have pre-existing wear, cosmetic issues, or damage that is unrelated to the authorized service.',
+        'The customer waives claims arising solely from normal wear, hidden defects, or conditions discovered during service that are not caused by Ghost Laser negligence.',
+    ];
+}
+
+function serviceAuthorizationStorageRoot(): string
+{
+    return dirname(__DIR__) . '/uploads/service-authorizations';
+}
+
+function serviceAuthorizationSignatureRoot(): string
+{
+    return serviceAuthorizationStorageRoot() . '/signatures';
+}
+
+function serviceAuthorizationEnsureDirectory(string $path): void
+{
+    if (is_dir($path)) {
+        return;
+    }
+
+    if (!mkdir($path, 0775, true) && !is_dir($path)) {
+        throw new RuntimeException('Unable to create authorization storage directory.');
+    }
+}
+
+function serviceAuthorizationNormalizeWhitespace(string $value): string
+{
+    $value = trim(str_replace(["\r\n", "\r"], "\n", $value));
+    $value = preg_replace("/[ \t]+/", ' ', $value) ?? $value;
+    $value = preg_replace("/\n{3,}/", "\n\n", $value) ?? $value;
+    return trim($value);
+}
+
+function serviceAuthorizationEnsureSentence(string $label, string $value): string
+{
+    $value = serviceAuthorizationNormalizeWhitespace($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $sentence = $label . ': ' . $value;
+    if (!preg_match('/[.!?]$/', $sentence)) {
+        $sentence .= '.';
+    }
+
+    return $sentence;
+}
+
+function serviceAuthorizationFormatServices(PDO $pdo, $services): string
+{
+    if ($services === null) {
+        return '';
+    }
+
+    $raw = trim((string) $services);
+    if ($raw === '') {
+        return '';
+    }
+
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) {
+        return formatServicesListForDisplay($pdo, $raw);
+    }
+
+    return $raw;
+}
+
+function serviceAuthorizationFormatServiceAddress(array $job): string
+{
+    $parts = array_filter([
+        trim((string) ($job['address'] ?? $job['destination_street'] ?? '')),
+        trim((string) ($job['city'] ?? $job['destination_city'] ?? '')),
+        trim((string) ($job['state'] ?? $job['destination_state'] ?? '')),
+        trim((string) ($job['zip'] ?? $job['destination_zip'] ?? '')),
+    ], static fn (string $part): bool => $part !== '');
+
+    return implode(', ', $parts);
+}
+
+function serviceAuthorizationBuildScopeOfWork(PDO $pdo, array $job): string
+{
+    $parts = [];
+
+    $services = serviceAuthorizationFormatServices($pdo, $job['services'] ?? null);
+    if ($services !== '') {
+        $parts[] = serviceAuthorizationEnsureSentence('Requested services', $services);
+    }
+
+    $problemSummary = trim((string) ($job['problem_summary'] ?? ''));
+    if ($problemSummary !== '') {
+        $parts[] = serviceAuthorizationEnsureSentence('Issue summary', $problemSummary);
+    }
+
+    $problemDetails = trim((string) ($job['problem'] ?? $job['problem_details'] ?? ''));
+    if ($problemDetails !== '' && strcasecmp($problemDetails, $problemSummary) !== 0) {
+        $parts[] = serviceAuthorizationEnsureSentence('Job description', $problemDetails);
+    }
+
+    $equipment = implode(' ', array_filter([
+        trim((string) ($job['laser_brand'] ?? '')),
+        trim((string) ($job['laser_model'] ?? '')),
+        trim((string) ($job['laser_watts'] ?? '')),
+    ], static fn (string $part): bool => $part !== ''));
+    if ($equipment !== '') {
+        $parts[] = serviceAuthorizationEnsureSentence('Equipment', $equipment);
+    }
+
+    $address = serviceAuthorizationFormatServiceAddress($job);
+    if ($address !== '') {
+        $parts[] = serviceAuthorizationEnsureSentence('Service location', $address);
+    }
+
+    if ($parts === []) {
+        $parts[] = 'Perform the service request currently listed for this visit.';
+    }
+
+    return implode("\n\n", $parts);
+}
+
+function serviceAuthorizationFetchJob(PDO $pdo, int $serviceRequestId): ?array
+{
+    $stmt = $pdo->prepare(
+        "SELECT
+            sr.id,
+            sr.problem_summary,
+            sr.problem,
+            sr.problem_details,
+            sr.services,
+            sr.laser_brand,
+            sr.laser_model,
+            sr.laser_watts,
+            sr.destination_street,
+            sr.destination_city,
+            sr.destination_state,
+            sr.destination_zip,
+            COALESCE(c.first_name, '') AS first_name,
+            COALESCE(c.last_name, '') AS last_name,
+            COALESCE(c.address, sr.destination_street) AS address,
+            COALESCE(c.city, sr.destination_city) AS city,
+            COALESCE(c.state, sr.destination_state) AS state,
+            COALESCE(c.zip, sr.destination_zip) AS zip
+         FROM service_requests sr
+         LEFT JOIN customers c ON c.id = sr.customer_id
+         WHERE sr.id = :id
+         LIMIT 1"
+    );
+    $stmt->execute([':id' => $serviceRequestId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $row ?: null;
+}
+
+function serviceAuthorizationFetchLatestByJobIds(PDO $pdo, array $serviceRequestIds): array
+{
+    $serviceRequestIds = array_values(array_unique(array_filter(array_map('intval', $serviceRequestIds), static fn (int $id): bool => $id > 0)));
+    if ($serviceRequestIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($serviceRequestIds), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT sa.*
+         FROM service_authorizations sa
+         INNER JOIN (
+            SELECT MAX(id) AS latest_id
+            FROM service_authorizations
+            WHERE agreement_type = 'service_authorization'
+              AND service_request_id IN ($placeholders)
+            GROUP BY service_request_id
+         ) latest ON latest.latest_id = sa.id"
+    );
+    $stmt->execute($serviceRequestIds);
+
+    $rows = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $rows[(int) $row['service_request_id']] = $row;
+    }
+
+    return $rows;
+}
+
+function serviceAuthorizationParseSignedAt(?string $signedAt): DateTimeImmutable
+{
+    if (is_string($signedAt) && trim($signedAt) !== '') {
+        try {
+            return new DateTimeImmutable($signedAt);
+        } catch (Throwable $e) {
+        }
+    }
+
+    return new DateTimeImmutable('now', new DateTimeZone('UTC'));
+}
+
+function serviceAuthorizationFormatSignedAtDisplay(?string $signedAt): string
+{
+    try {
+        return serviceAuthorizationParseSignedAt($signedAt)
+            ->setTimezone(new DateTimeZone('America/Los_Angeles'))
+            ->format('M j, Y g:i A T');
+    } catch (Throwable $e) {
+        return trim((string) $signedAt);
+    }
+}
+
+function serviceAuthorizationDecodeSignaturePng(string $signatureDataUrl): string
+{
+    $signatureDataUrl = trim($signatureDataUrl);
+    if (!preg_match('/^data:image\/png;base64,([a-zA-Z0-9+\/=]+)$/', $signatureDataUrl, $matches)) {
+        throw new InvalidArgumentException('Signature must be a PNG image.');
+    }
+
+    $binary = base64_decode($matches[1], true);
+    if ($binary === false || $binary === '') {
+        throw new InvalidArgumentException('Signature image could not be decoded.');
+    }
+
+    $imageInfo = @getimagesizefromstring($binary);
+    if ($imageInfo === false || ($imageInfo['mime'] ?? '') !== 'image/png') {
+        throw new InvalidArgumentException('Signature image must be a valid PNG.');
+    }
+
+    if (strlen($binary) > 5 * 1024 * 1024) {
+        throw new InvalidArgumentException('Signature image is too large.');
+    }
+
+    return $binary;
+}
+
+function serviceAuthorizationPrepareSignaturePaths(int $serviceRequestId): array
+{
+    serviceAuthorizationEnsureDirectory(serviceAuthorizationSignatureRoot());
+
+    $fileName = sprintf(
+        'service-auth-%d-%s-%s.png',
+        $serviceRequestId,
+        gmdate('YmdHis'),
+        bin2hex(random_bytes(6))
+    );
+    $relativePath = 'uploads/service-authorizations/signatures/' . $fileName;
+    $absolutePath = dirname(__DIR__) . '/' . $relativePath;
+
+    return [
+        'relative' => $relativePath,
+        'absolute' => $absolutePath,
+        'temp' => $absolutePath . '.tmp',
+    ];
+}
+
+function serviceAuthorizationWriteTempSignature(string $tempPath, string $binary): void
+{
+    if (file_put_contents($tempPath, $binary, LOCK_EX) === false) {
+        throw new RuntimeException('Unable to save signature image.');
+    }
+}
+
+function serviceAuthorizationSave(PDO $pdo, int $serviceRequestId, string $signatureDataUrl, ?float $latitude, ?float $longitude, ?string $signedAtInput): array
+{
+    $job = serviceAuthorizationFetchJob($pdo, $serviceRequestId);
+    if (!$job) {
+        throw new RuntimeException('Service request not found.');
+    }
+
+    $signatureBinary = serviceAuthorizationDecodeSignaturePng($signatureDataUrl);
+    $signaturePaths  = serviceAuthorizationPrepareSignaturePaths($serviceRequestId);
+    serviceAuthorizationWriteTempSignature($signaturePaths['temp'], $signatureBinary);
+    $signedAt        = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format(DATE_ATOM);
+    $scopeOfWork     = serviceAuthorizationBuildScopeOfWork($pdo, $job);
+    $summaryLine     = serviceAuthorizationSummaryLine();
+    $signatureSha256 = hash('sha256', $signatureBinary);
+    $startedTransaction = false;
+    $authorizationId = 0;
+    $pendingSignaturePath = $signaturePaths['relative'] . '.tmp';
+
+    try {
+        if (!$pdo->inTransaction()) {
+            $pdo->beginTransaction();
+            $startedTransaction = true;
+        }
+
+        $stmt = $pdo->prepare(
+            "INSERT INTO service_authorizations
+                (service_request_id, agreement_type, agreement_summary, scope_of_work, signature_path, signature_sha256, signed_at, signed_latitude, signed_longitude)
+             VALUES
+                (:service_request_id, 'service_authorization', :agreement_summary, :scope_of_work, :signature_path, :signature_sha256, :signed_at, :signed_latitude, :signed_longitude)"
+        );
+        $stmt->execute([
+            ':service_request_id' => $serviceRequestId,
+            ':agreement_summary'  => $summaryLine,
+            ':scope_of_work'      => $scopeOfWork,
+            ':signature_path'     => $pendingSignaturePath,
+            ':signature_sha256'   => $signatureSha256,
+            ':signed_at'          => $signedAt,
+            ':signed_latitude'    => $latitude,
+            ':signed_longitude'   => $longitude,
+        ]);
+        $authorizationId = (int) $pdo->lastInsertId();
+
+        if (!rename($signaturePaths['temp'], $signaturePaths['absolute'])) {
+            throw new RuntimeException('Unable to finalize signature image.');
+        }
+
+        $update = $pdo->prepare(
+            "UPDATE service_authorizations
+             SET signature_path = :signature_path
+             WHERE id = :id
+             LIMIT 1"
+        );
+        $update->execute([
+            ':signature_path' => $signaturePaths['relative'],
+            ':id' => $authorizationId,
+        ]);
+
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
+    } catch (Throwable $e) {
+        if ($startedTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        if (is_file($signaturePaths['temp'])) {
+            @unlink($signaturePaths['temp']);
+        }
+        if (is_file($signaturePaths['absolute'])) {
+            @unlink($signaturePaths['absolute']);
+        }
+        throw $e;
+    }
+
+    return serviceAuthorizationFetchById($pdo, $authorizationId) ?? [];
+}
+
+function serviceAuthorizationFetchById(PDO $pdo, int $authorizationId): ?array
+{
+    $stmt = $pdo->prepare(
+        "SELECT
+            sa.*,
+            sr.id AS service_request_number,
+            COALESCE(NULLIF(TRIM(CONCAT(COALESCE(c.first_name, ''), ' ', COALESCE(c.last_name, ''))), ''), 'Customer') AS customer_name
+         FROM service_authorizations sa
+         JOIN service_requests sr ON sr.id = sa.service_request_id
+         LEFT JOIN customers c ON c.id = sr.customer_id
+         WHERE sa.id = :id
+         LIMIT 1"
+    );
+    $stmt->execute([':id' => $authorizationId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $row ?: null;
+}
+
+function serviceAuthorizationResolveSignaturePath(string $relativePath): string
+{
+    $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
+    $baseRoot     = realpath(dirname(__DIR__));
+    $uploadsRoot  = realpath(serviceAuthorizationStorageRoot());
+    $absolutePath = $baseRoot . '/' . $relativePath;
+    $resolved     = realpath($absolutePath);
+
+    if (
+        $resolved === false ||
+        $uploadsRoot === false ||
+        ($resolved !== $uploadsRoot && strpos($resolved, $uploadsRoot . DIRECTORY_SEPARATOR) !== 0)
+    ) {
+        throw new RuntimeException('Signature file is unavailable.');
+    }
+
+    return $resolved;
+}
+
+function serviceAuthorizationFontPath(bool $bold = false): ?string
+{
+    $candidates = $bold
+        ? [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
+        ]
+        : [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/dejavu/DejaVuSans.ttf',
+        ];
+
+    foreach ($candidates as $candidate) {
+        if (is_file($candidate)) {
+            return $candidate;
+        }
+    }
+
+    return null;
+}
+
+function serviceAuthorizationWrapText(?string $fontPath, int $fontSize, int $maxWidth, string $text): array
+{
+    $text = trim($text);
+    if ($text === '') {
+        return [''];
+    }
+
+    if ($fontPath === null || !function_exists('imagettfbbox')) {
+        return preg_split("/\n/", wordwrap($text, 70), -1, PREG_SPLIT_NO_EMPTY) ?: [$text];
+    }
+
+    $lines = [];
+    foreach (preg_split("/\n/", $text) ?: [] as $paragraph) {
+        $paragraph = trim($paragraph);
+        if ($paragraph === '') {
+            $lines[] = '';
+            continue;
+        }
+
+        $words = preg_split('/\s+/', $paragraph) ?: [];
+        $line  = '';
+        foreach ($words as $word) {
+            $candidate = $line === '' ? $word : $line . ' ' . $word;
+            $bbox = imagettfbbox($fontSize, 0, $fontPath, $candidate);
+            $width = $bbox ? abs($bbox[2] - $bbox[0]) : 0;
+            if ($line !== '' && $width > $maxWidth) {
+                $lines[] = $line;
+                $line = $word;
+            } else {
+                $line = $candidate;
+            }
+        }
+        $lines[] = $line;
+    }
+
+    return $lines === [] ? [$text] : $lines;
+}
+
+function serviceAuthorizationRenderTextLine($image, ?string $fontPath, int $fontSize, int $x, int $y, int $color, string $text, int $builtInFont = 3): void
+{
+    if ($fontPath !== null && function_exists('imagettftext')) {
+        imagettftext($image, $fontSize, 0, $x, $y, $color, $fontPath, $text);
+        return;
+    }
+
+    imagestring($image, $builtInFont, $x, max(0, $y - 14), $text, $color);
+}
+
+function serviceAuthorizationRenderPages(array $authorization): array
+{
+    $pageWidth          = 1275;
+    $pageHeight         = 1650;
+    $marginX            = 90;
+    $topMargin          = 110;
+    $bottomMargin       = 90;
+    $signatureBlockSize = 290;
+    $bodyLimit          = $pageHeight - $bottomMargin - $signatureBlockSize;
+    $bodyWidth          = $pageWidth - ($marginX * 2);
+    $titleFont          = serviceAuthorizationFontPath(true);
+    $bodyFont           = serviceAuthorizationFontPath(false);
+    $pages              = [];
+
+    $newPage = static function () use ($pageWidth, $pageHeight): array {
+        $image = imagecreatetruecolor($pageWidth, $pageHeight);
+        imageantialias($image, true);
+        $white = imagecolorallocate($image, 255, 255, 255);
+        imagefilledrectangle($image, 0, 0, $pageWidth, $pageHeight, $white);
+
+        return [
+            'image' => $image,
+            'y' => 110,
+        ];
+    };
+
+    $page = $newPage();
+    $black = imagecolorallocate($page['image'], 17, 24, 39);
+    $muted = imagecolorallocate($page['image'], 75, 85, 99);
+    $lineColor = imagecolorallocate($page['image'], 209, 213, 219);
+
+    $ensureRoom = static function (array &$pageState, int $neededHeight) use (&$pages, $newPage, $bodyLimit): void {
+        if (($pageState['y'] + $neededHeight) <= $bodyLimit) {
+            return;
+        }
+
+        $pages[] = $pageState['image'];
+        $pageState = $newPage();
+    };
+
+    $drawWrappedBlock = static function (array &$pageState, string $text, int $fontSize, int $lineHeight, int $color, bool $bold = false, int $after = 18) use ($bodyWidth, $marginX, $ensureRoom, $titleFont, $bodyFont): void {
+        $fontPath = $bold ? $titleFont : $bodyFont;
+        $lines = serviceAuthorizationWrapText($fontPath, $fontSize, $bodyWidth, $text);
+        foreach ($lines as $line) {
+            $ensureRoom($pageState, $lineHeight);
+            serviceAuthorizationRenderTextLine($pageState['image'], $fontPath, $fontSize, $marginX, $pageState['y'], $color, $line, $bold ? 5 : 4);
+            $pageState['y'] += $lineHeight;
+        }
+        $pageState['y'] += $after;
+    };
+
+    $drawWrappedBlock($page, 'Service Authorization Agreement', 26, 42, $black, true, 10);
+    $drawWrappedBlock($page, serviceAuthorizationSummaryLine(), 16, 28, $black, false, 16);
+    $drawWrappedBlock($page, 'Customer: ' . ($authorization['customer_name'] ?? 'Customer'), 14, 24, $muted, false, 0);
+    $drawWrappedBlock($page, 'Service Request #: ' . (string) ($authorization['service_request_number'] ?? $authorization['service_request_id'] ?? ''), 14, 24, $muted, false, 0);
+    $drawWrappedBlock($page, 'Signed: ' . serviceAuthorizationFormatSignedAtDisplay($authorization['signed_at'] ?? ''), 14, 24, $muted, false, 24);
+    $drawWrappedBlock($page, 'Scope of Work', 18, 30, $black, true, 4);
+    $drawWrappedBlock($page, (string) ($authorization['scope_of_work'] ?? ''), 15, 28, $black, false, 20);
+    $drawWrappedBlock($page, 'Terms', 18, 30, $black, true, 4);
+
+    foreach (serviceAuthorizationClauses() as $index => $clause) {
+        $drawWrappedBlock($page, ($index + 1) . '. ' . $clause, 15, 28, $black, false, 10);
+    }
+
+    $signatureTop = max($page['y'] + 10, $pageHeight - $bottomMargin - $signatureBlockSize + 20);
+    if ($signatureTop > ($pageHeight - $bottomMargin - $signatureBlockSize + 20)) {
+        $pages[] = $page['image'];
+        $page = $newPage();
+        $black = imagecolorallocate($page['image'], 17, 24, 39);
+        $muted = imagecolorallocate($page['image'], 75, 85, 99);
+        $lineColor = imagecolorallocate($page['image'], 209, 213, 219);
+        $signatureTop = $pageHeight - $bottomMargin - $signatureBlockSize + 20;
+    }
+
+    imageline($page['image'], $marginX, $signatureTop - 16, $pageWidth - $marginX, $signatureTop - 16, $lineColor);
+    serviceAuthorizationRenderTextLine($page['image'], $titleFont, 18, $marginX, $signatureTop + 18, $black, 'Customer Signature', 5);
+
+    $signaturePath = serviceAuthorizationResolveSignaturePath((string) ($authorization['signature_path'] ?? ''));
+    $signatureImage = @imagecreatefrompng($signaturePath);
+    if ($signatureImage === false) {
+        throw new RuntimeException('Stored signature image is unavailable.');
+    }
+
+    $boxX = $marginX;
+    $boxY = $signatureTop + 42;
+    $boxW = 530;
+    $boxH = 140;
+    imagerectangle($page['image'], $boxX, $boxY, $boxX + $boxW, $boxY + $boxH, $lineColor);
+
+    $srcW = imagesx($signatureImage);
+    $srcH = imagesy($signatureImage);
+    $destW = $boxW - 24;
+    $destH = max(1, (int) round(($srcH / max(1, $srcW)) * $destW));
+    if ($destH > ($boxH - 24)) {
+        $destH = $boxH - 24;
+        $destW = max(1, (int) round(($srcW / max(1, $srcH)) * $destH));
+    }
+    $destX = $boxX + (int) floor(($boxW - $destW) / 2);
+    $destY = $boxY + (int) floor(($boxH - $destH) / 2);
+    imagealphablending($page['image'], true);
+    imagesavealpha($page['image'], true);
+    imagecopyresampled($page['image'], $signatureImage, $destX, $destY, 0, 0, $destW, $destH, $srcW, $srcH);
+    imagedestroy($signatureImage);
+
+    $stampX = $boxX + $boxW + 40;
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 16, $stampX, $boxY + 22, $black, 'Captured Details', 4);
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $stampX, $boxY + 58, $muted, 'Timestamp: ' . serviceAuthorizationFormatSignedAtDisplay($authorization['signed_at'] ?? ''), 3);
+
+    $lat = $authorization['signed_latitude'] ?? null;
+    $lng = $authorization['signed_longitude'] ?? null;
+    $gpsText = ($lat !== null && $lng !== null)
+        ? sprintf('GPS: %.6f, %.6f', (float) $lat, (float) $lng)
+        : 'GPS: Not captured';
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $stampX, $boxY + 92, $muted, $gpsText, 3);
+    serviceAuthorizationRenderTextLine($page['image'], $bodyFont, 14, $stampX, $boxY + 126, $muted, 'Agreement: Service Authorization', 3);
+
+    $pages[] = $page['image'];
+
+    $jpegPages = [];
+    foreach ($pages as $image) {
+        ob_start();
+        imagejpeg($image, null, 92);
+        $jpegPages[] = (string) ob_get_clean();
+        imagedestroy($image);
+    }
+
+    return $jpegPages;
+}
+
+function serviceAuthorizationRenderPdfFromJpegs(array $jpegPages): string
+{
+    if ($jpegPages === []) {
+        throw new RuntimeException('No pages available for PDF generation.');
+    }
+
+    if (class_exists('Imagick')) {
+        $imagick = new Imagick();
+        foreach ($jpegPages as $jpeg) {
+            $page = new Imagick();
+            $page->setResolution(150, 150);
+            $page->readImageBlob($jpeg);
+            $page->setImageFormat('jpeg');
+            $imagick->addImage($page);
+            $page->clear();
+            $page->destroy();
+        }
+        $imagick->setImageFormat('pdf');
+        $blob = $imagick->getImagesBlob();
+        $imagick->clear();
+        $imagick->destroy();
+        return $blob;
+    }
+
+    $objects = [];
+    $offsets = [];
+    $pageRefs = [];
+    $nextId = 3;
+
+    foreach ($jpegPages as $index => $jpeg) {
+        $imageInfo = @getimagesizefromstring($jpeg);
+        if ($imageInfo === false) {
+            throw new RuntimeException('Unable to read rendered PDF page.');
+        }
+
+        $pageObjId = $nextId++;
+        $contentObjId = $nextId++;
+        $imageObjId = $nextId++;
+        $pageRefs[] = $pageObjId . ' 0 R';
+        $imageName = 'Im' . ($index + 1);
+
+        $content = "q\n612 0 0 792 0 0 cm\n/{$imageName} Do\nQ\n";
+        $objects[$imageObjId] =
+            "<< /Type /XObject /Subtype /Image /Width {$imageInfo[0]} /Height {$imageInfo[1]} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " . strlen($jpeg) . " >>\n" .
+            "stream\n{$jpeg}\nendstream";
+        $objects[$contentObjId] =
+            "<< /Length " . strlen($content) . " >>\nstream\n{$content}endstream";
+        $objects[$pageObjId] =
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /{$imageName} {$imageObjId} 0 R >> >> /Contents {$contentObjId} 0 R >>";
+    }
+
+    $objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+    $objects[2] = "<< /Type /Pages /Count " . count($pageRefs) . " /Kids [" . implode(' ', $pageRefs) . "] >>";
+    ksort($objects);
+
+    $pdf = "%PDF-1.4\n";
+    foreach ($objects as $id => $body) {
+        $offsets[$id] = strlen($pdf);
+        $pdf .= $id . " 0 obj\n" . $body . "\nendobj\n";
+    }
+
+    $xrefOffset = strlen($pdf);
+    $maxId = max(array_keys($objects));
+    $pdf .= "xref\n0 " . ($maxId + 1) . "\n";
+    $pdf .= "0000000000 65535 f \n";
+    for ($i = 1; $i <= $maxId; $i++) {
+        $offset = $offsets[$i] ?? 0;
+        $pdf .= sprintf("%010d 00000 n \n", $offset);
+    }
+
+    $pdf .= "trailer\n<< /Size " . ($maxId + 1) . " /Root 1 0 R >>\nstartxref\n{$xrefOffset}\n%%EOF";
+    return $pdf;
+}
+
+function serviceAuthorizationGeneratePdf(PDO $pdo, int $authorizationId): array
+{
+    $authorization = serviceAuthorizationFetchById($pdo, $authorizationId);
+    if (!$authorization) {
+        throw new RuntimeException('Authorization record not found.');
+    }
+
+    $jpegPages = serviceAuthorizationRenderPages($authorization);
+    $pdfBinary = serviceAuthorizationRenderPdfFromJpegs($jpegPages);
+
+    return [
+        'filename' => sprintf('service-authorization-%d.pdf', (int) $authorization['service_request_id']),
+        'content' => $pdfBinary,
+        'authorization' => $authorization,
+    ];
+}
