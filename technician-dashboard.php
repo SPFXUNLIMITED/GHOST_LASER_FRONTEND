@@ -1419,6 +1419,8 @@ require_once __DIR__ . '/templates/header.php';
                                     class="job-note-edit"
                                     data-tech-notes-job-id="<?= $serviceRequestId ?>"
                                     data-technician-notes="<?= htmlspecialchars($technicianNotes, ENT_QUOTES, 'UTF-8') ?>"
+                                    aria-haspopup="dialog"
+                                    aria-controls="technicianNotesModal"
                                     aria-label="Edit technician notes for <?= htmlspecialchars($technicianNotesLabelTarget, ENT_QUOTES, 'UTF-8') ?>"
                                     title="Edit technician notes"
                                 >
@@ -1820,6 +1822,40 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
         if (!techNotesStatus) return;
         techNotesStatus.textContent = msg;
         techNotesStatus.className = 'tech-notes-status' + (type ? ' ' + type : '');
+    }
+
+    function modalFocusableElements(container) {
+        if (!container) return [];
+        return Array.prototype.slice.call(
+            container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+        ).filter(function (el) {
+            return el.offsetParent !== null || el === document.activeElement;
+        });
+    }
+
+    function trapModalFocus(event, container) {
+        if (event.key !== 'Tab') return;
+        var focusable = modalFocusableElements(container);
+        if (focusable.length === 0) {
+            event.preventDefault();
+            return;
+        }
+
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+
+        if (event.shiftKey) {
+            if (document.activeElement === first || !container.contains(document.activeElement)) {
+                event.preventDefault();
+                last.focus();
+            }
+            return;
+        }
+
+        if (document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
     }
 
     function refreshTechnicianNotesCard(jobId, notes, scopeOfWork) {
@@ -2636,6 +2672,8 @@ var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG |
             closeAuthorizationModal();
         } else if (event.key === 'Escape' && techNotesModal && techNotesModal.classList.contains('open')) {
             closeTechnicianNotesModal();
+        } else if (techNotesModal && techNotesModal.classList.contains('open')) {
+            trapModalFocus(event, techNotesModal);
         }
     });
 }());
