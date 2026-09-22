@@ -616,6 +616,7 @@ if ($step === 3 && $booking) {
         $travelMiles = round($distanceResult * 2, 1); // round trip
     } else {
         $travelDistanceError = $distanceResult['error'] ?? 'api_error';
+        $travelDistanceRawError = $distanceResult['raw_error'] ?? null;
     }
 }
 
@@ -1110,7 +1111,7 @@ require_once __DIR__ . '/templates/header.php';
                     </div>
                     <?php if ($travelDistanceError): ?>
                     <div class="rounded-lg border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm text-red-300">
-                        <?= h(travelDistanceErrorMessage($travelDistanceError)) ?>
+                        <?= h(travelDistanceErrorMessage($travelDistanceError, $travelDistanceRawError ?? null, true)) ?>
                     </div>
                     <?php endif; ?>
 
