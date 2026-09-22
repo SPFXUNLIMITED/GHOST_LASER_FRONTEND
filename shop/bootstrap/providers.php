@@ -95,4 +95,5 @@ return [
     TaxServiceProvider::class,
     ThemeServiceProvider::class,
     UserServiceProvider::class,
+	Webkul\GhostLaser\Providers\GhostLaserServiceProvider::class,
 ];

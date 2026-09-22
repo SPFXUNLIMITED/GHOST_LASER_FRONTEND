@@ -11,17 +11,6 @@ export default defineConfig(({ mode }) => {
     return {
         build: {
             emptyOutDir: true,
-            minify: "esbuild",
-            cssCodeSplit: true,
-            rollupOptions: {
-                output: {
-                    manualChunks: {
-                        vue: ["vue"],
-                        veeValidate: ["vee-validate", "@vee-validate/rules", "@vee-validate/i18n"],
-                        vendor: ["axios", "mitt"]
-                    }
-                }
-            }
         },
 
         envDir,
@@ -29,22 +18,20 @@ export default defineConfig(({ mode }) => {
         server: {
             host: process.env.VITE_HOST || "localhost",
             port: process.env.VITE_PORT || 5173,
-            cors: true,
         },
 
         plugins: [
             vue(),
 
             laravel({
-                hotFile: "../../../public/shop-default-vite.hot",
+                hotFile: "../../../public/ghostlaser-default-vite.hot",
                 publicDirectory: "../../../public",
-                buildDirectory: "themes/shop/ghost-laser/build",
+                buildDirectory: "themes/ghostlaser/default/build",
                 input: [
                     "src/Resources/assets/css/app.css",
                     "src/Resources/assets/js/app.js",
                 ],
                 refresh: true,
-                preload: false,
             }),
         ],
 
