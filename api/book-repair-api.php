@@ -31,10 +31,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // ── Load DB ───────────────────────────────────────────────────────────────────
 require __DIR__ . '/../project/db.php';
 require_once __DIR__ . '/../functions.php';
+require_once __DIR__ . '/../travel-helper.php';
 try {
     $pdo->exec("ALTER TABLE service_requests MODIFY COLUMN request_status ENUM('abandoned','new','queued','completed','cancelled','deleted') NOT NULL DEFAULT 'new'");
 } catch (\Throwable $ex) {
     // Non-fatal if request_status is already compatible or table is not available yet.
+}
+try {
+    $pdo->exec("ALTER TABLE service_requests MODIFY COLUMN geocode_status TEXT NULL");
+} catch (\Throwable $ex) {
+    // Non-fatal if geocode_status is already wide enough or table is not available yet.
 }
 
 // ── Rate limit: max 10 submissions per IP per hour (reuses form_rate_limit) ───
@@ -94,7 +100,7 @@ function load_env_value(string $key): string {
 
 /**
  * Calls the Google Maps Geocoding API and returns an array with:
- *   ['lat' => float|null, 'lng' => float|null, 'status' => 'ok'|'failed']
+ *   ['lat' => float|null, 'lng' => float|null, 'status' => string]
  */
 function geocode_address(string $full_address): array {
 	
@@ -125,8 +131,14 @@ function geocode_address(string $full_address): array {
 
     $data = json_decode((string)$response, true);
     if (!is_array($data) || ($data['status'] ?? '') !== 'OK' || empty($data['results'][0]['geometry']['location'])) {
-        error_log('api/book-repair-api.php geocode_address failed: status=' . ($data['status'] ?? 'invalid_json') . ' address=' . $full_address);
-        return ['lat' => null, 'lng' => null, 'status' => 'failed'];
+        $googleError = googleApiErrorSummary(is_array($data) ? $data : [], (string) ($data['status'] ?? 'invalid_json'));
+        error_log('api/book-repair-api.php geocode_address failed: ' . json_encode([
+            'status'  => $googleError['status'],
+            'message' => $googleError['message'],
+            'details' => $googleError['details'],
+            'address' => $full_address,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        return ['lat' => null, 'lng' => null, 'status' => $googleError['display']];
     }
 
     $location = $data['results'][0]['geometry']['location'];

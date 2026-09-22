@@ -188,7 +188,7 @@ try {
             request_status       VARCHAR(50)  NOT NULL DEFAULT 'new',
             latitude             DECIMAL(10,7) NULL,
             longitude            DECIMAL(10,7) NULL,
-            geocode_status       VARCHAR(50)  NULL,
+            geocode_status       TEXT NULL,
             preferred_date_start DATE NULL,
             preferred_date_end   DATE NULL,
             recurring_profile_id INT UNSIGNED NULL,
