@@ -13,13 +13,50 @@ if (empty($_SESSION['admin_id'])) {
 
 require_once dirname(__DIR__) . '/project/db.php';
 require_once dirname(__DIR__) . '/prospects_schema.php';
-require_once dirname(__DIR__) . '/smtp_config.php';
 require_once dirname(__DIR__) . '/lib/PHPMailer/src/Exception.php';
 require_once dirname(__DIR__) . '/lib/PHPMailer/src/PHPMailer.php';
 require_once dirname(__DIR__) . '/lib/PHPMailer/src/SMTP.php';
 
 use PHPMailer\PHPMailer\Exception as MailerException;
 use PHPMailer\PHPMailer\PHPMailer;
+
+$envFile = dirname(__DIR__) . '/.env';
+if (is_file($envFile) && is_readable($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (is_array($lines)) {
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '' || $line[0] === '#' || strpos($line, '=') === false) {
+                continue;
+            }
+
+            [$name, $value] = explode('=', $line, 2);
+            $name = trim($name);
+            $value = trim($value);
+            if ($name === '') {
+                continue;
+            }
+
+            if (strlen($value) >= 2) {
+                $first = $value[0];
+                $last = $value[strlen($value) - 1];
+                if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                    $value = substr($value, 1, -1);
+                }
+            }
+
+            $_ENV[$name] = $value;
+            putenv($name . '=' . $value);
+        }
+    }
+}
+
+$SMTP_HOST = (string) ($_ENV['SMTP_HOST'] ?? '');
+$SMTP_PORT = (int) ($_ENV['SMTP_PORT'] ?? 0);
+$SMTP_USERNAME = (string) ($_ENV['SMTP_USERNAME'] ?? '');
+$SMTP_PASSWORD = (string) ($_ENV['SMTP_PASSWORD'] ?? '');
+$SMTP_FROM_EMAIL = (string) ($_ENV['SMTP_FROM_EMAIL'] ?? '');
+$SMTP_FROM_NAME = (string) ($_ENV['SMTP_FROM_NAME'] ?? '');
 
 prospectsEnsureSchema($pdo);
 

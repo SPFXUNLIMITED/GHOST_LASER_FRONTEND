@@ -31,10 +31,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // ── Load DB ───────────────────────────────────────────────────────────────────
 require __DIR__ . '/../project/db.php';
 require_once __DIR__ . '/../functions.php';
+require_once __DIR__ . '/../travel-helper.php';
 try {
     $pdo->exec("ALTER TABLE service_requests MODIFY COLUMN request_status ENUM('abandoned','new','queued','completed','cancelled','deleted') NOT NULL DEFAULT 'new'");
 } catch (\Throwable $ex) {
     // Non-fatal if request_status is already compatible or table is not available yet.
+}
+try {
+    $pdo->exec("ALTER TABLE service_requests MODIFY COLUMN geocode_status TEXT NULL");
+} catch (\Throwable $ex) {
+    // Non-fatal if geocode_status is already wide enough or table is not available yet.
 }
 
 // ── Rate limit: max 10 submissions per IP per hour (reuses form_rate_limit) ───
@@ -84,49 +90,7 @@ function str_field(array $body, string $key): string {
 }
 
 function load_env_value(string $key): string {
-    static $dotenv_values = null;
-
-    if ($dotenv_values === null) {
-        $dotenv_values = [];
-        $dotenv_path = __DIR__ . '/.env';
-        if (is_file($dotenv_path) && is_readable($dotenv_path)) {
-            $lines = file($dotenv_path, FILE_IGNORE_NEW_LINES);
-            if (is_array($lines)) {
-                foreach ($lines as $line) {
-                    $line = trim((string)$line);
-                    if ($line === '' || str_starts_with($line, '#')) {
-                        continue;
-                    }
-                    $sep = strpos($line, '=');
-                    if ($sep === false) {
-                        continue;
-                    }
-                    $name = trim(substr($line, 0, $sep));
-                    if ($name === '' || !preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $name)) {
-                        continue;
-                    }
-                    $value = trim(substr($line, $sep + 1));
-                    if (strlen($value) >= 2) {
-                        $first = $value[0];
-                        $last  = $value[strlen($value) - 1];
-                        if ($first === '"' && $last === '"') {
-                            $value = substr($value, 1, -1);
-                            $value = strtr($value, ['\\\\' => '\\', '\\"' => '"', '\\n' => "\n", '\\r' => "\r", '\\t' => "\t"]);
-                        } elseif ($first === "'" && $last === "'") {
-                            $value = substr($value, 1, -1);
-                            $value = strtr($value, ['\\\\' => '\\', "\\'" => "'"]);
-                        }
-                    } else {
-                        $value = preg_replace('/\s+#.*$/', '', $value) ?? $value;
-                        $value = rtrim($value);
-                    }
-                    $dotenv_values[$name] = $value;
-                }
-            }
-        }
-    }
-
-    foreach ([getenv($key), getenv('REDIRECT_' . $key), $_ENV[$key] ?? null, $_SERVER[$key] ?? null, $_SERVER['REDIRECT_' . $key] ?? null, $dotenv_values[$key] ?? null] as $candidate) {
+    foreach ([getenv($key), getenv('REDIRECT_' . $key), $_ENV[$key] ?? null, $_SERVER[$key] ?? null, $_SERVER['REDIRECT_' . $key] ?? null] as $candidate) {
         if ($candidate !== null && trim((string)$candidate) !== '') {
             return trim((string)$candidate);
         }
@@ -136,7 +100,7 @@ function load_env_value(string $key): string {
 
 /**
  * Calls the Google Maps Geocoding API and returns an array with:
- *   ['lat' => float|null, 'lng' => float|null, 'status' => 'ok'|'failed']
+ *   ['lat' => float|null, 'lng' => float|null, 'status' => string]
  */
 function geocode_address(string $full_address): array {
 	
@@ -167,8 +131,14 @@ function geocode_address(string $full_address): array {
 
     $data = json_decode((string)$response, true);
     if (!is_array($data) || ($data['status'] ?? '') !== 'OK' || empty($data['results'][0]['geometry']['location'])) {
-        error_log('api/book-repair-api.php geocode_address failed: status=' . ($data['status'] ?? 'invalid_json') . ' address=' . $full_address);
-        return ['lat' => null, 'lng' => null, 'status' => 'failed'];
+        $googleError = googleApiErrorSummary(is_array($data) ? $data : [], (string) ($data['status'] ?? 'invalid_json'));
+        error_log('api/book-repair-api.php geocode_address failed: ' . json_encode([
+            'status'  => $googleError['status'],
+            'message' => $googleError['message'],
+            'details' => $googleError['details'],
+            'address' => $full_address,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        return ['lat' => null, 'lng' => null, 'status' => $googleError['display']];
     }
 
     $location = $data['results'][0]['geometry']['location'];

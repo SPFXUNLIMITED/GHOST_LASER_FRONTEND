@@ -104,8 +104,121 @@ function updateTravelSettings(PDO $pdo, array $settings): void
     ]);
 }
 
+function googleApiErrorDetailsToString(mixed $details): string
+{
+    if (is_string($details)) {
+        return trim($details);
+    }
+    if (!is_array($details) || $details === []) {
+        return '';
+    }
+
+    $json = json_encode($details, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    return $json === false ? '' : $json;
+}
+
+function googleApiErrorPrimaryReason(mixed $details): string
+{
+    if (is_array($details)) {
+        foreach ($details as $value) {
+            if (is_array($value)) {
+                $reason = trim((string) ($value['reason'] ?? ''));
+                if ($reason !== '') {
+                    return $reason;
+                }
+            }
+        }
+    }
+
+    return '';
+}
+
+function googleApiErrorSummary(array $data, string $fallbackStatus = '', int $httpCode = 0): array
+{
+    $error = is_array($data['error'] ?? null) ? $data['error'] : [];
+
+    $status = trim((string) ($error['status'] ?? $data['status'] ?? $fallbackStatus));
+    if ($status === '' && $httpCode > 0) {
+        $status = 'HTTP_' . $httpCode;
+    }
+
+    $message = trim((string) ($error['message'] ?? $data['error_message'] ?? ''));
+    $details = $error['details'] ?? null;
+    $reason = googleApiErrorPrimaryReason($details);
+    $detailsString = googleApiErrorDetailsToString($details);
+
+    $display = $status !== '' ? $status : 'api_error';
+    $primary = $reason !== '' ? $reason : $message;
+    if ($primary !== '' && $primary !== $display) {
+        $display .= ': ' . $primary;
+    }
+    if ($message !== '' && $message !== $primary) {
+        $display .= ' — ' . $message;
+    }
+    if ($detailsString !== '' && $detailsString !== $primary && $detailsString !== $message) {
+        $display .= ' | details=' . $detailsString;
+    }
+
+    return [
+        'status'  => $status,
+        'message' => $message,
+        'details' => $details,
+        'display' => $display,
+    ];
+}
+
+function geocodeAddressForRoutes(string $address, string $apiKey): array
+{
+    $url = 'https://maps.googleapis.com/maps/api/geocode/json?' . http_build_query([
+        'address' => $address,
+        'key'     => $apiKey,
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 6,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_SSL_VERIFYPEER => true,
+    ]);
+    $response = curl_exec($ch);
+    $curlErr  = curl_errno($ch);
+    curl_close($ch);
+
+    if ($curlErr || $response === false) {
+        error_log('travel-helper.php geocodeAddressForRoutes curl error: ' . $curlErr);
+        return ['ok' => false, 'error' => 'api_error'];
+    }
+
+    $data   = json_decode((string) $response, true);
+    $status = (string) ($data['status'] ?? '');
+
+    if ($status !== 'OK' || empty($data['results'][0]['geometry']['location'])) {
+        $googleError = googleApiErrorSummary(is_array($data) ? $data : [], $status);
+        if (!in_array($status, ['ZERO_RESULTS', 'NOT_FOUND'], true)) {
+            error_log('travel-helper.php geocodeAddressForRoutes API error: ' . json_encode([
+                'status'  => $googleError['status'],
+                'message' => $googleError['message'],
+                'details' => $googleError['details'],
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        }
+        return in_array($status, ['ZERO_RESULTS', 'NOT_FOUND'], true)
+            ? ['ok' => false, 'error' => 'invalid_address']
+            : ['ok' => false, 'error' => 'api_error', 'raw_error' => $googleError['display']];
+    }
+
+    $location = $data['results'][0]['geometry']['location'];
+
+    return [
+        'ok'  => true,
+        'lat' => (float) ($location['lat'] ?? 0),
+        'lng' => (float) ($location['lng'] ?? 0),
+    ];
+}
+
 /**
- * Calls the Google Maps Distance Matrix API and returns the one-way driving
+ * Calls the Google Maps Routes API and returns the one-way driving
  * distance in miles between $origin and $destination.
  *
  * Returns a float (miles) on success, or an array ['error' => '<code>'] on failure.
@@ -125,23 +238,59 @@ function calculateDrivingDistanceMiles(string $origin, string $destination, stri
         return ['error' => 'invalid_address'];
     }
 
-    $url = 'https://maps.googleapis.com/maps/api/distancematrix/json?' . http_build_query([
-        'origins'      => $origin,
-        'destinations' => $destination,
-        'mode'         => 'driving',
-        'units'        => 'imperial',
-        'key'          => $apiKey,
-    ]);
+    $originCoords = geocodeAddressForRoutes($origin, $apiKey);
+    if (($originCoords['ok'] ?? false) !== true) {
+        return array_filter([
+            'error' => $originCoords['error'] ?? 'api_error',
+            'raw_error' => $originCoords['raw_error'] ?? null,
+        ], static fn ($value) => $value !== null);
+    }
 
-    $ch = curl_init($url);
+    $destinationCoords = geocodeAddressForRoutes($destination, $apiKey);
+    if (($destinationCoords['ok'] ?? false) !== true) {
+        return array_filter([
+            'error' => $destinationCoords['error'] ?? 'api_error',
+            'raw_error' => $destinationCoords['raw_error'] ?? null,
+        ], static fn ($value) => $value !== null);
+    }
+
+    $requestBody = [
+        'origin' => [
+            'location' => [
+                'latLng' => [
+                    'latitude'  => (float) $originCoords['lat'],
+                    'longitude' => (float) $originCoords['lng'],
+                ],
+            ],
+        ],
+        'destination' => [
+            'location' => [
+                'latLng' => [
+                    'latitude'  => (float) $destinationCoords['lat'],
+                    'longitude' => (float) $destinationCoords['lng'],
+                ],
+            ],
+        ],
+        'travelMode' => 'DRIVE',
+    ];
+
+    $ch = curl_init('https://routes.googleapis.com/directions/v2:computeRoutes');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($requestBody, JSON_UNESCAPED_SLASHES),
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'X-Goog-Api-Key: ' . $apiKey,
+            'X-Goog-FieldMask: routes.distanceMeters',
+        ],
         CURLOPT_TIMEOUT        => 6,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_SSL_VERIFYPEER => true,
     ]);
     $response = curl_exec($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $curlErr  = curl_errno($ch);
     curl_close($ch);
 
@@ -150,18 +299,26 @@ function calculateDrivingDistanceMiles(string $origin, string $destination, stri
         return ['error' => 'api_error'];
     }
 
-    $data    = json_decode((string) $response, true);
-    $element = $data['rows'][0]['elements'][0] ?? null;
-    $status  = is_array($element) ? ($element['status'] ?? '') : '';
-
-    if ($status !== 'OK') {
-        error_log('travel-helper.php calculateDrivingDistanceMiles API status: ' . ($status ?: ($data['status'] ?? 'unknown')));
-        return in_array($status, ['ZERO_RESULTS', 'NOT_FOUND'], true)
-            ? ['error' => 'invalid_address']
-            : ['error' => 'api_error'];
+    $data      = json_decode((string) $response, true);
+    $apiStatus = (string) ($data['error']['status'] ?? '');
+    if ($httpCode < 200 || $httpCode >= 300) {
+        $googleError = googleApiErrorSummary(is_array($data) ? $data : [], $apiStatus, $httpCode);
+        error_log('travel-helper.php calculateDrivingDistanceMiles API error: ' . json_encode([
+            'status'  => $googleError['status'],
+            'message' => $googleError['message'],
+            'details' => $googleError['details'],
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        return [
+            'error' => 'api_error',
+            'raw_error' => $googleError['display'],
+        ];
     }
 
-    $meters = (float) ($element['distance']['value'] ?? 0);
+    if (empty($data['routes'][0])) {
+        return ['error' => 'invalid_address'];
+    }
+
+    $meters = (float) ($data['routes'][0]['distanceMeters'] ?? 0);
     if ($meters <= 0) {
         return ['error' => 'api_error'];
     }
@@ -172,8 +329,12 @@ function calculateDrivingDistanceMiles(string $origin, string $destination, stri
 /**
  * Returns a human-readable error message for a travel distance error code.
  */
-function travelDistanceErrorMessage(string $errorCode): string
+function travelDistanceErrorMessage(string $errorCode, ?string $rawError = null, bool $isPublicFacing = true): string
 {
+    if (!$isPublicFacing && $rawError !== null && trim($rawError) !== '') {
+        return trim($rawError);
+    }
+
     return match ($errorCode) {
         'base_location_missing' => "Unable to calculate travel distance \u{2014} the shop\u{2019}s base location has not been configured. Please contact us for a quote.",
         'api_key_missing'       => "Unable to calculate travel distance \u{2014} the distance service is not configured. Please contact us for a quote.",

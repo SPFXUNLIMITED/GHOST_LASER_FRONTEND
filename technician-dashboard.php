@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
+
 // Extend session lifetime to 12 hours for technicians using this page while driving.
 ini_set('session.gc_maxlifetime', 43200);
 session_set_cookie_params([
@@ -9,13 +12,22 @@ session_set_cookie_params([
 ]);
 session_start();
 
-if (empty($_SESSION['admin_id'])) {
+require_once __DIR__ . '/project/technician_dashboard_auth.php';
+
+if (!technicianDashboardHasAccess()) {
     header('Location: admin-login.php');
     exit;
 }
 
+if (empty($_SESSION['technician_dashboard_csrf'])) {
+    $_SESSION['technician_dashboard_csrf'] = bin2hex(random_bytes(16));
+}
+$technicianDashboardCsrf = (string) $_SESSION['technician_dashboard_csrf'];
+
 require_once __DIR__ . '/project/db.php';
 require_once __DIR__ . '/project/service_display.php';
+require_once __DIR__ . '/project/service_authorization.php';
+require_once __DIR__ . '/project/completion_certificate.php';
 require_once __DIR__ . '/scheduling_settings.php';
 require_once __DIR__ . '/mileage_schema.php';
 
@@ -35,56 +47,91 @@ $nextDate = $viewDate->modify('+1 day');
 $dateKey  = $viewDate->format('Y-m-d');
 
 // ── Load scheduled clusters for the selected date ─────────────────────────
-$scheduledJobsStmt = $pdo->prepare("
-    SELECT
-        sc.id AS scheduled_cluster_id,
-        sc.cluster_label,
-        sc.centroid_latitude,
-        sc.centroid_longitude,
-        scj.time_window_start,
-        scj.time_window_end,
-        sr.id AS service_request_id,
-        sr.priority_level,
-        sr.laser_brand,
-        sr.laser_model,
-        sr.laser_watts,
-        sr.laser_age,
-        sr.problem_summary,
-        sr.problem,
-        sr.services,
-        sr.service_speed,
-        sr.speed,
-        sr.service_total,
-        sr.travel_fee,
-        sr.grand_total,
-        sr.preferred_date_start,
-        sr.preferred_date_end,
-        sr.destination_street,
-        sr.destination_city,
-        sr.destination_state,
-        sr.destination_zip,
-        sr.task_contact,
-        COALESCE(c.first_name, '') AS first_name,
-        COALESCE(c.last_name,  '') AS last_name,
-        COALESCE(c.phone,  '') AS phone,
-        COALESCE(c.email,  '') AS email,
-        COALESCE(c.company,'') AS company,
-        COALESCE(c.address, sr.destination_street) AS address,
-        COALESCE(c.city,    sr.destination_city)   AS city,
-        COALESCE(c.state,   sr.destination_state)  AS state,
-        COALESCE(c.zip,     sr.destination_zip)    AS zip
-    FROM scheduled_clusters sc
-    JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
-    JOIN service_requests sr ON sr.id = scj.service_request_id
-    LEFT JOIN customers c ON c.id = sr.customer_id
-    WHERE sc.scheduled_date = :date
-    ORDER BY
-        FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
-        sc.cluster_label ASC,
-        scj.time_window_start ASC
-");
-$scheduledJobsStmt->execute([':date' => $dateKey]);
-$rawJobs = $scheduledJobsStmt->fetchAll(PDO::FETCH_ASSOC);
+$scheduleQueryError = null;
+$rawJobs = [];
+$setScheduleQueryError = static function (array $errorInfo) use (&$scheduleQueryError): void {
+    $scheduleQueryError = [
+        'sqlstate' => (string) ($errorInfo[0] ?? 'N/A'),
+        'code' => isset($errorInfo[1]) && $errorInfo[1] !== null ? (string) $errorInfo[1] : 'N/A',
+        'message' => (string) ($errorInfo[2] ?? 'Unknown database error.'),
+    ];
+
+    error_log(sprintf(
+        'technician-dashboard schedule query failed [SQLSTATE %s] [Code %s] %s',
+        $scheduleQueryError['sqlstate'],
+        $scheduleQueryError['code'],
+        $scheduleQueryError['message']
+    ));
+};
+
+try {
+    $scheduledJobsStmt = $pdo->prepare("
+        SELECT
+            sc.id AS scheduled_cluster_id,
+            sc.cluster_label,
+            sc.centroid_latitude,
+            sc.centroid_longitude,
+            scj.time_window_start,
+            scj.time_window_end,
+            sr.id AS service_request_id,
+            sr.priority_level,
+            sr.laser_brand,
+            sr.laser_model,
+            sr.laser_watts,
+            sr.laser_age,
+            sr.problem_summary,
+            sr.problem,
+            sr.technician_notes,
+            sr.job_photos,
+            sr.services,
+            sr.service_speed,
+            sr.speed,
+            sr.service_total,
+            sr.travel_fee,
+            sr.grand_total,
+            sr.preferred_date_start,
+            sr.preferred_date_end,
+            sr.destination_street,
+            sr.destination_city,
+            sr.destination_state,
+            sr.destination_zip,
+            sr.task_contact,
+            COALESCE(c.first_name, '') AS first_name,
+            COALESCE(c.last_name,  '') AS last_name,
+            COALESCE(c.phone,  '') AS phone,
+            COALESCE(c.email,  '') AS email,
+            COALESCE(c.company,'') AS company,
+            COALESCE(c.address, sr.destination_street) AS address,
+            COALESCE(c.city,    sr.destination_city)   AS city,
+            COALESCE(c.state,   sr.destination_state)  AS state,
+            COALESCE(c.zip,     sr.destination_zip)    AS zip
+        FROM scheduled_clusters sc
+        JOIN scheduled_cluster_jobs scj ON scj.scheduled_cluster_id = sc.id
+        JOIN service_requests sr ON sr.id = scj.service_request_id
+        LEFT JOIN customers c ON c.id = sr.customer_id
+        WHERE sc.scheduled_date = :date
+        ORDER BY
+            FIELD(LOWER(sr.priority_level), 'emergency', 'vip', 'standard'),
+            sc.cluster_label ASC,
+            scj.time_window_start ASC
+    ");
+
+    if ($scheduledJobsStmt === false) {
+        $setScheduleQueryError($pdo->errorInfo());
+    } elseif (!$scheduledJobsStmt->execute([
+        ':date' => $dateKey,
+    ])) {
+        $setScheduleQueryError($scheduledJobsStmt->errorInfo());
+    } else {
+        $rawJobs = $scheduledJobsStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Throwable $e) {
+    $setScheduleQueryError(
+        ($e instanceof PDOException && !empty($e->errorInfo))
+            ? $e->errorInfo
+            : [(string) $e->getCode(), null, $e->getMessage()]
+    );
+}
 
 // ── Group jobs by cluster ─────────────────────────────────────────────────
 $clusters = [];
@@ -100,6 +147,16 @@ foreach ($rawJobs as $job) {
     $clusters[$cid]['jobs'][] = $job;
 }
 $clusters = array_values($clusters);
+$jobIdsForAuthorizations = !empty($rawJobs) ? array_map('intval', array_column($rawJobs, 'service_request_id')) : [];
+$serviceAuthorizations   = [];
+$completionCertificates  = [];
+try {
+    $serviceAuthorizations = serviceAuthorizationFetchLatestByJobIds($pdo, $jobIdsForAuthorizations);
+    $completionCertificates = completionCertificateFetchLatestByJobIds($pdo, $jobIdsForAuthorizations);
+} catch (Throwable $e) {
+    $serviceAuthorizations = [];
+    $completionCertificates = [];
+}
 
 // ── Load scheduling settings (provides shop_address for Returning Home card) ─
 $schedSettings = getSchedulingSettings($pdo);
@@ -216,7 +273,6 @@ function techDashBookingDetailEntries(array $job): array
         'Laser model' => $job['laser_model'] ?? '',
         'Laser watts' => $job['laser_watts'] ?? '',
         'Laser age' => $job['laser_age'] ?? '',
-        'Problem' => $job['problem'] ?? '',
         'Services' => techDashFormatServices($job['services'] ?? null),
         'Service speed' => $job['service_speed'] ?? '',
         'Service total' => $job['service_total'] ?? '',
@@ -495,6 +551,47 @@ $extraHead       = <<<'HTML'
         .mileage-btn:active { transform: scale(0.96); }
         .mileage-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+        .authorize-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 6.25rem;
+            padding: 0.42rem 0.8rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(34, 211, 238, 0.75);
+            background: rgba(34, 211, 238, 0.16);
+            color: #67e8f9;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.15s, border-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .authorize-btn:active { transform: scale(0.96); }
+        .authorize-btn:hover {
+            background: rgba(34, 211, 238, 0.24);
+            border-color: rgba(103, 232, 249, 0.95);
+        }
+
+        .authorization-status {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem 0.75rem;
+            align-items: center;
+            margin-top: 0.7rem;
+            font-size: 0.78rem;
+            color: #a1a1aa;
+        }
+        .authorization-status.is-signed { color: #86efac; }
+        .authorization-download {
+            color: #67e8f9;
+            font-weight: 700;
+            text-decoration: none;
+        }
+        .authorization-download:hover { color: #a5f3fc; }
+
         .btn-on-way {
             background: rgba(103, 232, 249, 0.25);
             border: 1px solid rgba(103, 232, 249, 0.75);
@@ -590,6 +687,427 @@ $extraHead       = <<<'HTML'
             -webkit-backdrop-filter: blur(6px);
         }
         .mileage-modal.open { display: flex; }
+
+        .service-auth-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.92);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        .service-auth-modal.open { display: block; }
+        .service-auth-modal-inner {
+            height: calc(100dvh - 1rem);
+            width: min(100%, 42rem);
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            border-radius: 1.1rem;
+            border: 1px solid rgba(34, 211, 238, 0.24);
+            background: linear-gradient(180deg, rgba(12, 14, 18, 0.98), rgba(5, 7, 9, 0.98));
+            box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.06), 0 24px 70px rgba(0, 0, 0, 0.45);
+            overflow: hidden;
+        }
+        .service-auth-modal-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1rem 0.75rem;
+        }
+        .service-auth-modal-kicker {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: rgba(103, 232, 249, 0.72);
+        }
+        .service-auth-modal-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #f4f4f5;
+            margin-top: 0.35rem;
+        }
+        .service-auth-close {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(113, 113, 122, 0.55);
+            background: rgba(39, 39, 42, 0.5);
+            color: #d4d4d8;
+            font-size: 1.35rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .service-auth-summary {
+            margin: 0 1rem;
+            padding: 0.85rem 0.95rem;
+            border-radius: 0.85rem;
+            background: rgba(34, 211, 238, 0.09);
+            border: 1px solid rgba(34, 211, 238, 0.18);
+            color: #e4e4e7;
+            font-size: 0.86rem;
+            line-height: 1.4;
+        }
+        .service-auth-layout {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 0.9rem 1rem 1rem;
+            gap: 0.8rem;
+        }
+        .service-auth-contract {
+            flex: 0 0 auto;
+            overflow-y: auto;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.7);
+            background: rgba(9, 9, 11, 0.68);
+            padding: 1rem;
+            color: #e4e4e7;
+        }
+        .service-auth-contract h3 {
+            margin: 0 0 0.6rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #67e8f9;
+        }
+        .service-auth-contract p,
+        .service-auth-contract li {
+            font-size: 0.88rem;
+            line-height: 1.55;
+            color: #e4e4e7;
+        }
+        .service-auth-contract p { white-space: pre-line; }
+        .service-auth-contract ol {
+            margin: 0;
+            padding-left: 1.15rem;
+            display: grid;
+            gap: 0.7rem;
+        }
+        .service-auth-signature-panel {
+            flex: none;
+            padding: 0.95rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.78);
+            background: rgba(9, 9, 11, 0.9);
+        }
+        .service-auth-signature-copy {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #f4f4f5;
+        }
+        .service-auth-meta {
+            margin-top: 0.3rem;
+            font-size: 0.75rem;
+            color: #a1a1aa;
+        }
+        .service-auth-canvas {
+            display: block;
+            width: 100%;
+            height: 11rem;
+            margin-top: 0.8rem;
+            border-radius: 0.8rem;
+            border: 1px solid rgba(103, 232, 249, 0.24);
+            background: #ffffff;
+            touch-action: none;
+        }
+        .service-auth-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.7rem;
+            margin-top: 0.8rem;
+        }
+        .service-auth-primary-actions {
+            display: flex;
+            gap: 0.7rem;
+        }
+        .service-auth-secondary,
+        .service-auth-primary {
+            min-height: 2.85rem;
+            padding: 0.65rem 1rem;
+            border-radius: 0.8rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .service-auth-secondary {
+            border: 1px solid rgba(113, 113, 122, 0.75);
+            background: rgba(39, 39, 42, 0.7);
+            color: #e4e4e7;
+        }
+        .service-auth-primary {
+            border: 1px solid rgba(34, 211, 238, 0.85);
+            background: linear-gradient(135deg, rgba(34, 211, 238, 0.48), rgba(6, 182, 212, 0.28));
+            color: #ffffff;
+            min-width: 6rem;
+        }
+        .service-auth-secondary:disabled,
+        .service-auth-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .service-auth-status {
+            min-height: 1rem;
+            margin-top: 0.75rem;
+            font-size: 0.78rem;
+            color: #a1a1aa;
+        }
+        .service-auth-status.ok { color: #86efac; }
+        .service-auth-status.err { color: #fca5a5; }
+
+        .job-note-row,
+        .job-note-edit {
+            width: 100%;
+            margin-top: 0.75rem;
+            padding: 0.8rem 0.9rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.72);
+            background: rgba(9, 9, 11, 0.58);
+        }
+        .job-note-row-label,
+        .job-note-edit-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #71717a;
+        }
+        .job-note-row-value,
+        .job-note-edit-value {
+            margin-top: 0.45rem;
+            font-size: 0.86rem;
+            line-height: 1.5;
+            color: #e4e4e7;
+            white-space: pre-wrap;
+        }
+        .job-note-edit {
+            display: block;
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease;
+        }
+        .job-note-edit:hover,
+        .job-note-edit:focus-visible {
+            border-color: rgba(103, 232, 249, 0.4);
+            background: rgba(9, 9, 11, 0.82);
+            outline: none;
+        }
+        .job-note-edit-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: #a1a1aa;
+            letter-spacing: 0.04em;
+            text-transform: none;
+        }
+        .job-note-edit-icon {
+            width: 0.9rem;
+            height: 0.9rem;
+            color: rgba(161, 161, 170, 0.88);
+            flex-shrink: 0;
+        }
+        .job-note-edit-value.is-placeholder {
+            color: #a1a1aa;
+        }
+        .job-note-row-value.is-placeholder {
+            color: #a1a1aa;
+        }
+
+        .job-photo-panel {
+            margin-top: 0.75rem;
+            padding: 0.8rem 0.9rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.72);
+            background: rgba(9, 9, 11, 0.58);
+        }
+        .job-photo-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+        .job-photo-heading {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #71717a;
+        }
+        .job-photo-copy {
+            margin-top: 0.35rem;
+            font-size: 0.8rem;
+            line-height: 1.45;
+            color: #a1a1aa;
+        }
+        .job-photo-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            min-height: 2.35rem;
+            padding: 0.55rem 0.9rem;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(34, 211, 238, 0.38);
+            background: rgba(34, 211, 238, 0.12);
+            color: #67e8f9;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .job-photo-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        .job-photo-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        .job-photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+            gap: 0.7rem;
+            margin-top: 0.85rem;
+        }
+        .job-photo-empty {
+            font-size: 0.82rem;
+            color: #a1a1aa;
+        }
+        .job-photo-tile {
+            overflow: hidden;
+            border-radius: 0.85rem;
+            border: 1px solid rgba(63, 63, 70, 0.78);
+            background: rgba(24, 24, 27, 0.92);
+        }
+        .job-photo-link {
+            display: block;
+            aspect-ratio: 1 / 1;
+            background: #18181b;
+        }
+        .job-photo-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .job-photo-remove {
+            width: 100%;
+            border: 0;
+            border-top: 1px solid rgba(63, 63, 70, 0.78);
+            background: rgba(39, 39, 42, 0.75);
+            color: #e4e4e7;
+            font-size: 0.74rem;
+            font-weight: 700;
+            padding: 0.5rem 0.6rem;
+            cursor: pointer;
+        }
+        .job-photo-remove:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .job-photo-status {
+            min-height: 1rem;
+            margin-top: 0.7rem;
+            font-size: 0.78rem;
+            color: #a1a1aa;
+        }
+        .job-photo-status.ok { color: #86efac; }
+        .job-photo-status.err { color: #fca5a5; }
+
+        .tech-notes-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10010;
+            padding: 0.85rem;
+            background: rgba(0, 0, 0, 0.92);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            align-items: center;
+            justify-content: center;
+        }
+        .tech-notes-modal.open { display: flex; }
+        .tech-notes-modal-inner {
+            width: min(100%, 34rem);
+            border-radius: 1rem;
+            border: 1px solid rgba(34, 211, 238, 0.24);
+            background: linear-gradient(180deg, rgba(12, 14, 18, 0.98), rgba(5, 7, 9, 0.98));
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+            overflow: hidden;
+        }
+        .tech-notes-modal-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1rem 0.75rem;
+        }
+        .tech-notes-modal-kicker {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: rgba(103, 232, 249, 0.72);
+        }
+        .tech-notes-modal-title {
+            margin-top: 0.35rem;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #f4f4f5;
+        }
+        .tech-notes-modal-body {
+            padding: 0 1rem 1rem;
+        }
+        .tech-notes-textarea {
+            width: 100%;
+            min-height: 16rem;
+            resize: vertical;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(63, 63, 70, 0.78);
+            background: rgba(9, 9, 11, 0.9);
+            color: #f4f4f5;
+            padding: 0.95rem 1rem;
+            font-size: 0.92rem;
+            line-height: 1.5;
+            outline: none;
+        }
+        .tech-notes-textarea:focus {
+            border-color: rgba(103, 232, 249, 0.55);
+            box-shadow: 0 0 0 1px rgba(103, 232, 249, 0.16);
+        }
+        .tech-notes-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.7rem;
+            margin-top: 0.85rem;
+        }
+        .tech-notes-status {
+            min-height: 1rem;
+            margin-top: 0.75rem;
+            font-size: 0.78rem;
+            color: #a1a1aa;
+        }
+        .tech-notes-status.err { color: #fca5a5; }
 
         .mileage-modal-inner {
             width: 100%;
@@ -771,6 +1289,24 @@ $extraHead       = <<<'HTML'
             80%       { transform: translateX(4px); }
         }
         .nixie-display.shake { animation: nixie-shake 0.32s ease; }
+
+        @media (max-width: 480px) {
+            .service-auth-actions,
+            .service-auth-primary-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .service-auth-primary,
+            .service-auth-secondary,
+            .authorize-btn,
+            .job-photo-button {
+                width: 100%;
+            }
+            .job-photo-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
     </style>
 HTML;
 $headerRight     = <<<'HTML'
@@ -818,6 +1354,24 @@ require_once __DIR__ . '/templates/header.php';
         </div>
     <?php endif; ?>
 
+    <?php if ($scheduleQueryError !== null): ?>
+        <div class="mb-5 rounded-xl border border-red-500/70 bg-red-500/15 px-4 py-3 text-sm text-red-100">
+            <div class="font-semibold">Schedule query failed.</div>
+            <div class="mt-1">SQLSTATE: <?= htmlspecialchars($scheduleQueryError['sqlstate'], ENT_QUOTES, 'UTF-8') ?></div>
+            <div>Error code: <?= htmlspecialchars($scheduleQueryError['code'], ENT_QUOTES, 'UTF-8') ?></div>
+            <div>Message: <?= htmlspecialchars($scheduleQueryError['message'], ENT_QUOTES, 'UTF-8') ?></div>
+        </div>
+    <?php endif; ?>
+
+    <?php
+    $serviceAgreementTerms = [
+        'The customer authorizes Ghost Laser to inspect, diagnose, and perform the approved service described in the Scope of Work.',
+        'The customer agrees to pay for all parts, labor, travel, and related service charges required to complete the authorized work.',
+        'The customer acknowledges that the equipment may have pre-existing wear, cosmetic issues, or damage that is unrelated to the authorized service.',
+        'The customer waives claims arising solely from normal wear, hidden defects, or conditions discovered during service that are not caused by Ghost Laser negligence.',
+    ];
+    $completionCertificateTerms = completionCertificateClauses();
+    ?>
     <?php if (empty($clusters)): ?>
         <!-- Empty state -->
         <div class="flex flex-col items-center justify-center py-16 text-center">
@@ -865,6 +1419,14 @@ require_once __DIR__ . '/templates/header.php';
                         $gmapsUrl    = techDashGoogleMapsUrl($job);
                         $timeWindow  = techDashTimeWindow($job['time_window_start'] ?? null, $job['time_window_end'] ?? null);
                         $bookingDetailEntries = techDashBookingDetailEntries($job);
+                        $serviceRequestId = (int) ($job['service_request_id'] ?? 0);
+                        $authorizationScope = serviceAuthorizationBuildScopeOfWork($pdo, $job);
+                        $existingAuthorization = $serviceAuthorizations[(int) $job['service_request_id']] ?? null;
+                        $existingCompletionCertificate = $completionCertificates[(int) $job['service_request_id']] ?? null;
+                        $completionCertificateScope = $authorizationScope;
+                        $customerProblem = str_replace(["\r\n", "\r"], "\n", serviceAuthorizationPrimaryProblemText($job));
+                        $technicianNotes = str_replace(["\r\n", "\r"], "\n", (string) ($job['technician_notes'] ?? ''));
+                        $jobPhotoItems = serviceAuthorizationBuildJobPhotoPayloads(serviceAuthorizationDecodeJobPhotos($job['job_photos'] ?? null));
                         $customerName = trim((string) ($job['first_name'] ?? '') . ' ' . (string) ($job['last_name'] ?? ''));
                         if ($customerName === '') {
                             // Fall back to task_contact (company or contact name) for task-type rows.
@@ -873,6 +1435,7 @@ require_once __DIR__ . '/templates/header.php';
                         if ($customerName === '') {
                             $customerName = 'Internal Task';
                         }
+                        $technicianNotesLabelTarget = $customerName !== '' ? $customerName : ('request #' . $serviceRequestId);
                         ?>
                         <div class="job-card">
                             <!-- Row 1: stop number + priority + time -->
@@ -966,6 +1529,169 @@ require_once __DIR__ . '/templates/header.php';
                                     </div>
                                 </div>
                             <?php endif; ?>
+                            <?php if (trim($customerProblem) !== ''): ?>
+                                <div class="job-note-row">
+                                    <div class="job-note-row-label">Customer problem</div>
+                                    <div class="job-note-row-value"><?= htmlspecialchars($customerProblem, ENT_QUOTES, 'UTF-8') ?></div>
+                                </div>
+                            <?php endif; ?>
+                            <?php if ($serviceRequestId > 0): ?>
+                                <button
+                                    type="button"
+                                    class="job-note-edit"
+                                    data-tech-notes-job-id="<?= $serviceRequestId ?>"
+                                    data-technician-notes-encoded="<?= htmlspecialchars(rawurlencode($technicianNotes), ENT_QUOTES, 'UTF-8') ?>"
+                                    aria-haspopup="dialog"
+                                    aria-controls="technicianNotesModal"
+                                    aria-label="Edit technician notes for <?= htmlspecialchars($technicianNotesLabelTarget, ENT_QUOTES, 'UTF-8') ?>"
+                                    title="Edit technician notes"
+                                >
+                                    <span class="job-note-edit-label">
+                                        <span>Technician notes</span>
+                                        <span class="job-note-edit-hint">
+                                            <svg class="job-note-edit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.768-6.768a2.5 2.5 0 113.536 3.536L12.536 16.536A4 4 0 019.707 17.707L7 18l.293-2.707A4 4 0 018.464 12.536z"/></svg>
+                                            Edit
+                                        </span>
+                                    </span>
+                                    <span
+                                        class="job-note-edit-value<?= trim($technicianNotes) === '' ? ' is-placeholder' : '' ?>"
+                                        data-tech-notes-value
+                                    ><?= htmlspecialchars(trim($technicianNotes) !== '' ? $technicianNotes : 'Tap to add notes', ENT_QUOTES, 'UTF-8') ?></span>
+                                </button>
+                            <?php else: ?>
+                                <div class="job-note-row">
+                                    <div class="job-note-row-label">Technician notes</div>
+                                    <div class="job-note-row-value<?= trim($technicianNotes) === '' ? ' is-placeholder' : '' ?>"><?= htmlspecialchars(trim($technicianNotes) !== '' ? $technicianNotes : 'No notes yet', ENT_QUOTES, 'UTF-8') ?></div>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="job-photo-panel">
+                                <div class="job-photo-header">
+                                    <div class="min-w-0">
+                                        <div class="job-photo-heading">Job Photos</div>
+                                        <div class="job-photo-copy">Capture or attach reference photos for the completion certificate.</div>
+                                    </div>
+                                    <?php if ($serviceRequestId > 0): ?>
+                                        <button
+                                            type="button"
+                                            class="job-photo-button"
+                                            data-job-photo-picker="<?= $serviceRequestId ?>"
+                                            aria-controls="jobPhotoInput<?= $serviceRequestId ?>"
+                                        >Add photos</button>
+                                        <input
+                                            type="file"
+                                            id="jobPhotoInput<?= $serviceRequestId ?>"
+                                            class="job-photo-input"
+                                            data-job-photo-input="<?= $serviceRequestId ?>"
+                                            aria-label="Add job photos"
+                                            accept="image/*"
+                                            capture="environment"
+                                            multiple
+                                        >
+                                    <?php endif; ?>
+                                </div>
+                                <div class="job-photo-grid"<?= $serviceRequestId > 0 ? ' data-job-photo-grid="' . $serviceRequestId . '"' : '' ?>>
+                                    <?php if ($jobPhotoItems !== []): ?>
+                                        <?php foreach ($jobPhotoItems as $photoIndex => $jobPhoto): ?>
+                                            <div class="job-photo-tile">
+                                                <a
+                                                    href="<?= htmlspecialchars($jobPhoto['url'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="job-photo-link"
+                                                >
+                                                    <img
+                                                        src="<?= htmlspecialchars($jobPhoto['url'], ENT_QUOTES, 'UTF-8') ?>"
+                                                        alt="Job photo <?= $photoIndex + 1 ?>"
+                                                        class="job-photo-image"
+                                                        loading="lazy"
+                                                    >
+                                                </a>
+                                                <?php if ($serviceRequestId > 0): ?>
+                                                    <button
+                                                        type="button"
+                                                        class="job-photo-remove"
+                                                        data-job-photo-remove="<?= $serviceRequestId ?>"
+                                                        data-photo-path="<?= htmlspecialchars($jobPhoto['path'], ENT_QUOTES, 'UTF-8') ?>"
+                                                        aria-label="Remove job photo <?= $photoIndex + 1 ?>"
+                                                    >Remove</button>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <div class="job-photo-empty">No photos yet.</div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if ($serviceRequestId > 0): ?>
+                                    <div class="job-photo-status" data-job-photo-status="<?= $serviceRequestId ?>" role="status" aria-live="polite"></div>
+                                <?php endif; ?>
+                            </div>
+
+                            <div class="mt-3 pt-3 border-t border-zinc-700/40">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-zinc-500">Service Agreement</div>
+                                        <div class="mt-1 text-xs text-zinc-400">Customer approval for the listed work before service begins.</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="authorize-btn"
+                                        data-authorize-job-id="<?= (int) $job['service_request_id'] ?>"
+                                        data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-scope="<?= htmlspecialchars($authorizationScope, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-doc-type="service_authorization"
+                                    >
+                                        Authorize
+                                    </button>
+                                </div>
+                                <div class="authorization-status<?= $existingAuthorization ? ' is-signed' : '' ?>" data-auth-job="<?= (int) $job['service_request_id'] ?>">
+                                    <?php if ($existingAuthorization): ?>
+                                        <span>Signed <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $existingAuthorization['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
+                                        <a
+                                            href="/api/service-authorization-pdf.php?authorization_id=<?= (int) $existingAuthorization['id'] ?>"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="authorization-download"
+                                        >Download PDF</a>
+                                    <?php else: ?>
+                                        <span>Not signed yet.</span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
+                            <div class="mt-3 pt-3 border-t border-zinc-700/40">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-zinc-500">Completion Certificate</div>
+                                        <div class="mt-1 text-xs text-zinc-400">Confirms completed work and customer approval of final payment.</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="authorize-btn"
+                                        data-authorize-job-id="<?= (int) $job['service_request_id'] ?>"
+                                        data-authorize-customer="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-scope="<?= htmlspecialchars($completionCertificateScope, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-authorize-doc-type="completion_certificate"
+                                        title="<?= $existingAuthorization ? 'Capture customer completion signature' : 'Complete service authorization first' ?>"
+                                        <?= $existingAuthorization ? '' : 'disabled' ?>
+                                    >
+                                        Generate completion certificate
+                                    </button>
+                                </div>
+                                <div class="authorization-status<?= $existingCompletionCertificate ? ' is-signed' : '' ?>" data-cert-job="<?= (int) $job['service_request_id'] ?>">
+                                    <?php if ($existingCompletionCertificate): ?>
+                                        <span>Generated <?= htmlspecialchars(serviceAuthorizationFormatSignedAtDisplay((string) $existingCompletionCertificate['signed_at']), ENT_QUOTES, 'UTF-8') ?></span>
+                                        <a
+                                            href="/api/completion-certificate-pdf.php?service_request_id=<?= (int) $job['service_request_id'] ?>"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="authorization-download"
+                                        >Download PDF</a>
+                                    <?php else: ?>
+                                        <span><?= !$existingAuthorization ? 'Complete service authorization first.' : 'Not generated yet.' ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
 
                             <!-- Row 5: mileage tracking buttons -->
                             <div class="mt-3 pt-3 border-t border-zinc-700/40">
@@ -1010,6 +1736,68 @@ require_once __DIR__ . '/templates/header.php';
                 </div>
             </div>
         <?php endforeach; ?>
+
+        <div id="serviceAuthorizationModal" class="service-auth-modal" role="dialog" aria-modal="true" aria-labelledby="serviceAuthorizationModalTitle">
+            <div class="service-auth-modal-inner">
+                <div class="service-auth-modal-header">
+                    <div>
+                        <div id="serviceAuthorizationModalKicker" class="service-auth-modal-kicker">Service Authorization</div>
+                        <div id="serviceAuthorizationModalTitle" class="service-auth-modal-title">Authorize Work</div>
+                    </div>
+                    <button type="button" id="serviceAuthorizationClose" class="service-auth-close" aria-label="Close">&times;</button>
+                </div>
+                <div id="serviceAuthorizationSummary" class="service-auth-summary">The customer authorizes the technician to perform the listed work described below.</div>
+                <div class="service-auth-layout">
+                    <div class="service-auth-contract">
+                        <h3 id="serviceAuthorizationScopeHeading">Scope of Work</h3>
+                        <p id="serviceAuthorizationScope"></p>
+
+                        <h3 id="serviceAuthorizationTermsHeading">Terms</h3>
+                        <ol id="serviceAuthorizationTermsList">
+                            <?php foreach ($serviceAgreementTerms as $serviceAgreementTerm): ?>
+                                <li><?= htmlspecialchars($serviceAgreementTerm, ENT_QUOTES, 'UTF-8') ?></li>
+                            <?php endforeach; ?>
+                        </ol>
+                    </div>
+
+                    <div class="service-auth-signature-panel">
+                        <div class="service-auth-signature-copy">Customer signature</div>
+                        <div id="serviceAuthorizationMeta" class="service-auth-meta">Draw with a finger, then tap Sign to capture the signature, timestamp, and GPS.</div>
+                        <canvas id="serviceAuthorizationCanvas" class="service-auth-canvas"></canvas>
+                        <form id="serviceAuthorizationForm">
+                            <div class="service-auth-actions">
+                                <button type="button" id="serviceAuthorizationClear" class="service-auth-secondary">Clear</button>
+                                <div class="service-auth-primary-actions">
+                                    <button type="button" id="serviceAuthorizationCancel" class="service-auth-secondary">Cancel</button>
+                                    <button type="submit" id="serviceAuthorizationSign" class="service-auth-primary">Sign</button>
+                                </div>
+                            </div>
+                        </form>
+                        <div id="serviceAuthorizationStatus" class="service-auth-status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="technicianNotesModal" class="tech-notes-modal" role="dialog" aria-modal="true" aria-labelledby="technicianNotesModalTitle">
+            <div class="tech-notes-modal-inner">
+                <div class="tech-notes-modal-header">
+                    <div>
+                        <div class="tech-notes-modal-kicker">Technician Notes</div>
+                        <div id="technicianNotesModalTitle" class="tech-notes-modal-title">Update notes</div>
+                    </div>
+                    <button type="button" id="technicianNotesClose" class="service-auth-close" aria-label="Close">&times;</button>
+                </div>
+                <form id="technicianNotesForm" class="tech-notes-modal-body">
+                    <textarea id="technicianNotesTextarea" class="tech-notes-textarea" aria-label="Technician notes" placeholder="Add notes, parts, or scope updates here."></textarea>
+                    <div class="tech-notes-actions">
+                        <button type="button" id="technicianNotesCancel" class="service-auth-secondary">Cancel</button>
+                        <button type="submit" id="technicianNotesSave" class="service-auth-primary">Save</button>
+                    </div>
+                    <div id="technicianNotesStatus" class="tech-notes-status" role="status" aria-live="polite"></div>
+                </form>
+            </div>
+        </div>
 
         <!-- ── Returning Home card ──────────────────────────────────────────── -->
         <?php
@@ -1110,6 +1898,9 @@ require_once __DIR__ . '/templates/header.php';
 var TRIP_STATES = <?= json_encode($tripStates, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 var HAS_ACTIVE_VEHICLES = <?= $hasActiveVehicles ? 'true' : 'false' ?>;
 var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleId : 'null' ?>;
+var SERVICE_AUTH_CSRF = <?= json_encode($technicianDashboardCsrf, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+var SERVICE_AUTH_TERMS = <?= json_encode($serviceAgreementTerms, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+var COMPLETION_CERTIFICATE_TERMS = <?= json_encode($completionCertificateTerms, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
 
 <!-- ── Mileage Entry Modal ───────────────────────────────────────────────── -->
@@ -1182,6 +1973,45 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
 
     // Starting odometer per job, used to validate the ending reading client-side.
     var _startMileageByJob = {};
+    var authModal = document.getElementById('serviceAuthorizationModal');
+    var authKicker = document.getElementById('serviceAuthorizationModalKicker');
+    var authTitle = document.getElementById('serviceAuthorizationModalTitle');
+    var authSummary = document.getElementById('serviceAuthorizationSummary');
+    var authScopeHeading = document.getElementById('serviceAuthorizationScopeHeading');
+    var authTermsHeading = document.getElementById('serviceAuthorizationTermsHeading');
+    var authTermsList = document.getElementById('serviceAuthorizationTermsList');
+    var authScope = document.getElementById('serviceAuthorizationScope');
+    var authMeta = document.getElementById('serviceAuthorizationMeta');
+    var authStatus = document.getElementById('serviceAuthorizationStatus');
+    var authClearBtn = document.getElementById('serviceAuthorizationClear');
+    var authCancelBtn = document.getElementById('serviceAuthorizationCancel');
+    var authCloseBtn = document.getElementById('serviceAuthorizationClose');
+    var authSignBtn = document.getElementById('serviceAuthorizationSign');
+    var authForm = document.getElementById('serviceAuthorizationForm');
+    var authCanvas = document.getElementById('serviceAuthorizationCanvas');
+    var authCtx = authCanvas ? authCanvas.getContext('2d') : null;
+    var authState = {
+        btn: null,
+        jobId: 0,
+        documentType: 'service_authorization',
+        dirty: false,
+        drawing: false,
+        pointerId: null,
+        submitting: false
+    };
+    var techNotesModal = document.getElementById('technicianNotesModal');
+    var techNotesForm = document.getElementById('technicianNotesForm');
+    var techNotesTextarea = document.getElementById('technicianNotesTextarea');
+    var techNotesStatus = document.getElementById('technicianNotesStatus');
+    var techNotesCancelBtn = document.getElementById('technicianNotesCancel');
+    var techNotesCloseBtn = document.getElementById('technicianNotesClose');
+    var techNotesSaveBtn = document.getElementById('technicianNotesSave');
+    var techNotesState = {
+        btn: null,
+        jobId: 0,
+        submitting: false
+    };
+    var jobPhotoBusyByJob = {};
 
     // ── GPS helper ────────────────────────────────────────────────────────────
     function getCoords() {
@@ -1215,6 +2045,223 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         if (!el) return;
         el.textContent = msg;
         el.className = 'eta-status' + (type ? ' ' + type : '');
+    }
+
+    function setTechNotesModalStatus(msg, type) {
+        if (!techNotesStatus) return;
+        techNotesStatus.textContent = msg;
+        techNotesStatus.className = 'tech-notes-status' + (type ? ' ' + type : '');
+    }
+
+    function decodeTechnicianNotesValue(value) {
+        if (!value) return '';
+        try {
+            return decodeURIComponent(value);
+        } catch (err) {
+            return '';
+        }
+    }
+
+    function setJobPhotoStatus(jobId, msg, type) {
+        var el = document.querySelector('[data-job-photo-status="' + jobId + '"]');
+        if (!el) return;
+        el.textContent = msg;
+        el.className = 'job-photo-status' + (type ? ' ' + type : '');
+    }
+
+    function setJobPhotoBusy(jobId, busy) {
+        jobPhotoBusyByJob[jobId] = busy;
+        document.querySelectorAll('[data-job-photo-picker="' + jobId + '"], [data-job-photo-input="' + jobId + '"], [data-job-photo-remove="' + jobId + '"]').forEach(function (el) {
+            el.disabled = !!busy;
+        });
+    }
+
+    function renderJobPhotos(jobId, photos) {
+        var grid = document.querySelector('[data-job-photo-grid="' + jobId + '"]');
+        if (!grid) return;
+
+        grid.textContent = '';
+        if (!photos || photos.length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'job-photo-empty';
+            empty.textContent = 'No photos yet.';
+            grid.appendChild(empty);
+            return;
+        }
+
+        photos.forEach(function (photo, index) {
+            var tile = document.createElement('div');
+            tile.className = 'job-photo-tile';
+
+            var link = document.createElement('a');
+            link.href = photo.url || '';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.className = 'job-photo-link';
+
+            var image = document.createElement('img');
+            image.src = photo.url || '';
+            image.alt = 'Job photo ' + (index + 1);
+            image.className = 'job-photo-image';
+            image.loading = 'lazy';
+            link.appendChild(image);
+            tile.appendChild(link);
+
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'job-photo-remove';
+            removeBtn.textContent = 'Remove';
+            removeBtn.dataset.jobPhotoRemove = String(jobId);
+            removeBtn.dataset.photoPath = photo.path || '';
+            removeBtn.setAttribute('aria-label', 'Remove job photo ' + (index + 1));
+            removeBtn.disabled = !!jobPhotoBusyByJob[jobId];
+            tile.appendChild(removeBtn);
+
+            grid.appendChild(tile);
+        });
+    }
+
+    function parseJsonResponse(res) {
+        return res.text().then(function (text) {
+            var data = null;
+            if (text) {
+                try {
+                    data = JSON.parse(text);
+                } catch (err) {
+                    if (!res.ok) {
+                        throw new Error(text || ('Server error (' + res.status + ')'));
+                    }
+                    throw new Error('Invalid server response');
+                }
+            }
+
+            if (!res.ok) {
+                throw new Error((data && data.error) ? data.error : ('Server error (' + res.status + ')'));
+            }
+
+            if (!data || !data.success) {
+                throw new Error((data && data.error) ? data.error : 'Unable to update photos.');
+            }
+
+            return data;
+        });
+    }
+
+    function uploadJobPhotos(jobId, input) {
+        if (!input || !input.files || !input.files.length || jobPhotoBusyByJob[jobId]) {
+            return;
+        }
+
+        function finishUploadCleanup() {
+            input.value = '';
+            setJobPhotoBusy(jobId, false);
+        }
+
+        var formData = new FormData();
+        formData.append('action', 'upload');
+        formData.append('service_request_id', String(jobId));
+        formData.append('csrf_token', SERVICE_AUTH_CSRF);
+        Array.prototype.forEach.call(input.files, function (file) {
+            formData.append('photos[]', file, file.name || 'photo');
+        });
+
+        setJobPhotoBusy(jobId, true);
+        setJobPhotoStatus(jobId, 'Uploading photos…', '');
+
+        fetch('/api/technician-job-photos-api.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData
+        }).then(parseJsonResponse).then(function (data) {
+            finishUploadCleanup();
+            renderJobPhotos(jobId, data.photos || []);
+            setJobPhotoStatus(jobId, 'Photos updated.', 'ok');
+        }).catch(function (err) {
+            setJobPhotoStatus(jobId, '✗ ' + err.message, 'err');
+            finishUploadCleanup();
+        });
+    }
+
+    function removeJobPhoto(jobId, photoPath) {
+        if (!photoPath || jobPhotoBusyByJob[jobId]) {
+            return;
+        }
+
+        var formData = new FormData();
+        formData.append('action', 'remove');
+        formData.append('service_request_id', String(jobId));
+        formData.append('photo_path', photoPath);
+        formData.append('csrf_token', SERVICE_AUTH_CSRF);
+
+        setJobPhotoBusy(jobId, true);
+        setJobPhotoStatus(jobId, 'Removing photo…', '');
+
+        fetch('/api/technician-job-photos-api.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData
+        }).then(parseJsonResponse).then(function (data) {
+            setJobPhotoBusy(jobId, false);
+            renderJobPhotos(jobId, data.photos || []);
+            setJobPhotoStatus(jobId, 'Photo removed.', 'ok');
+        }).catch(function (err) {
+            setJobPhotoStatus(jobId, '✗ ' + err.message, 'err');
+            setJobPhotoBusy(jobId, false);
+        });
+    }
+
+    function modalFocusableElements(container) {
+        if (!container) return [];
+        return Array.prototype.slice.call(
+            container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+        ).filter(function (el) {
+            return el.offsetParent !== null || el === document.activeElement;
+        });
+    }
+
+    function trapModalFocus(event, container) {
+        if (event.key !== 'Tab') return;
+        var focusable = modalFocusableElements(container);
+        if (focusable.length === 0) {
+            event.preventDefault();
+            return;
+        }
+
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+
+        if (event.shiftKey) {
+            if (document.activeElement === first || !container.contains(document.activeElement)) {
+                event.preventDefault();
+                last.focus();
+            }
+            return;
+        }
+
+        if (document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    }
+
+    function refreshTechnicianNotesCard(jobId, notes, scopeOfWork) {
+        document.querySelectorAll('[data-tech-notes-job-id="' + jobId + '"]').forEach(function (trigger) {
+            trigger.dataset.technicianNotesEncoded = encodeURIComponent(notes);
+            var valueEl = trigger.querySelector('[data-tech-notes-value]');
+            if (valueEl) {
+                var hasNotes = notes.trim() !== '';
+                valueEl.textContent = hasNotes ? notes : 'Tap to add notes';
+                valueEl.classList.toggle('is-placeholder', !hasNotes);
+            }
+        });
+
+        document.querySelectorAll('[data-authorize-job-id="' + jobId + '"]').forEach(function (authorizeBtn) {
+            authorizeBtn.dataset.authorizeScope = scopeOfWork;
+        });
+
+        if (authState.jobId === jobId && authScope && authState.documentType === 'service_authorization') {
+            authScope.textContent = scopeOfWork || 'Perform the service request currently listed for this visit.';
+        }
     }
 
     function setTripButtons(jobId, state) {
@@ -1354,6 +2401,284 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
         return value !== null && value !== undefined && value !== '';
     }
 
+    function getAuthorizationDocumentConfig(documentType) {
+        if (documentType === 'completion_certificate') {
+            return {
+                kicker: 'Completion Certificate',
+                title: 'Generate completion certificate',
+                summary: 'This certifies that the work has been satisfactorily completed and the customer approves final payment.',
+                scopeHeading: 'Completed Work',
+                termsHeading: 'Customer Acknowledgment',
+                terms: window.COMPLETION_CERTIFICATE_TERMS || [],
+                emptyCardStatus: 'Not generated yet.',
+                signedCardPrefix: 'Generated ',
+                saveStatusMessage: 'Saving completion certificate…',
+                saveError: 'Unable to save completion certificate.',
+                apiEndpoint: '/api/completion-certificate-api.php',
+                responseKey: 'certificate',
+                statusSelectorPrefix: 'data-cert-job'
+            };
+        }
+
+        return {
+            kicker: 'Service Authorization',
+            title: 'Authorize Work',
+            summary: 'The customer authorizes the technician to perform the listed work described below.',
+            scopeHeading: 'Scope of Work',
+            termsHeading: 'Terms',
+            terms: window.SERVICE_AUTH_TERMS || [],
+            emptyCardStatus: 'Not signed yet.',
+            signedCardPrefix: 'Signed ',
+            saveStatusMessage: 'Saving authorization…',
+            saveError: 'Unable to save authorization.',
+            apiEndpoint: '/api/service-authorization-api.php',
+            responseKey: 'authorization',
+            statusSelectorPrefix: 'data-auth-job'
+        };
+    }
+
+    function renderAuthorizationTerms(terms) {
+        if (!authTermsList) return;
+        authTermsList.textContent = '';
+        (terms || []).forEach(function (term) {
+            var li = document.createElement('li');
+            li.textContent = term;
+            authTermsList.appendChild(li);
+        });
+    }
+
+    function setAuthorizationCardStatus(jobId, documentType, authorization, warning) {
+        var config = getAuthorizationDocumentConfig(documentType);
+        var el = document.querySelector('[' + config.statusSelectorPrefix + '="' + jobId + '"]');
+        if (!el) return;
+
+        el.textContent = '';
+        el.classList.remove('is-signed');
+
+        if (!authorization || !authorization.download_url) {
+            var empty = document.createElement('span');
+            empty.textContent = config.emptyCardStatus;
+            el.appendChild(empty);
+            return;
+        }
+
+        el.classList.add('is-signed');
+
+        if (warning) {
+            var warningText = document.createElement('span');
+            warningText.textContent = warning;
+            el.appendChild(warningText);
+
+            var warningLink = document.createElement('a');
+            warningLink.href = authorization.download_url;
+            warningLink.target = '_blank';
+            warningLink.rel = 'noopener noreferrer';
+            warningLink.className = 'authorization-download';
+            warningLink.textContent = 'Download PDF';
+            el.appendChild(warningLink);
+            return;
+        }
+
+        var signedText = document.createElement('span');
+        signedText.textContent = config.signedCardPrefix + (authorization.signed_at_display || authorization.signed_at || '');
+        el.appendChild(signedText);
+
+        var link = document.createElement('a');
+        link.href = authorization.download_url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'authorization-download';
+        link.textContent = 'Download PDF';
+        el.appendChild(link);
+    }
+
+    function setAuthorizationModalStatus(msg, type) {
+        if (!authStatus) return;
+        authStatus.textContent = msg;
+        authStatus.className = 'service-auth-status' + (type ? ' ' + type : '');
+    }
+
+    function resizeAuthorizationCanvas() {
+        if (!authCanvas || !authCtx) return;
+        var rect = authCanvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        var snapshot = null;
+        if (authState.dirty && authCanvas.width && authCanvas.height) {
+            snapshot = document.createElement('canvas');
+            snapshot.width = authCanvas.width;
+            snapshot.height = authCanvas.height;
+            var snapshotCtx = snapshot.getContext('2d');
+            if (snapshotCtx) {
+                snapshotCtx.drawImage(authCanvas, 0, 0);
+            } else {
+                snapshot = null;
+            }
+        }
+        var dpr = Math.max(window.devicePixelRatio || 1, 1);
+        authCanvas.width = Math.round(rect.width * dpr);
+        authCanvas.height = Math.round(rect.height * dpr);
+        authCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        authCtx.lineCap = 'round';
+        authCtx.lineJoin = 'round';
+        authCtx.lineWidth = 2.75;
+        authCtx.strokeStyle = '#111827';
+        authCtx.clearRect(0, 0, rect.width, rect.height);
+        if (snapshot) {
+            authCtx.drawImage(snapshot, 0, 0, rect.width, rect.height);
+        }
+    }
+
+    function clearAuthorizationCanvas() {
+        if (!authCanvas || !authCtx) return;
+        var rect = authCanvas.getBoundingClientRect();
+        authCtx.clearRect(0, 0, rect.width, rect.height);
+        authState.dirty = false;
+    }
+
+    function openAuthorizationModal(btn) {
+        var documentType = btn.dataset.authorizeDocType || 'service_authorization';
+        var config = getAuthorizationDocumentConfig(documentType);
+        authState.btn = btn;
+        authState.jobId = parseInt(btn.dataset.authorizeJobId, 10) || 0;
+        authState.documentType = documentType;
+        authState.dirty = false;
+        authState.drawing = false;
+        authState.pointerId = null;
+        authState.submitting = false;
+        if (authKicker) authKicker.textContent = config.kicker;
+        if (authTitle) authTitle.textContent = config.title;
+        if (authSummary) authSummary.textContent = config.summary;
+        if (authScopeHeading) authScopeHeading.textContent = config.scopeHeading;
+        if (authTermsHeading) authTermsHeading.textContent = config.termsHeading;
+        renderAuthorizationTerms(config.terms);
+        if (authScope) {
+            authScope.textContent = btn.dataset.authorizeScope || 'Perform the service request currently listed for this visit.';
+        }
+        if (authMeta) {
+            var customer = btn.dataset.authorizeCustomer || 'Customer';
+            authMeta.textContent = customer + ' signs below. Timestamp and GPS are captured when Sign is tapped.';
+        }
+        setAuthorizationModalStatus('', '');
+        if (authSignBtn) authSignBtn.disabled = false;
+        if (authClearBtn) authClearBtn.disabled = false;
+        if (authCancelBtn) authCancelBtn.disabled = false;
+        if (authCloseBtn) authCloseBtn.disabled = false;
+        authModal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        window.requestAnimationFrame(function () {
+            resizeAuthorizationCanvas();
+            clearAuthorizationCanvas();
+            if (authCloseBtn) {
+                authCloseBtn.focus();
+            } else if (authSignBtn) {
+                authSignBtn.focus();
+            }
+        });
+    }
+
+    function closeAuthorizationModal(force) {
+        if (!authModal) return;
+        if (authState.submitting && !force) return;
+        var restoreFocusTarget = authState.btn;
+        authModal.classList.remove('open');
+        document.body.style.overflow = '';
+        authState.btn = null;
+        authState.jobId = 0;
+        authState.documentType = 'service_authorization';
+        authState.dirty = false;
+        authState.drawing = false;
+        authState.pointerId = null;
+        authState.submitting = false;
+        setAuthorizationModalStatus('', '');
+        if (restoreFocusTarget && typeof restoreFocusTarget.focus === 'function') {
+            restoreFocusTarget.focus();
+        }
+    }
+
+    function openTechnicianNotesModal(btn) {
+        if (!techNotesModal || !techNotesTextarea) return;
+        techNotesState.btn = btn;
+        techNotesState.jobId = parseInt(btn.dataset.techNotesJobId, 10) || 0;
+        techNotesState.submitting = false;
+        techNotesTextarea.value = decodeTechnicianNotesValue(btn.dataset.technicianNotesEncoded || '');
+        techNotesTextarea.disabled = false;
+        if (techNotesSaveBtn) techNotesSaveBtn.disabled = false;
+        if (techNotesCancelBtn) techNotesCancelBtn.disabled = false;
+        if (techNotesCloseBtn) techNotesCloseBtn.disabled = false;
+        setTechNotesModalStatus('', '');
+        techNotesModal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        window.requestAnimationFrame(function () {
+            techNotesTextarea.focus();
+            techNotesTextarea.setSelectionRange(techNotesTextarea.value.length, techNotesTextarea.value.length);
+        });
+    }
+
+    function closeTechnicianNotesModal(force) {
+        if (!techNotesModal) return;
+        if (techNotesState.submitting && !force) return;
+        var restoreFocusTarget = techNotesState.btn;
+        techNotesModal.classList.remove('open');
+        document.body.style.overflow = '';
+        techNotesState.btn = null;
+        techNotesState.jobId = 0;
+        techNotesState.submitting = false;
+        setTechNotesModalStatus('', '');
+        if (restoreFocusTarget && typeof restoreFocusTarget.focus === 'function') {
+            restoreFocusTarget.focus();
+        }
+    }
+
+    function authorizationCanvasPoint(event) {
+        var rect = authCanvas.getBoundingClientRect();
+        return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        };
+    }
+
+    function authorizationStartDrawing(event) {
+        if (!authCanvas || !authCtx) return;
+        event.preventDefault();
+        authState.drawing = true;
+        authState.pointerId = event.pointerId;
+        authCanvas.setPointerCapture(event.pointerId);
+        var point = authorizationCanvasPoint(event);
+        authCtx.beginPath();
+        authCtx.moveTo(point.x, point.y);
+        authCtx.lineTo(point.x + 0.01, point.y + 0.01);
+        authCtx.stroke();
+        authState.dirty = true;
+        setAuthorizationModalStatus('', '');
+    }
+
+    function authorizationMoveDrawing(event) {
+        if (!authState.drawing || authState.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        var point = authorizationCanvasPoint(event);
+        authCtx.lineTo(point.x, point.y);
+        authCtx.stroke();
+    }
+
+    function authorizationStopDrawing(event) {
+        if (!authState.drawing || authState.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        authState.drawing = false;
+        authState.pointerId = null;
+        authCtx.closePath();
+        if (authCanvas.hasPointerCapture(event.pointerId)) {
+            authCanvas.releasePointerCapture(event.pointerId);
+        }
+    }
+
+    function authorizationResetDrawingState() {
+        authState.drawing = false;
+        authState.pointerId = null;
+        if (authCtx) {
+            authCtx.closePath();
+        }
+    }
+
     function initTripStates() {
         var states = window.TRIP_STATES;
         if (!states) { return; }
@@ -1380,6 +2705,223 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
     }
 
     initTripStates();
+
+    if (authCanvas) {
+        authCanvas.addEventListener('pointerdown', authorizationStartDrawing);
+        authCanvas.addEventListener('pointermove', authorizationMoveDrawing);
+        authCanvas.addEventListener('pointerup', authorizationStopDrawing);
+        authCanvas.addEventListener('pointercancel', authorizationStopDrawing);
+        authCanvas.addEventListener('lostpointercapture', authorizationResetDrawingState);
+    }
+
+    function syncAuthorizationCanvasToViewport() {
+        if (authModal && authModal.classList.contains('open')) {
+            if (authState.dirty) {
+                return;
+            }
+            resizeAuthorizationCanvas();
+        }
+    }
+
+    window.addEventListener('resize', syncAuthorizationCanvasToViewport);
+    window.addEventListener('orientationchange', syncAuthorizationCanvasToViewport);
+
+    if (authClearBtn) {
+        authClearBtn.addEventListener('click', function () {
+            clearAuthorizationCanvas();
+            setAuthorizationModalStatus('', '');
+        });
+    }
+
+    if (authCancelBtn) {
+        authCancelBtn.addEventListener('click', closeAuthorizationModal);
+    }
+
+    if (authCloseBtn) {
+        authCloseBtn.addEventListener('click', closeAuthorizationModal);
+    }
+
+    if (authModal) {
+        authModal.addEventListener('click', function (event) {
+            if (event.target === authModal) {
+                closeAuthorizationModal();
+            }
+        });
+    }
+
+    document.querySelectorAll('[data-tech-notes-job-id]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            openTechnicianNotesModal(btn);
+        });
+    });
+
+    document.querySelectorAll('[data-job-photo-input]').forEach(function (input) {
+        input.addEventListener('change', function () {
+            var jobId = parseInt(input.dataset.jobPhotoInput, 10) || 0;
+            if (!jobId) return;
+            uploadJobPhotos(jobId, input);
+        });
+    });
+
+    if (techNotesCancelBtn) {
+        techNotesCancelBtn.addEventListener('click', function () {
+            closeTechnicianNotesModal();
+        });
+    }
+
+    if (techNotesCloseBtn) {
+        techNotesCloseBtn.addEventListener('click', function () {
+            closeTechnicianNotesModal();
+        });
+    }
+
+    if (techNotesModal) {
+        techNotesModal.addEventListener('click', function (event) {
+            if (event.target === techNotesModal) {
+                closeTechnicianNotesModal();
+            }
+        });
+    }
+
+    if (authForm) {
+        authForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            if (!authState.jobId || authState.submitting) return;
+            if (!authState.dirty || !authCanvas) {
+                setAuthorizationModalStatus('Signature required before continuing.', 'err');
+                return;
+            }
+
+            authState.submitting = true;
+            authSignBtn.disabled = true;
+            if (authClearBtn) authClearBtn.disabled = true;
+            if (authCancelBtn) authCancelBtn.disabled = true;
+            if (authCloseBtn) authCloseBtn.disabled = true;
+            var docConfig = getAuthorizationDocumentConfig(authState.documentType);
+            setAuthorizationModalStatus('Getting GPS location…', '');
+
+            var signedAt = new Date().toISOString();
+            var signaturePng = authCanvas.toDataURL('image/png');
+
+            getCoords().then(function (coords) {
+                setAuthorizationModalStatus(docConfig.saveStatusMessage, '');
+                return fetch(docConfig.apiEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        service_request_id: authState.jobId,
+                        signature_png: signaturePng,
+                        scope_of_work: authScope ? authScope.textContent : '',
+                        signed_at: signedAt,
+                        csrf_token: SERVICE_AUTH_CSRF,
+                        latitude: coords.lat,
+                        longitude: coords.lng
+                    })
+                });
+            }).then(function (res) {
+                return res.text().then(function (text) {
+                    var data = null;
+                    if (text) {
+                        try {
+                            data = JSON.parse(text);
+                        } catch (err) {
+                            if (!res.ok) {
+                                throw new Error(text || ('Server error (' + res.status + ')'));
+                            }
+                            throw new Error('Invalid server response');
+                        }
+                    }
+
+                    if (!res.ok) {
+                        throw new Error((data && data.error) ? data.error : ('Server error (' + res.status + ')'));
+                    }
+
+                    if (!data || !data.success || !data[docConfig.responseKey]) {
+                        throw new Error((data && data.error) ? data.error : docConfig.saveError);
+                    }
+
+                    return data;
+                });
+            }).then(function (payload) {
+                var authorization = payload[docConfig.responseKey];
+                var warning = payload.warning || '';
+                setAuthorizationCardStatus(authState.jobId, authState.documentType, authorization, warning);
+                authState.submitting = false;
+                if (authCloseBtn) authCloseBtn.disabled = false;
+                closeAuthorizationModal(true);
+            }).catch(function (err) {
+                authState.submitting = false;
+                authSignBtn.disabled = false;
+                if (authClearBtn) authClearBtn.disabled = false;
+                if (authCancelBtn) authCancelBtn.disabled = false;
+                if (authCloseBtn) authCloseBtn.disabled = false;
+                setAuthorizationModalStatus('✗ ' + err.message, 'err');
+            });
+        });
+    }
+
+    if (techNotesForm) {
+        techNotesForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            if (!techNotesState.jobId || techNotesState.submitting || !techNotesTextarea) return;
+
+            techNotesState.submitting = true;
+            techNotesTextarea.disabled = true;
+            if (techNotesSaveBtn) techNotesSaveBtn.disabled = true;
+            if (techNotesCancelBtn) techNotesCancelBtn.disabled = true;
+            if (techNotesCloseBtn) techNotesCloseBtn.disabled = true;
+            setTechNotesModalStatus('Saving notes…', '');
+
+            fetch('/api/technician-notes-api.php', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    service_request_id: techNotesState.jobId,
+                    technician_notes: techNotesTextarea.value,
+                    csrf_token: SERVICE_AUTH_CSRF
+                })
+            }).then(function (res) {
+                return res.text().then(function (text) {
+                    var data = null;
+                    if (text) {
+                        try {
+                            data = JSON.parse(text);
+                        } catch (err) {
+                            if (!res.ok) {
+                                throw new Error(text || ('Server error (' + res.status + ')'));
+                            }
+                            throw new Error('Invalid server response');
+                        }
+                    }
+
+                    if (!res.ok) {
+                        throw new Error((data && data.error) ? data.error : ('Server error (' + res.status + ')'));
+                    }
+
+                    if (!data || !data.success) {
+                        throw new Error((data && data.error) ? data.error : 'Unable to save technician notes.');
+                    }
+
+                    return data;
+                });
+            }).then(function (data) {
+                refreshTechnicianNotesCard(
+                    techNotesState.jobId,
+                    data.technician_notes || '',
+                    data.scope_of_work || ''
+                );
+                closeTechnicianNotesModal(true);
+            }).catch(function (err) {
+                techNotesState.submitting = false;
+                techNotesTextarea.disabled = false;
+                if (techNotesSaveBtn) techNotesSaveBtn.disabled = false;
+                if (techNotesCancelBtn) techNotesCancelBtn.disabled = false;
+                if (techNotesCloseBtn) techNotesCloseBtn.disabled = false;
+                setTechNotesModalStatus('✗ ' + err.message, 'err');
+            });
+        });
+    }
 
     // ── Mileage Modal ─────────────────────────────────────────────────────────
     var _modalData   = null; // { btn, jobId, payload }
@@ -1513,6 +3055,34 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
 
     // ── Attach listeners ──────────────────────────────────────────────────────
     document.addEventListener('click', function (e) {
+        var photoPickerBtn = e.target.closest('[data-job-photo-picker]');
+        if (photoPickerBtn) {
+            if (photoPickerBtn.disabled) return;
+            var pickerJobId = photoPickerBtn.dataset.jobPhotoPicker;
+            var photoInput = document.querySelector('[data-job-photo-input="' + pickerJobId + '"]');
+            if (photoInput && !photoInput.disabled) {
+                photoInput.click();
+            }
+            return;
+        }
+
+        var photoRemoveBtn = e.target.closest('[data-job-photo-remove]');
+        if (photoRemoveBtn) {
+            if (photoRemoveBtn.disabled) return;
+            removeJobPhoto(
+                parseInt(photoRemoveBtn.dataset.jobPhotoRemove, 10) || 0,
+                photoRemoveBtn.dataset.photoPath || ''
+            );
+            return;
+        }
+
+        var authorizeBtn = e.target.closest('.authorize-btn');
+        if (authorizeBtn) {
+            if (authorizeBtn.disabled) return;
+            openAuthorizationModal(authorizeBtn);
+            return;
+        }
+
         var btn = e.target.closest('.mileage-btn');
         if (!btn || btn.disabled) return;
 
@@ -1593,6 +3163,18 @@ var DEFAULT_VEHICLE_ID = <?= $defaultVehicleId !== null ? (int) $defaultVehicleI
 		var message = 'Ghost Laser Technician: I just got here. Let me log into the system and take out my tools and I\'ll be right in.';
 		window.location.href = 'sms:' + phone + '?body=' + encodeURIComponent(message);
 	};
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && authModal && authModal.classList.contains('open')) {
+            closeAuthorizationModal();
+        } else if (event.key === 'Escape' && techNotesModal && techNotesModal.classList.contains('open')) {
+            closeTechnicianNotesModal();
+        } else if (authModal && authModal.classList.contains('open')) {
+            trapModalFocus(event, authModal);
+        } else if (techNotesModal && techNotesModal.classList.contains('open')) {
+            trapModalFocus(event, techNotesModal);
+        }
+    });
 }());
 
 function saveContact(btn) {
