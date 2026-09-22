@@ -15,32 +15,14 @@ require_once __DIR__ . '/functions.php';
 function loadGoogleMapsApiKey(): string {
     static $key = null;
     if ($key !== null) return $key;
-    // Check OS environment first
-    $envKey = getenv('GOOGLE_MAPS_API_KEY');
-    if ($envKey !== false && trim($envKey) !== '') {
-        $key = trim($envKey);
-        return $key;
-    }
-    // Fall back to api/.env file (same source used by api/book-repair-api.php)
-    $dotenvPath = __DIR__ . '/api/.env';
-    if (is_file($dotenvPath) && is_readable($dotenvPath)) {
-        $lines = file($dotenvPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        if (is_array($lines)) {
-            foreach ($lines as $line) {
-                $line = trim($line);
-                if ($line === '' || str_starts_with($line, '#')) continue;
-                if (!str_starts_with($line, 'GOOGLE_MAPS_API_KEY=')) continue;
-                $val = substr($line, strlen('GOOGLE_MAPS_API_KEY='));
-                $val = trim($val);
-                if (strlen($val) >= 2) {
-                    if ($val[0] === '"' && $val[-1] === '"') $val = substr($val, 1, -1);
-                    elseif ($val[0] === "'" && $val[-1] === "'") $val = substr($val, 1, -1);
-                }
-                $key = $val;
-                return $key;
-            }
+
+    foreach ([getenv('GOOGLE_MAPS_API_KEY'), getenv('REDIRECT_GOOGLE_MAPS_API_KEY'), $_ENV['GOOGLE_MAPS_API_KEY'] ?? null, $_SERVER['GOOGLE_MAPS_API_KEY'] ?? null, $_SERVER['REDIRECT_GOOGLE_MAPS_API_KEY'] ?? null] as $candidate) {
+        if ($candidate !== null && trim((string) $candidate) !== '') {
+            $key = trim((string) $candidate);
+            return $key;
         }
     }
+
     $key = '';
     return $key;
 }
