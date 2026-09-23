@@ -18,7 +18,7 @@
 @endphp
 
 <footer
-    class="mt-9 bg-lightOrange max-sm:mt-10"
+    class="mt-9 border-t border-zinc-800 bg-zinc-950 max-sm:mt-10"
     @if ($section && $sectionRepository->isPreviewing())
         data-section-id="{{ $section->id }}"
         data-section-name="{{ $section->name }}"
@@ -46,9 +46,9 @@
         <!-- For Mobile view -->
         <x-shop::accordion
             :is-active="false"
-            class="hidden !w-full rounded-xl !border-2 !border-[#e9decc] max-1060:block max-sm:rounded-lg"
+            class="hidden !w-full rounded-xl !border-2 !border-zinc-800 max-1060:block max-sm:rounded-lg"
         >
-            <x-slot:header class="rounded-t-lg bg-[#F1EADF] font-medium max-md:p-2.5 max-sm:px-3 max-sm:py-2 max-sm:text-sm">
+            <x-slot:header class="rounded-t-lg bg-zinc-900 font-medium max-md:p-2.5 max-sm:px-3 max-sm:py-2 max-sm:text-sm">
                 @lang('shop::app.components.layouts.footer.footer-content')
             </x-slot>
 
@@ -79,7 +79,7 @@
         @if (core()->getConfigData('customer.settings.newsletter.subscription'))
             <div class="grid content-start gap-2.5">
                 <p
-                    class="max-w-[288px] text-3xl italic leading-[45px] text-navyBlue max-md:text-2xl max-sm:text-lg"
+                    class="max-w-[288px] text-3xl italic leading-[45px] text-zinc-100 max-md:text-2xl max-sm:text-lg"
                     role="heading"
                     aria-level="2"
                 >
@@ -101,7 +101,7 @@
                         <div class="relative w-full">
                             <x-shop::form.control-group.control
                                 type="email"
-                                class="block w-[420px] max-w-full rounded-xl border-2 border-[#e9decc] bg-[#F1EADF] px-5 py-4 text-base max-1060:w-full max-md:p-3.5 max-sm:mb-0 max-sm:rounded-lg max-sm:border-2 max-sm:p-2 max-sm:text-sm"
+                                class="block w-[420px] max-w-full rounded-xl border-2 border-zinc-800 bg-zinc-900 px-5 py-4 text-base max-1060:w-full max-md:p-3.5 max-sm:mb-0 max-sm:rounded-lg max-sm:border-2 max-sm:p-2 max-sm:text-sm"
                                 name="email"
                                 rules="required|email"
                                 label="Email"
@@ -114,7 +114,7 @@
     
                             <button
                                 type="submit"
-                                class="absolute top-1.5 flex w-max items-center rounded-xl bg-white px-7 py-2.5 font-medium hover:bg-zinc-100 ltr:right-2 rtl:left-2 max-md:top-1 max-md:px-5 max-md:text-xs max-sm:mt-0 max-sm:rounded-lg max-sm:px-4 max-sm:py-2"
+                                class="absolute top-1.5 flex w-max items-center rounded-xl bg-zinc-800 px-7 py-2.5 font-medium text-zinc-100 hover:bg-zinc-700 ltr:right-2 rtl:left-2 max-md:top-1 max-md:px-5 max-md:text-xs max-sm:mt-0 max-sm:rounded-lg max-sm:px-4 max-sm:py-2"
                             >
                                 @lang('shop::app.components.layouts.footer.subscribe')
                             </button>
@@ -127,10 +127,10 @@
         {!! view_render_event('bagisto.shop.layout.footer.newsletter_subscription.after') !!}
     </div>
 
-    <div class="flex justify-between bg-[#F1EADF] px-[60px] py-3.5 max-md:justify-center max-sm:px-5">
+    <div class="flex justify-between bg-zinc-900 px-[60px] py-3.5 max-md:justify-center max-sm:px-5">
         {!! view_render_event('bagisto.shop.layout.footer.footer_text.before') !!}
 
-        <p class="text-sm text-zinc-600 max-md:text-center">
+        <p class="text-sm text-zinc-400 max-md:text-center">
             @if (core()->getConfigData('general.content.footer.copyright_content'))
                 {!! clean_content((string) core()->getConfigData('general.content.footer.copyright_content')) !!}
             @else
