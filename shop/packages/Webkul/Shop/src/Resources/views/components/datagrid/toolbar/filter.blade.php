@@ -36,7 +36,7 @@
                 >
                     <x-slot:toggle>
                         <div
-                            class="flex w-full max-w-[200px] cursor-pointer items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-zinc-950 py-2 text-sm transition-all hover:border-gray-400 focus:border-gray-400 max-md:w-fit ltr:pl-3 ltr:pr-4 max-md:ltr:pl-2.5 max-md:ltr:pr-2.5 rtl:pl-4 rtl:pr-3 max-md:rtl:pl-2.5 max-md:rtl:pr-2.5"
+                            class="flex w-full max-w-[200px] cursor-pointer items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-white py-2 text-sm transition-all hover:border-gray-400 focus:border-gray-400 max-md:w-fit ltr:pl-3 ltr:pr-4 max-md:ltr:pl-2.5 max-md:ltr:pr-2.5 rtl:pl-4 rtl:pr-3 max-md:rtl:pl-2.5 max-md:rtl:pr-2.5"
                             :class="{'[&>*]:text-blue-600': filters.columns.length > 0}"
                         >
                             <span class="flex items-center justify-between gap-1.5">
@@ -87,7 +87,7 @@
                                                 <x-slot:toggle>
                                                     <button
                                                         type="button"
-                                                        class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-zinc-950 py-2 text-sm transition-all hover:border-gray-400 focus:border-gray-400 max-md:w-full max-md:!py-1.5 ltr:pl-4 ltr:pr-3 max-md:ltr:pl-2.5 max-md:ltr:pr-2.5 rtl:pl-3 rtl:pr-4 max-md:rtl:pl-2.5 max-md:rtl:pr-2.5"
+                                                        class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-white py-2 text-sm transition-all hover:border-gray-400 focus:border-gray-400 max-md:w-full max-md:!py-1.5 ltr:pl-4 ltr:pr-3 max-md:ltr:pl-2.5 max-md:ltr:pr-2.5 rtl:pl-3 rtl:pr-4 max-md:rtl:pl-2.5 max-md:rtl:pr-2.5"
                                                     >
                                                         <!-- If Allow Multiple Values -->
                                                         <span
@@ -447,7 +447,7 @@
                                             <x-slot:toggle>
                                                 <button
                                                     type="button"
-                                                    class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-zinc-950 py-2 text-sm text-gray-600 transition-all hover:border-gray-400 focus:border-gray-400 ltr:pl-4 ltr:pr-3 rtl:pl-3 rtl:pr-4"
+                                                    class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-white py-2 text-sm text-gray-600 transition-all hover:border-gray-400 focus:border-gray-400 ltr:pl-4 ltr:pr-3 rtl:pl-3 rtl:pr-4"
                                                 >
                                                     <span v-text="numericOperators.find((operator) => operator.value === filterOperator[column.index])?.label"></span>
 
@@ -567,7 +567,7 @@
                                                 <x-slot:toggle>
                                                     <button
                                                         type="button"
-                                                        class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-zinc-950 py-2 text-sm transition-all hover:border-gray-400 focus:border-gray-400 max-md:w-full max-md:py-1.5 ltr:pl-4 ltr:pr-3 max-md:ltr:pl-2.5 max-md:ltr:pr-2.5 rtl:pl-3 rtl:pr-4 max-md:rtl:pl-2.5 max-md:rtl:pr-2.5"
+                                                        class="flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-white py-2 text-sm transition-all hover:border-gray-400 focus:border-gray-400 max-md:w-full max-md:py-1.5 ltr:pl-4 ltr:pr-3 max-md:ltr:pl-2.5 max-md:ltr:pr-2.5 rtl:pl-3 rtl:pr-4 max-md:rtl:pl-2.5 max-md:rtl:pr-2.5"
                                                     >
                                                         <!-- If Allow Multiple Values -->
                                                         <span
@@ -720,7 +720,7 @@
                             leave-to-class="translate-y-full opacity-0"
                         >
                             <div
-                                class="sticky bottom-0 border-t border-zinc-200 bg-zinc-950 p-4"
+                                class="sticky bottom-0 border-t border-zinc-200 bg-white p-4"
                                 v-show="filters.columns.length > 0 || hasAnyAppliedColumn()"
                             >
                                 <button

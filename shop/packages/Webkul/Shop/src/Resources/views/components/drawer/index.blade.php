@@ -89,7 +89,7 @@
                 :leave-to-class="enterFromLeaveToClasses"
             >
                 <div
-                    class="fixed z-[1000] overflow-hidden bg-zinc-950 max-md:!w-full"
+                    class="fixed z-[1000] overflow-hidden bg-white max-md:!w-full"
                     :class="{
                         'inset-x-0 top-0': position == 'top',
                         'inset-x-0 bottom-0 max-sm:max-h-full': position == 'bottom',
@@ -99,7 +99,7 @@
                     :style="'width:' + width"
                     v-show="isOpen"
                 >
-                    <div class="pointer-events-auto h-full w-full overflow-auto bg-zinc-950">
+                    <div class="pointer-events-auto h-full w-full overflow-auto bg-white">
                         <div class="flex h-full w-full flex-col">
                             <div class="min-h-0 min-w-0 flex-1 overflow-auto">
                                 <div class="flex h-full flex-col">
