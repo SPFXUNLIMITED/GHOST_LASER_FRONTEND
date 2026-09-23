@@ -14,11 +14,6 @@
     "file": "assets/vue-Cbfb4A7j.js",
     "name": "vue"
   },
-  "src/Resources/assets/css/app.css": {
-    "file": "assets/app-BqaB0kJO.css",
-    "src": "src/Resources/assets/css/app.css",
-    "isEntry": true
-  },
   "src/Resources/assets/fonts/bagisto-shop.woff": {
     "file": "assets/bagisto-shop-BHAKyv0r.woff",
     "src": "src/Resources/assets/fonts/bagisto-shop.woff"
@@ -116,7 +111,7 @@
     "src": "src/Resources/assets/images/wishlist.png"
   },
   "src/Resources/assets/js/app.js": {
-    "file": "assets/app-Bk-rJHIJ.js",
+    "file": "assets/app-Ch6tQcdj.js",
     "name": "app",
     "src": "src/Resources/assets/js/app.js",
     "isEntry": true,
@@ -126,7 +121,10 @@
       "_veeValidate-o7oVFGhs.js"
     ],
     "css": [
-      "assets/app-DsP8OK1c.css"
+      "assets/app-DJFBIBU7.css"
+    ],
+    "assets": [
+      "assets/bagisto-shop-BHAKyv0r.woff"
     ]
   }
 }
