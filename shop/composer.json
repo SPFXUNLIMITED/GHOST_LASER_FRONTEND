@@ -51,7 +51,8 @@
         "stripe/stripe-php": "^17.3",
         "symfony/brevo-mailer": "^7.4",
         "symfony/http-client": "^7.4",
-        "web-token/jwt-framework": "^4.1"
+        "web-token/jwt-framework": "^4.1",
+		"webkul/ghostlaser": "*"
     },
     "require-dev": {
         "bagisto/bagisto-package-generator": "^2.1",
@@ -167,7 +168,7 @@
             "php-http/discovery": true
         }
     },
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
     "prefer-stable": true,
     "support": {
         "issues": "https://github.com/bagisto/bagisto/issues",

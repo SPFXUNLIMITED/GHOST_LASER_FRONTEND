@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "80272e7098e51d22ac1b06eaa66f312d",
+    "content-hash": "59cb3bc1f23449ead194e0b3f59f2859",
     "packages": [
         {
             "name": "apimatic/core",
@@ -12247,7 +12247,7 @@
             "dist": {
                 "type": "path",
                 "url": "packages/Webkul/GhostLaser",
-                "reference": "6b77f8e0b4d31d38b19f0ad763019b2cbcbc5269"
+                "reference": "93509c59f8519a2fe71710cf13eb19c578c7bad7"
             },
             "type": "library",
             "extra": {
@@ -12255,6 +12255,11 @@
                     "providers": [
                         "Webkul\\GhostLaser\\Providers\\GhostLaserServiceProvider"
                     ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Webkul\\GhostLaser\\": "src/"
                 }
             },
             "transport-options": {
@@ -15892,10 +15897,8 @@
         }
     ],
     "aliases": [],
-    "minimum-stability": "stable",
-    "stability-flags": {
-        "webkul/ghostlaser": 20
-    },
+    "minimum-stability": "dev",
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

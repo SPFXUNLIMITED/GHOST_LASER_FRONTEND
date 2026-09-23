@@ -1,8 +1,10 @@
 {
     "name": "webkul/ghostlaser",
+    "type": "library",
     "extra": {
         "laravel": {
-            "providers": }
+            "providers": ["Webkul\\GhostLaser\\Providers\\GhostLaserServiceProvider"]
+        }
     },
     "autoload": {
         "psr-4": {
