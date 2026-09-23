@@ -103,7 +103,7 @@
         </a>
 
         <!-- Built With Bagisto -->
-        <div id="app">
+        <div id="app" class="bg-zinc-950 bg-grid-pattern text-zinc-100 font-sans">
             <!-- Flash Message Blade Component -->
             <x-shop::flash-group />
 
