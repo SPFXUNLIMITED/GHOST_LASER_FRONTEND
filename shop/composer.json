@@ -111,7 +111,8 @@
             "Webkul\\Stripe\\": "packages/Webkul/Stripe/src",
             "Webkul\\Tax\\": "packages/Webkul/Tax/src",
             "Webkul\\Theme\\": "packages/Webkul/Theme/src",
-            "Webkul\\User\\": "packages/Webkul/User/src"
+            "Webkul\\User\\": "packages/Webkul/User/src",
+			"Webkul\\GhostLaser\\": "packages/Webkul/GhostLaser/src"
         }
     },
     "autoload-dev": {
@@ -152,7 +153,7 @@
     },
     "repositories": [{
         "type": "path",
-        "url": "packages/*/*",
+        "url": "packages/Webkul/GhostLaser",
         "options": {
             "symlink": true
         }

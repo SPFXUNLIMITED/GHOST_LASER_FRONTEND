@@ -43,7 +43,7 @@ class GhostLaserServiceProvider extends ServiceProvider
     protected function registerConfig()
     {
         $this->mergeConfigFrom(
-            dirname(__DIR__) . '/Config/admin-menu.php', 'menu.admin'
+            dirname(__DIR__) . '/Config/admin-menu.php', 'menu.admin.items'
         );
 
         $this->mergeConfigFrom(

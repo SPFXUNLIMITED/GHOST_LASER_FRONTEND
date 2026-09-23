@@ -1,0 +1,12 @@
+{
+    "name": "webkul/ghostlaser",
+    "extra": {
+        "laravel": {
+            "providers": }
+    },
+    "autoload": {
+        "psr-4": {
+            "Webkul\\GhostLaser\\": "src/"
+        }
+    }
+}
