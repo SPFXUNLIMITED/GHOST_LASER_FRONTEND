@@ -11,7 +11,7 @@
             <span class="shimmer h-6 w-6"></span>
         </div>
 
-        <div class="z-10 rounded-lg bg-zinc-950">
+        <div class="z-10 rounded-lg bg-white">
             <x-shop::shimmer.range-slider />
         </div>
     </div>
@@ -29,7 +29,7 @@
             <div class="shimmer h-5 w-[50%] self-end rounded"></div>
         </div>
 
-        <div class="z-10 grid gap-1 rounded-lg bg-zinc-950 pb-3">
+        <div class="z-10 grid gap-1 rounded-lg bg-white pb-3">
             <div class="flex items-center gap-x-4 ltr:pl-2 rtl:pr-2">
                 <div class="shimmer h-5 w-5 rounded"></div>
 
@@ -69,7 +69,7 @@
             <div class="shimmer h-5 w-[50%] self-end rounded"></div>
         </div>
 
-        <div class="z-10 grid gap-1 rounded-lg bg-zinc-950 pb-3">
+        <div class="z-10 grid gap-1 rounded-lg bg-white pb-3">
             <div class="flex items-center gap-x-4 ltr:pl-2 rtl:pr-2">
                 <div class="shimmer h-5 w-5 rounded"></div>
 
