@@ -512,7 +512,7 @@ img.lazy {
 
     html,
     body {
-        @apply bg-zinc-950 text-zinc-100;
+        @apply bg-zinc-950;
     }
 
     #app {

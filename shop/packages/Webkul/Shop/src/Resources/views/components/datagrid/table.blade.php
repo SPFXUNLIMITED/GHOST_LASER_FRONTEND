@@ -21,7 +21,7 @@
         id="v-datagrid-table-template"
     >
         <div class="w-full overflow-x-auto rounded-xl border max-md:rounded-none max-md:border-0">
-            <div class="table-responsive box-shadow grid w-full overflow-hidden rounded bg-white">
+            <div class="table-responsive box-shadow grid w-full overflow-hidden rounded bg-zinc-950">
                 <slot
                     name="header"
                     :is-loading="isLoading"
@@ -115,7 +115,7 @@
                     <template v-else>
                         <template v-if="available.records.length">
                             <div
-                                class="row grid items-center gap-2.5 border-b bg-white px-6 py-4 font-medium text-gray-600 transition-all max-md:p-4 max-md:text-xs"
+                                class="row grid items-center gap-2.5 border-b bg-zinc-950 px-6 py-4 font-medium text-gray-600 transition-all max-md:p-4 max-md:text-xs"
                                 v-for="record in available.records"
                                 :style="`grid-template-columns: repeat(${gridsCount}, minmax(0, 1fr))`"
                             >

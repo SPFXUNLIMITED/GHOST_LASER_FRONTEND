@@ -7,7 +7,7 @@
     >
         <transition
             tag="div"
-            class="bg-white"
+            class="bg-zinc-950"
             name="modal-content"
             enter-class="duration-300 ease-out"
             enter-from-class="translate-y-4 opacity-0 md:translate-y-0 md:scale-95"

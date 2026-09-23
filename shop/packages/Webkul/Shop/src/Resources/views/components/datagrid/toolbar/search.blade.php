@@ -32,7 +32,7 @@
                                 type="text"
                                 name="search"
                                 :value="getSearchedValues('all')"
-                                class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-base text-gray-600 transition-all hover:border-gray-400 focus:border-gray-400 max-md:max-w-[250px] max-md:py-2 max-sm:py-1.5 ltr:pr-8 rtl:pl-8"
+                                class="rounded-lg border border-gray-300 bg-zinc-950 px-3 py-2 text-base text-gray-600 transition-all hover:border-gray-400 focus:border-gray-400 max-md:max-w-[250px] max-md:py-2 max-sm:py-1.5 ltr:pr-8 rtl:pl-8"
                                 placeholder="@lang('shop::app.components.datagrid.toolbar.search.title')"
                                 autocomplete="off"
                                 @keyup.enter="search"
