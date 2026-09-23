@@ -1,4 +1,9 @@
 /**
+ * Main stylesheet, bundled together with this entry point.
+ */
+import "../css/app.css";
+
+/**
  * This will track all the images and fonts for publishing.
  */
 import.meta.glob(["../images/**", "../fonts/**"]);

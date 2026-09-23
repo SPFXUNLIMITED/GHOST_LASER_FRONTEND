@@ -52,7 +52,7 @@
             href="{{ core()->getCurrentChannel()->favicon_url ?? bagisto_asset('images/favicon.ico') }}"
         />
 
-        @bagistoVite(['src/Resources/assets/css/app.css', 'src/Resources/assets/js/app.js'])
+        @bagistoVite(['src/Resources/assets/js/app.js'])
 
         <link
             rel="preconnect"
