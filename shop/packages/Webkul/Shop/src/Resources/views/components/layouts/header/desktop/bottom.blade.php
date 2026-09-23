@@ -76,7 +76,7 @@
                     name="query"
                     value="{{ request('query') }}"
                     toolparamdescription="{{ trans('shop::app.components.layouts.webmcp.search-products-query') }}"
-                    class="block w-full py-3 text-xs font-medium text-gray-900 transition-all border border-transparent rounded-lg bg-zinc-100 px-11 hover:border-gray-400 focus:border-gray-400"
+                    class="block w-full py-3 text-xs font-medium text-zinc-100 transition-all border border-transparent rounded-lg bg-zinc-900 px-11 hover:border-zinc-600 focus:border-zinc-600"
                     minlength="{{ core()->getConfigData('catalog.products.search.min_query_length') }}"
                     maxlength="{{ core()->getConfigData('catalog.products.search.max_query_length') }}"
                     placeholder="@lang('shop::app.components.layouts.header.desktop.bottom.search-text')"
@@ -213,14 +213,14 @@
                             {!! view_render_event('bagisto.shop.components.layouts.header.desktop.bottom.profile_dropdown.links.before') !!}
 
                             <a
-                                class="px-5 py-2 text-base cursor-pointer hover:bg-gray-100"
+                                class="px-5 py-2 text-base cursor-pointer hover:bg-zinc-800"
                                 href="{{ route('shop.customers.account.profile.index') }}"
                             >
                                 @lang('shop::app.components.layouts.header.desktop.bottom.profile')
                             </a>
 
                             <a
-                                class="px-5 py-2 text-base cursor-pointer hover:bg-gray-100"
+                                class="px-5 py-2 text-base cursor-pointer hover:bg-zinc-800"
                                 href="{{ route('shop.customers.account.orders.index') }}"
                             >
                                 @lang('shop::app.components.layouts.header.desktop.bottom.orders')
@@ -228,7 +228,7 @@
 
                             @if (core()->getConfigData('customer.settings.wishlist.wishlist_option'))
                                 <a
-                                    class="px-5 py-2 text-base cursor-pointer hover:bg-gray-100"
+                                    class="px-5 py-2 text-base cursor-pointer hover:bg-zinc-800"
                                     href="{{ route('shop.customers.account.wishlist.index') }}"
                                 >
                                     @lang('shop::app.components.layouts.header.desktop.bottom.wishlist')
@@ -244,7 +244,7 @@
                                 />
 
                                 <a
-                                    class="px-5 py-2 text-base cursor-pointer hover:bg-gray-100"
+                                    class="px-5 py-2 text-base cursor-pointer hover:bg-zinc-800"
                                     href="{{ route('shop.customer.session.destroy') }}"
                                     onclick="event.preventDefault(); document.getElementById('customerLogout').submit();"
                                 >
@@ -308,7 +308,7 @@
                 </span>
 
                 <div
-                    class="pointer-events-none absolute top-[78px] z-[1] max-h-[580px] w-max max-w-[1260px] translate-y-1 overflow-auto overflow-x-auto border border-b-0 border-l-0 border-r-0 border-t border-[#F3F3F3] bg-white p-9 opacity-0 shadow-[0_6px_6px_1px_rgba(0,0,0,.3)] transition duration-300 ease-out group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-hover:duration-200 group-hover:ease-in ltr:-left-9 rtl:-right-9"
+                    class="pointer-events-none absolute top-[78px] z-[1] max-h-[580px] w-max max-w-[1260px] translate-y-1 overflow-auto overflow-x-auto border border-b-0 border-l-0 border-r-0 border-t border-zinc-800 bg-zinc-900 p-9 opacity-0 shadow-[0_6px_6px_1px_rgba(0,0,0,.3)] transition duration-300 ease-out group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-hover:duration-200 group-hover:ease-in ltr:-left-9 rtl:-right-9"
                     data-mega-menu-dropdown
                     v-if="category.children && category.children.length"
                 >
@@ -376,7 +376,7 @@
 
                     <!-- Dropdown for each category -->
                     <div
-                        class="pointer-events-none absolute top-[78px] z-[1] max-h-[580px] w-max max-w-[1260px] translate-y-1 overflow-auto overflow-x-auto border border-b-0 border-l-0 border-r-0 border-t border-[#F3F3F3] bg-white p-9 opacity-0 shadow-[0_6px_6px_1px_rgba(0,0,0,.3)] transition duration-300 ease-out group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-hover:duration-200 group-hover:ease-in ltr:-left-9 rtl:-right-9 flex justify-between gap-x-[70px]"
+                        class="pointer-events-none absolute top-[78px] z-[1] max-h-[580px] w-max max-w-[1260px] translate-y-1 overflow-auto overflow-x-auto border border-b-0 border-l-0 border-r-0 border-t border-zinc-800 bg-zinc-900 p-9 opacity-0 shadow-[0_6px_6px_1px_rgba(0,0,0,.3)] transition duration-300 ease-out group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-hover:duration-200 group-hover:ease-in ltr:-left-9 rtl:-right-9 flex justify-between gap-x-[70px]"
                         data-mega-menu-dropdown
                         v-if="category.children && category.children.length"
                     >
@@ -447,7 +447,7 @@
                                         :key="category.id"
                                         :class="{'mb-2': category.children && category.children.length}"
                                     >
-                                        <div class="flex items-center justify-between px-6 py-2 transition-colors duration-200 cursor-pointer hover:bg-gray-100">
+                                        <div class="flex items-center justify-between px-6 py-2 transition-colors duration-200 cursor-pointer hover:bg-zinc-800">
                                             <a
                                                 :href="category.url"
                                                 class="text-base font-medium text-black"
@@ -463,7 +463,7 @@
                                                 :key="secondLevelCategory.id"
                                             >
                                                 <div
-                                                    class="flex items-center justify-between px-6 py-2 transition-colors duration-200 cursor-pointer hover:bg-gray-100"
+                                                    class="flex items-center justify-between px-6 py-2 transition-colors duration-200 cursor-pointer hover:bg-zinc-800"
                                                     @click="showThirdLevel(secondLevelCategory, category, $event)"
                                                 >
                                                     <a
@@ -512,7 +512,7 @@
                                     >
                                         <a
                                             :href="thirdLevelCategory.url"
-                                            class="block px-6 py-2 text-sm transition-colors duration-200 hover:bg-gray-100"
+                                            class="block px-6 py-2 text-sm transition-colors duration-200 hover:bg-zinc-800"
                                         >
                                             @{{ thirdLevelCategory.name }}
                                         </a>
