@@ -43,7 +43,7 @@ $lng  = isset($req['origin_lng'])  ? $req['origin_lng']  : null;
 $dest = isset($req['destination']) ? trim($req['destination']) : '';
 
 if (!$lat || !$lng || !$dest) {
-    echo json_encode(['success' => true, 'message' => "Ghost Laser Technician: I'm on my way! I should be there shortly."]);
+    echo json_encode(['success' => true, 'message' => "Laser Technician: I'm on my way! I should be there shortly."]);
     exit;
 }
 
@@ -83,7 +83,7 @@ function format_eta_duration(int $minutes): string {
     return implode(' ', $parts);
 }
 
-$message = "Ghost Laser Technician: I'm on my way! I should be there shortly.";
+$message = "Laser Technician: I'm on my way! I should be there shortly.";
 
 if (
     is_array($data) &&
@@ -92,11 +92,11 @@ if (
 ) {
     $minutes  = (int) round($data['rows'][0]['elements'][0]['duration']['value'] / 60);
     $duration = format_eta_duration($minutes);
-    $arrival  = (new DateTimeImmutable('now'))
+    $arrival  = (new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles')))
         ->add(new DateInterval('PT' . max(1, $minutes) . 'M'))
         ->format('g:i A');
 
-    $message = "Ghost Laser Technician: I'm on my way! I should be there in about {$duration}, by {$arrival}.";
+    $message = "Laser Technician: I'm on my way! I should be there in about {$duration}, by {$arrival}.";
 }
 
 echo json_encode(['success' => true, 'message' => $message]);
