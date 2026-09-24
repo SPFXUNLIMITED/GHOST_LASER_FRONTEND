@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => {
             laravel({
                 hotFile: "../../../public/shop-default-vite.hot",
                 publicDirectory: "../../../public",
-                buildDirectory: "themes/shop/default/build",
+                buildDirectory: "themes/shop/ghost-laser/build",
                 input: [
                     "src/Resources/assets/css/app.css",
                     "src/Resources/assets/js/app.js",
