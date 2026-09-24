@@ -49,10 +49,12 @@ if (!$lat || !$lng || !$dest) {
 
 $url = 'https://maps.googleapis.com/maps/api/distancematrix/json?'
      . http_build_query([
-         'origins'      => $lat . ',' . $lng,
-         'destinations' => $dest,
-         'mode'         => 'driving',
-         'key'          => $key,
+         'origins'        => $lat . ',' . $lng,
+         'destinations'   => $dest,
+         'mode'           => 'driving',
+         'departure_time' => 'now',
+         'traffic_model'  => 'best_guess',
+         'key'            => $key,
      ]);
 
 $response = @file_get_contents($url);
@@ -83,20 +85,62 @@ function format_eta_duration(int $minutes): string {
     return implode(' ', $parts);
 }
 
-$message = "Laser Technician: I'm on my way! I should be there shortly.";
+/**
+ * Reports the exact Google Distance Matrix failure (OVER_QUERY_LIMIT,
+ * REQUEST_DENIED, INVALID_REQUEST, ...) instead of silently falling back
+ * to a static duration.
+ */
+function fail_with_google_error(string $status, string $errorMessage = ''): void {
+    $error = 'Google Distance Matrix error: ' . $status;
 
-if (
-    is_array($data) &&
-    isset($data['rows'][0]['elements'][0]['status']) &&
-    $data['rows'][0]['elements'][0]['status'] === 'OK'
-) {
-    $minutes  = (int) round($data['rows'][0]['elements'][0]['duration']['value'] / 60);
-    $duration = format_eta_duration($minutes);
-    $arrival  = (new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles')))
-        ->add(new DateInterval('PT' . max(1, $minutes) . 'M'))
-        ->format('g:i A');
+    if ($errorMessage !== '') {
+        $error .= ' - ' . $errorMessage;
+    }
 
-    $message = "Laser Technician: I'm on my way! I should be there in about {$duration}, by {$arrival}.";
+    echo json_encode([
+        'success'       => false,
+        'error'         => $error,
+        'status'        => $status,
+        'error_message' => $errorMessage,
+    ]);
+    exit;
 }
+
+if (!is_array($data)) {
+    fail_with_google_error('REQUEST_FAILED', 'No valid response from the Google Distance Matrix API.');
+}
+
+$topStatus = (string) ($data['status'] ?? '');
+
+if ($topStatus !== 'OK') {
+    fail_with_google_error(
+        $topStatus !== '' ? $topStatus : 'UNKNOWN_ERROR',
+        (string) ($data['error_message'] ?? '')
+    );
+}
+
+$element       = $data['rows'][0]['elements'][0] ?? null;
+$elementStatus = is_array($element) ? (string) ($element['status'] ?? '') : '';
+
+if ($elementStatus !== 'OK') {
+    fail_with_google_error(
+        $elementStatus !== '' ? $elementStatus : 'UNKNOWN_ERROR',
+        (string) ($data['error_message'] ?? '')
+    );
+}
+
+$durationSeconds = $element['duration_in_traffic']['value'] ?? $element['duration']['value'] ?? null;
+
+if (!is_numeric($durationSeconds)) {
+    fail_with_google_error('INVALID_REQUEST', 'Google did not return a travel duration for this route.');
+}
+
+$minutes  = (int) round(((float) $durationSeconds) / 60);
+$duration = format_eta_duration($minutes);
+$arrival  = (new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles')))
+    ->add(new DateInterval('PT' . max(1, $minutes) . 'M'))
+    ->format('g:i A');
+
+$message = "Laser Technician: I'm on my way! I should be there in about {$duration}, by {$arrival}.";
 
 echo json_encode(['success' => true, 'message' => $message]);
