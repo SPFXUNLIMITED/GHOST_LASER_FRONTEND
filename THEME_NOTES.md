@@ -90,3 +90,29 @@ not to this static-site repo, so they cannot be run from here.
 ## Reference
 
 The original cyberpunk homepage lives in the separate repo `SPFXUNLIMITED/GHOST_LASER_FRONTEND`.
+
+## custom-theme asset package (`packages/Webkul/CustomTheme`)
+
+The compiled CSS/JS for `custom-theme` is built from this package:
+
+| File | Purpose |
+| --- | --- |
+| `package.json` | npm package named `custom-theme` with the Vite/Tailwind toolchain |
+| `vite.config.js` | `hotFile: public/custom-theme-vite.hot`, `buildDirectory: themes/shop/custom-theme/build`, inputs `src/Resources/assets/css/app.css` and `src/Resources/assets/js/app.js` |
+| `tailwind.config.js` / `postcss.config.js` | Tailwind + PostCSS config (scans the `resources/themes/custom-theme/views` Blade files) |
+| `src/Resources/assets/css/app.css` | Tailwind directives plus the glow helpers (`.glow-cyan`, `.glow-box`, `.btn-glow`, `.gradient-fade-bottom`, `.hero-grid`) |
+| `src/Resources/assets/js/app.js` | Vue/axios entry point |
+| `src/Resources/assets/{fonts,images,locales}` | Placeholders — copy these folders from `packages/Webkul/Shop/src/Resources/assets/` in the Bagisto app (the Shop package is not in this repo) |
+
+### Deploy
+
+1. Upload the whole `packages/Webkul/CustomTheme` folder to the server, keeping it at
+   `packages/Webkul/CustomTheme` inside the Bagisto application root.
+2. Copy `packages/Webkul/Shop/src/Resources/assets/fonts`, `images` and `locales`
+   into `packages/Webkul/CustomTheme/src/Resources/assets/`.
+3. `cd packages/Webkul/CustomTheme`
+4. `npm install`
+5. `npm run build`
+
+The build output lands in `public/themes/shop/custom-theme/build`, which is the
+`assets_path` registered for `custom-theme` in `config/themes.php`.
