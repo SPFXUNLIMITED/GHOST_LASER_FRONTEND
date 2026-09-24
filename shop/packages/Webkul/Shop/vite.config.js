@@ -1,4 +1,3 @@
-import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, loadEnv } from "vite";
 import vue from "@vitejs/plugin-vue";
 import laravel from "laravel-vite-plugin";
@@ -35,14 +34,12 @@ export default defineConfig(({ mode }) => {
 
         plugins: [
             vue(),
-			tailwindcss(),
 
             laravel({
                 hotFile: "../../../public/shop-default-vite.hot",
                 publicDirectory: "../../../public",
                 buildDirectory: "themes/shop/ghost-laser/build",
                 input: [
-                    "src/Resources/assets/css/app.css",
                     "src/Resources/assets/js/app.js",
                 ],
                 refresh: true,

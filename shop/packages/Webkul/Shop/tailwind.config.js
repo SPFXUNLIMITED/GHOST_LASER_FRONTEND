@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-    content: ["./src/Resources/**/*.blade.php", "./src/Resources/**/*.js"],
+    content: ["./src/Resources/**/*.blade.php", "./src/Resources/**/*.js", "./../../../resources/themes/ghost-laser/views/**/*.blade.php"],
 
     theme: {
         container: {
@@ -34,11 +34,21 @@ module.exports = {
                 darkGreen: '#40994A',
                 darkBlue: '#0044F2',
                 darkPink: '#F85156',
+                zinc950: '#09090b',
+                cyan400: '#22d3ee',
+                cyan500: '#06b6d4',
+                violet500: '#8b5cf6',
             },
 
             fontFamily: {
                 poppins: ["Poppins", "sans-serif"],
                 dmserif: ["DM Serif Display", "serif"],
+                sans: ["Inter", "system-ui", "sans-serif"],
+            },
+
+            backgroundImage: {
+                'grid-pattern': 'linear-gradient(rgba(34,211,238,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.05) 1px, transparent 1px)',
+                'grid-pattern-size': '60px 60px',
             },
         }
     },
