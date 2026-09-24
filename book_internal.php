@@ -175,18 +175,35 @@ function getCustomerSearchSelectColumns(PDO $pdo): array {
 
 // ── Data ───────────────────────────────────────────────────────────────────
 function fetchServicesForBooking(PDO $pdo): array {
+    // is_premium is optional so the form keeps working on deployments where the
+    // migration has not been applied yet; missing column means every service is
+    // treated as a regular (non-premium) service.
+    $premiumSelect = servicesTableHasPremiumColumn($pdo) ? 'is_premium' : '0 AS is_premium';
+    $premiumOrder  = servicesTableHasPremiumColumn($pdo) ? 'is_premium ASC, ' : '';
+
     return $pdo->query(
-        "SELECT id, service_name, base_price FROM services ORDER BY service_name ASC"
+        "SELECT id, service_name, base_price, duration_minutes, {$premiumSelect} FROM services ORDER BY {$premiumOrder}service_name ASC"
     )->fetchAll(PDO::FETCH_ASSOC);
 }
 
 $_dbServices = fetchServicesForBooking($pdo);
 $serviceLabels = [];
 $serviceBasePrices = [];
+$serviceDurations = [];
+$servicePremium = [];
+$regularServiceKeys = [];
+$premiumServiceKeys = [];
 foreach ($_dbServices as $_svc) {
     $_key = (string) $_svc['id'];
     $serviceLabels[$_key] = $_svc['service_name'];
     $serviceBasePrices[$_key] = (float) $_svc['base_price'];
+    $serviceDurations[$_key] = (int) ($_svc['duration_minutes'] ?? 0);
+    $servicePremium[$_key] = ((int) ($_svc['is_premium'] ?? 0)) === 1;
+    if ($servicePremium[$_key]) {
+        $premiumServiceKeys[] = $_key;
+    } else {
+        $regularServiceKeys[] = $_key;
+    }
 }
 $otherServiceId = '';
 foreach ($_dbServices as $_svc) {
@@ -539,7 +556,7 @@ require_once __DIR__ . '/templates/header.php';
             <div>
                 <p class="mb-4 text-xs font-semibold uppercase tracking-widest text-cyan-400">Services Needed</p>
                 <div class="grid gap-3 sm:grid-cols-2">
-                    <?php foreach ($serviceLabels as $serviceKey => $serviceLabel): ?>
+                    <?php foreach ($regularServiceKeys as $serviceKey): ?>
                         <div class="choice-card">
                             <input
                                 type="checkbox"
@@ -548,10 +565,27 @@ require_once __DIR__ . '/templates/header.php';
                                 value="<?= h($serviceKey) ?>"
                                 <?= in_array($serviceKey, (array) ($_POST['services'] ?? []), true) ? 'checked' : '' ?>
                             >
-                            <label for="service-<?= h($serviceKey) ?>"><?= h($serviceLabel) ?> &ndash; $<?= formatPrice($serviceBasePrices[$serviceKey]) ?></label>
+                            <label for="service-<?= h($serviceKey) ?>"><?= h($serviceLabels[$serviceKey]) ?> &ndash; $<?= formatPrice($serviceBasePrices[$serviceKey]) ?><?php $serviceDurationLabel = formatServiceDuration($serviceDurations[$serviceKey] ?? 0); ?><?php if ($serviceDurationLabel !== ''): ?> &ndash; <?= h($serviceDurationLabel) ?><?php endif; ?></label>
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <?php if ($premiumServiceKeys !== []): ?>
+                    <p class="mb-4 mt-6 text-xs font-semibold uppercase tracking-widest text-cyan-400">Premium Services</p>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <?php foreach ($premiumServiceKeys as $serviceKey): ?>
+                            <div class="choice-card">
+                                <input
+                                    type="checkbox"
+                                    id="service-<?= h($serviceKey) ?>"
+                                    name="services[]"
+                                    value="<?= h($serviceKey) ?>"
+                                    <?= in_array($serviceKey, (array) ($_POST['services'] ?? []), true) ? 'checked' : '' ?>
+                                >
+                                <label for="service-<?= h($serviceKey) ?>"><?= h($serviceLabels[$serviceKey]) ?> &ndash; $<?= formatPrice($serviceBasePrices[$serviceKey]) ?><?php $serviceDurationLabel = formatServiceDuration($serviceDurations[$serviceKey] ?? 0); ?><?php if ($serviceDurationLabel !== ''): ?> &ndash; <?= h($serviceDurationLabel) ?><?php endif; ?></label>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
                 <div id="other-service-wrap" class="mt-4 <?= ($otherServiceId !== '' && in_array($otherServiceId, (array) ($_POST['services'] ?? []), true)) ? '' : 'hidden' ?>">
                     <input class="input-base" id="other-service-input" name="other_service" placeholder="Describe other service" value="<?= h($_POST['other_service'] ?? '') ?>">
                 </div>
