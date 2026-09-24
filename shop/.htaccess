@@ -1,8 +1,0 @@
-<IfModule mod_alias.c>
-	RedirectMatch 301 ^/shop/$ https://ghostlaser.com/shop/public
-</IfModule>
-
-# Make sure .env files not browseable if in a sub-directory.
-<FilesMatch "\.env$">
-	Deny from all
-</FilesMatch>
