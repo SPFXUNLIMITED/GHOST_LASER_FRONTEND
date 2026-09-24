@@ -26,5 +26,8 @@
     "readline-sync": "^1.4.10",
     "vee-validate": "^4.9.1",
     "vue-flatpickr": "^2.3.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
   }
 }
