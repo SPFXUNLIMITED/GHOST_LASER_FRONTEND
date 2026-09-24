@@ -1,3 +1,4 @@
+import "../css/app.css";
 /**
  * This will track all the images and fonts for publishing.
  */
