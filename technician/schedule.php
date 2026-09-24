@@ -1130,36 +1130,7 @@ require_once __DIR__ . '/../lib/PHPMailer/src/SMTP.php';
 use PHPMailer\PHPMailer\Exception as MailerException;
 use PHPMailer\PHPMailer\PHPMailer;
 
-$envFile = dirname(__DIR__) . '/.env';
-if (is_file($envFile) && is_readable($envFile)) {
-    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    if (is_array($lines)) {
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if ($line === '' || $line[0] === '#' || strpos($line, '=') === false) {
-                continue;
-            }
-
-            [$name, $value] = explode('=', $line, 2);
-            $name = trim($name);
-            $value = trim($value);
-            if ($name === '') {
-                continue;
-            }
-
-            if (strlen($value) >= 2) {
-                $first = $value[0];
-                $last = $value[strlen($value) - 1];
-                if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
-                    $value = substr($value, 1, -1);
-                }
-            }
-
-            $_ENV[$name] = $value;
-            putenv($name . '=' . $value);
-        }
-    }
-}
+require_once __DIR__ . '/../bootstrap_env.php';
 
 $SMTP_HOST = (string) ($_ENV['SMTP_HOST'] ?? '');
 $SMTP_PORT = (int) ($_ENV['SMTP_PORT'] ?? 0);
