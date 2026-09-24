@@ -29,5 +29,56 @@ function ensure_customer_status_table(PDO $pdo): void {
     }
 }
 
+/**
+ * Whether the services catalog already has the is_premium column.
+ *
+ * Read-only pages (the booking forms) must keep working on deployments where
+ * neither the migration nor service-settings.php has added the column yet, so
+ * they use this to decide whether they can select it.
+ */
+function servicesTableHasPremiumColumn(PDO $pdo): bool {
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    try {
+        $exists = (int) $pdo->query("
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME   = 'services'
+              AND COLUMN_NAME  = 'is_premium'
+        ")->fetchColumn();
+        $cache = $exists > 0;
+    } catch (Throwable $e) {
+        $cache = false;
+    }
+
+    return $cache;
+}
+
+/**
+ * Human-readable duration label for a service, e.g. 60 => "1 hour",
+ * 90 => "1 hour 30 min", 45 => "45 min". Returns '' for non-positive values so
+ * callers can omit the segment entirely for services with no duration set.
+ */
+function formatServiceDuration(int $minutes): string {
+    if ($minutes <= 0) {
+        return '';
+    }
+
+    $hours = intdiv($minutes, 60);
+    $rest  = $minutes % 60;
+
+    $parts = [];
+    if ($hours > 0) {
+        $parts[] = $hours . ' ' . ($hours === 1 ? 'hour' : 'hours');
+    }
+    if ($rest > 0) {
+        $parts[] = $rest . ' min';
+    }
+
+    return implode(' ', $parts);
+}
+
 
 ?>

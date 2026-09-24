@@ -7,6 +7,7 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/project/db.php';
+require_once __DIR__ . '/functions.php';
 
 // --- Database helpers ---
 
@@ -18,6 +19,7 @@ function ensureServicesTable(PDO $pdo): void
             service_name VARCHAR(255) NOT NULL,
             base_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             duration_minutes INT UNSIGNED NOT NULL DEFAULT 0,
+            is_premium TINYINT(1) NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
@@ -34,6 +36,19 @@ function ensureServicesDurationColumn(PDO $pdo): void
     ")->fetchColumn();
     if (!$exists) {
         $pdo->exec("ALTER TABLE services ADD COLUMN duration_minutes INT UNSIGNED NOT NULL DEFAULT 0 AFTER base_price");
+    }
+}
+
+function ensureServicesPremiumColumn(PDO $pdo): void
+{
+    $exists = (int) $pdo->query("
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'services'
+          AND COLUMN_NAME  = 'is_premium'
+    ")->fetchColumn();
+    if (!$exists) {
+        $pdo->exec("ALTER TABLE services ADD COLUMN is_premium TINYINT(1) NOT NULL DEFAULT 0 AFTER duration_minutes");
     }
 }
 
@@ -92,7 +107,7 @@ function findDuplicateServiceNameId(PDO $pdo, string $name, ?int $excludeId = nu
 
 function getServices(PDO $pdo): array
 {
-    return $pdo->query("SELECT id, service_name, base_price, duration_minutes FROM services ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+    return $pdo->query("SELECT id, service_name, base_price, duration_minutes, is_premium FROM services ORDER BY is_premium ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC);
 }
 
 /**
@@ -117,6 +132,7 @@ function serviceNameExists(PDO $pdo, string $name, ?int $excludeId = null): bool
 
 ensureServicesTable($pdo);
 ensureServicesDurationColumn($pdo);
+ensureServicesPremiumColumn($pdo);
 seedServicesIfEmpty($pdo);
 
 // --- Handle POST actions ---
@@ -131,6 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name     = trim((string) ($_POST['service_name'] ?? ''));
         $price    = trim((string) ($_POST['base_price'] ?? ''));
         $duration = trim((string) ($_POST['duration_minutes'] ?? ''));
+        $isPremium = !empty($_POST['is_premium']) ? 1 : 0;
 
         $duplicateId = findDuplicateServiceNameId($pdo, $name);
 
@@ -143,8 +160,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (serviceNameExists($pdo, $name)) {
             $errorMessage = 'A service with that name (ignoring case/whitespace) already exists.';
         } else {
-            $stmt = $pdo->prepare("INSERT INTO services (service_name, base_price, duration_minutes) VALUES (:name, :price, :duration)");
-            $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration]);
+            $stmt = $pdo->prepare("INSERT INTO services (service_name, base_price, duration_minutes, is_premium) VALUES (:name, :price, :duration, :is_premium)");
+            $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration, ':is_premium' => $isPremium]);
             $successMessage = 'Service added successfully.';
         }
 
@@ -153,6 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name     = trim((string) ($_POST['service_name'] ?? ''));
         $price    = trim((string) ($_POST['base_price'] ?? ''));
         $duration = trim((string) ($_POST['duration_minutes'] ?? ''));
+        $isPremium = !empty($_POST['is_premium']) ? 1 : 0;
 
         $duplicateId = findDuplicateServiceNameId($pdo, $name, $id > 0 ? $id : null);
 
@@ -167,8 +185,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (serviceNameExists($pdo, $name, $id)) {
             $errorMessage = 'A service with that name (ignoring case/whitespace) already exists.';
         } else {
-            $stmt = $pdo->prepare("UPDATE services SET service_name = :name, base_price = :price, duration_minutes = :duration WHERE id = :id");
-            $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration, ':id' => $id]);
+            $stmt = $pdo->prepare("UPDATE services SET service_name = :name, base_price = :price, duration_minutes = :duration, is_premium = :is_premium WHERE id = :id");
+            $stmt->execute([':name' => $name, ':price' => round((float) $price, 2), ':duration' => (int) $duration, ':is_premium' => $isPremium, ':id' => $id]);
             $successMessage = 'Service updated successfully.';
         }
 
@@ -267,6 +285,7 @@ require_once __DIR__ . '/templates/header.php';
                                 <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Service Name</th>
                                 <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Base Price</th>
                                 <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Duration</th>
+                                <th class="pb-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">Premium</th>
                                 <th class="pb-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500">Actions</th>
                             </tr>
                         </thead>
@@ -280,13 +299,20 @@ require_once __DIR__ . '/templates/header.php';
                                     $<?= number_format((float) $svc['base_price'], 2) ?>
                                 </td>
                                 <td class="py-3.5 pr-4 text-zinc-300">
-                                    <?= (int) $svc['duration_minutes'] ?> min
+                                    <?= htmlspecialchars(formatServiceDuration((int) $svc['duration_minutes']) ?: '—', ENT_QUOTES, 'UTF-8') ?>
+                                </td>
+                                <td class="py-3.5 pr-4">
+                                    <?php if ((int) $svc['is_premium'] === 1): ?>
+                                        <span class="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-400">Premium</span>
+                                    <?php else: ?>
+                                        <span class="text-xs text-zinc-500">Regular</span>
+                                    <?php endif; ?>
                                 </td>
                                 <td class="py-3.5 text-right">
                                     <div class="inline-flex items-center gap-2">
                                         <button
                                             type="button"
-                                            onclick="openEditModal(<?= (int) $svc['id'] ?>, <?= htmlspecialchars(json_encode($svc['service_name']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode($svc['base_price']), ENT_QUOTES, 'UTF-8') ?>, <?= (int) $svc['duration_minutes'] ?>)"
+                                            onclick="openEditModal(<?= (int) $svc['id'] ?>, <?= htmlspecialchars(json_encode($svc['service_name']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode($svc['base_price']), ENT_QUOTES, 'UTF-8') ?>, <?= (int) $svc['duration_minutes'] ?>, <?= (int) $svc['is_premium'] ?>)"
                                             class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-cyan-500/50 hover:text-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
                                         >
                                             Edit
@@ -359,6 +385,19 @@ require_once __DIR__ . '/templates/header.php';
                             placeholder="e.g. 90"
                         >
                     </div>
+                    <div>
+                        <label class="flex items-center gap-2.5 text-sm text-zinc-300">
+                            <input
+                                type="checkbox"
+                                id="add-is-premium"
+                                name="is_premium"
+                                value="1"
+                                class="h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-cyan-500 focus:ring-2 focus:ring-cyan-500/50"
+                            >
+                            Premium service
+                        </label>
+                        <p class="mt-1.5 text-xs text-zinc-500">Premium services appear in their own section on the booking forms.</p>
+                    </div>
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button
@@ -422,6 +461,19 @@ require_once __DIR__ . '/templates/header.php';
                             class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
                         >
                     </div>
+                    <div>
+                        <label class="flex items-center gap-2.5 text-sm text-zinc-300">
+                            <input
+                                type="checkbox"
+                                id="edit-is-premium"
+                                name="is_premium"
+                                value="1"
+                                class="h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-cyan-500 focus:ring-2 focus:ring-cyan-500/50"
+                            >
+                            Premium service
+                        </label>
+                        <p class="mt-1.5 text-xs text-zinc-500">Premium services appear in their own section on the booking forms.</p>
+                    </div>
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button
@@ -453,11 +505,12 @@ require_once __DIR__ . '/templates/header.php';
         function closeAddModal() {
             addModal.classList.add('hidden');
         }
-        function openEditModal(id, name, price, duration) {
+        function openEditModal(id, name, price, duration, isPremium) {
             document.getElementById('edit-id').value               = id;
             document.getElementById('edit-service-name').value     = name;
             document.getElementById('edit-base-price').value       = parseFloat(price).toFixed(2);
             document.getElementById('edit-duration-minutes').value = parseInt(duration, 10);
+            document.getElementById('edit-is-premium').checked     = Number(isPremium) === 1;
             editModal.classList.remove('hidden');
             document.getElementById('edit-service-name').focus();
         }

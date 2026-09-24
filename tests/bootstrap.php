@@ -64,7 +64,8 @@ function ghostLaserMakeTestPdo(array $services): PDO
     $pdo->exec('CREATE TABLE services (
         id INTEGER PRIMARY KEY,
         service_name TEXT NOT NULL,
-        duration_minutes INTEGER NOT NULL DEFAULT 0
+        duration_minutes INTEGER NOT NULL DEFAULT 0,
+        is_premium INTEGER NOT NULL DEFAULT 0
     )');
     $pdo->exec('CREATE TABLE customers (
         id INTEGER PRIMARY KEY,
