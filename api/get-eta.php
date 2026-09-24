@@ -58,15 +58,45 @@ $url = 'https://maps.googleapis.com/maps/api/distancematrix/json?'
 $response = @file_get_contents($url);
 $data     = $response !== false ? json_decode($response, true) : null;
 
-$message = "I'm on my way! I should be there shortly.";
+/**
+ * Turns a minute count into a human-readable duration such as
+ * "45 minutes", "1 hour" or "2 hours 15 minutes".
+ */
+function format_eta_duration(int $minutes): string {
+    if ($minutes < 1) {
+        $minutes = 1;
+    }
+
+    $hours     = intdiv($minutes, 60);
+    $remainder = $minutes % 60;
+
+    if ($hours === 0) {
+        return $remainder . ' ' . ($remainder === 1 ? 'minute' : 'minutes');
+    }
+
+    $parts = [$hours . ' ' . ($hours === 1 ? 'hour' : 'hours')];
+
+    if ($remainder > 0) {
+        $parts[] = $remainder . ' ' . ($remainder === 1 ? 'minute' : 'minutes');
+    }
+
+    return implode(' ', $parts);
+}
+
+$message = "Ghost Laser Technician: I'm on my way! I should be there shortly.";
 
 if (
     is_array($data) &&
     isset($data['rows'][0]['elements'][0]['status']) &&
     $data['rows'][0]['elements'][0]['status'] === 'OK'
 ) {
-    $minutes = (int) round($data['rows'][0]['elements'][0]['duration']['value'] / 60);
-    $message = "Ghost Laser Technician: I'm on my way! I should be there in about {$minutes} minutes.";
+    $minutes  = (int) round($data['rows'][0]['elements'][0]['duration']['value'] / 60);
+    $duration = format_eta_duration($minutes);
+    $arrival  = (new DateTimeImmutable('now'))
+        ->add(new DateInterval('PT' . max(1, $minutes) . 'M'))
+        ->format('g:i A');
+
+    $message = "Ghost Laser Technician: I'm on my way! I should be there in about {$duration}, by {$arrival}.";
 }
 
 echo json_encode(['success' => true, 'message' => $message]);
