@@ -49,6 +49,44 @@ Contains Tailwind directives and icon fonts only. Do not edit the compiled
 
 Never run build commands on the server.
 
+## custom-theme (Blade port of the static site)
+
+Blade sources live in this repo under `resources/themes/custom-theme/views`:
+
+| File | Ported from |
+| --- | --- |
+| `components/layouts/index.blade.php` | `templates/header.php` (nav, logo, phone, mobile menu, user menu) |
+| `components/layouts/footer.blade.php` | `templates/footer.php` |
+| `home/index.blade.php` | `index.php` (hero, services, why-us, process, contact) |
+
+The home page wraps everything in `<x-shop::layouts>`, sets the page title through
+`<x-slot:title>` and pushes the glow styles through `@push('styles')`, which the
+layout renders with `@stack('styles')`.
+
+Copy the `resources/themes/custom-theme` folder into the Bagisto application, then
+register the theme in the store's `config/themes.php` under the `shop` key:
+
+```php
+'shop' => [
+    'custom-theme' => [
+        'name'       => 'Custom Theme',
+        'assets_path' => 'public/themes/shop/custom-theme',
+        'views_path'  => 'resources/themes/custom-theme/views',
+    ],
+],
+```
+
+Set `'default' => 'custom-theme'` (or select the theme per channel) and then run in
+the Bagisto app root:
+
+```
+php artisan view:clear
+php artisan optimize:clear
+```
+
+Those artisan commands and `config/themes.php` belong to the Bagisto application,
+not to this static-site repo, so they cannot be run from here.
+
 ## Reference
 
 The original cyberpunk homepage lives in the separate repo `SPFXUNLIMITED/GHOST_LASER_FRONTEND`.
