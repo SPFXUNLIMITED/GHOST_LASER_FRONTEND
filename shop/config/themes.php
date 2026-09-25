@@ -193,8 +193,8 @@ return [
 			'assets_path' => 'public/themes/shop/ghost-laser',
 			'views_path' => 'resources/themes/ghost-laser/views',
 			'vite' => [
-				'hot_file' => 'shop-default-vite.hot',
-				'build_directory' => 'themes/shop/default/build',
+				'hot_file' => 'shop-ghost-laser-vite.hot',
+				'build_directory' => 'themes/shop/ghost-laser/build',
 				'package_assets_directory' => 'src/Resources/assets',
 			],
 
