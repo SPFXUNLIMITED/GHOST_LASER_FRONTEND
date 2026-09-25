@@ -4,7 +4,9 @@ Short reference for future theme edits.
 
 ## Colors and fonts
 
-File: `packages/Webkul/Shop/tailwind.config.js`
+File: `packages/Webkul/Shop/src/Resources/assets/css/app.css` (the `@theme` block —
+Tailwind 4 reads its tokens from the CSS, so the package's legacy
+`tailwind.config.js` is no longer part of the build).
 
 Custom colors:
 
@@ -20,18 +22,17 @@ Fonts: Poppins and DM Serif Display.
 
 ## Cyberpunk grid theme
 
-Same file: `packages/Webkul/Shop/tailwind.config.js`
+Same file: the `@theme` block in `packages/Webkul/Shop/src/Resources/assets/css/app.css`.
 
 Added tokens:
 
 | Token | Value |
 | --- | --- |
-| `zinc950` | `#09090b` |
-| `cyan400` | `#22d3ee` |
-| `cyan500` | `#06b6d4` |
-| `violet500` | `#8b5cf6` |
-| font | Inter |
-| `backgroundImage` → `grid-pattern` | two linear gradients at 5% cyan opacity, 60px grid |
+| `--font-sans` | Inter |
+| `--background-image-grid-pattern` | two linear gradients at 5% cyan opacity, 60px grid |
+
+The zinc, cyan and violet shades the theme uses (`zinc-950`, `cyan-400`, `cyan-500`,
+`violet-500`) ship with Tailwind, so they need no token of their own.
 
 Applied via `bg-zinc-950 bg-grid-pattern text-zinc-100 font-sans` on the shop layout root.
 
@@ -59,13 +60,28 @@ these files need to stay in sync with Bagisto's default theme.
 
 File: `packages/Webkul/Shop/src/Resources/assets/css/app.css`
 
-Contains Tailwind directives and icon fonts only. Do not edit the compiled
+Tailwind 4: the file imports Tailwind, declares the theme tokens in `@theme`, and
+pulls the `resources/themes/ghost-laser/views` Blade files in with `@source` so the
+classes the theme uses are generated. Do not edit the compiled
 `public/themes/shop/ghost-laser/build/` output directly.
 
 ## Build and deploy
 
-1. Run `npm run build` locally in Laragon.
-2. Upload the compiled `public/themes/shop/ghost-laser/build` folder to HostGator.
+The `ghost-laser` build comes out of `packages/Webkul/Shop`, whose `vite.config.js`
+writes to the theme's own `hot_file` (`shop-ghost-laser-vite.hot`) and
+`build_directory` (`themes/shop/ghost-laser/build`) registered in `config/themes.php`.
+Its entry points must stay in step with the `@bagistoVite([...])` call in the shop
+layout — today `src/Resources/assets/css/app.css` and `src/Resources/assets/js/app.js`.
+An entry point missing from the manifest makes every storefront page fail with a 500.
+
+Because the store is served from the `/shop/public/` sub-directory, the build rewrites
+asset URLs inside the compiled CSS to bare file names, which resolve next to the CSS.
+
+1. `cd packages/Webkul/Shop`
+2. `npm install`
+3. `npm run build` locally in Laragon (the build has to run from this package
+   directory: the public directory is resolved relative to it).
+4. Upload the compiled `public/themes/shop/ghost-laser/build` folder to HostGator.
 
 Never run build commands on the server.
 
