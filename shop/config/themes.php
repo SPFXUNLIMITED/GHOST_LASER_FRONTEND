@@ -197,6 +197,22 @@ return [
 				'build_directory' => 'themes/shop/ghost-laser/build',
 				'package_assets_directory' => 'src/Resources/assets',
 			],
+
+			/*
+			| Ghost Laser only restyles the default theme, so the Appearance editor
+			| offers exactly the same section types the default theme offers.
+			*/
+
+			'customize' => [
+				'sections' => [
+					SectionTypeEnum::IMAGE_CAROUSEL,
+					SectionTypeEnum::PRODUCT_CAROUSEL,
+					SectionTypeEnum::CATEGORY_CAROUSEL,
+					SectionTypeEnum::FOOTER_LINKS,
+					SectionTypeEnum::STATIC_CONTENT,
+					SectionTypeEnum::SERVICES_CONTENT,
+				],
+			],
 		],					
     ],
 

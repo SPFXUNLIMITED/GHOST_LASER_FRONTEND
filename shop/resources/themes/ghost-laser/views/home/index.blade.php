@@ -1,146 +1,259 @@
-<x-shop::layouts :has-header="true" :has-feature="false" :has-footer="true">
+@php
+    $channel = core()->getCurrentChannel();
+
+    $hasProductCarousel = collect($sections)
+        ->contains(fn ($section) => $section->type === \Webkul\Theme\Enums\SectionTypeEnum::PRODUCT_CAROUSEL->value);
+@endphp
+
+<!-- SEO Meta Content -->
+@push ('meta')
+    <meta
+        name="title"
+        content="{{ $channel->home_seo['meta_title'] ?? 'Ghost Laser | Laser Cutters, Laser Tubes & Laser Parts' }}"
+    />
+
+    <meta
+        name="description"
+        content="{{ $channel->home_seo['meta_description'] ?? 'Ghost Laser sells Ghost Laser cutting machines and distributes Yongli and Reci laser tubes, CloudRay laser parts, lenses, mirrors, fume extractors and air pumps.' }}"
+    />
+
+    <meta
+        name="keywords"
+        content="{{ $channel->home_seo['meta_keywords'] ?? 'laser cutter, laser engraver, Yongli laser tube, Reci laser tube, CloudRay parts, laser lens, laser mirror, fume extractor, air pump' }}"
+    />
+@endPush
+
+@push('scripts')
+    @if(! empty($categories))
+        <script>
+            localStorage.setItem('categories', JSON.stringify(@json($categories)));
+        </script>
+    @endif
+@endpush
+
+<x-shop::layouts>
+    <!-- Page Title -->
     <x-slot:title>
-        Ghost Laser | Laser Machines & Parts
+        {{ $channel->home_seo['meta_title'] ?? 'Ghost Laser | Laser Cutters, Laser Tubes & Laser Parts' }}
     </x-slot>
 
-    @push('meta')
-        <meta name="description" content="Ghost Laser — precision laser cutting machines, parts, and accessories. Shop the catalog.">
-    @endpush
+    <!-- Ghost Laser Hero -->
+    <section class="bg-grid-pattern relative overflow-hidden bg-zinc-950">
+        <div class="container max-lg:px-8 max-sm:!px-4">
+            <div class="max-w-4xl py-24 max-md:py-14 max-sm:py-10">
+                <div class="mb-8 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-zinc-900 px-4 py-1.5 max-md:mb-5">
+                    <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400"></span>
 
-    @push('styles')
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <style>
-            .glow-cyan { text-shadow: 0 0 30px rgba(6,182,212,0.6), 0 0 60px rgba(6,182,212,0.3); }
-            .glow-box { box-shadow: 0 0 0 1px rgba(6,182,212,0.2), 0 0 40px rgba(6,182,212,0.05); }
-            .glow-box:hover { box-shadow: 0 0 0 1px rgba(6,182,212,0.5), 0 0 40px rgba(6,182,212,0.15); }
-            .btn-glow { box-shadow: 0 0 20px rgba(6,182,212,0.4); }
-            .btn-glow:hover { box-shadow: 0 0 30px rgba(6,182,212,0.7); }
-            .gradient-fade-bottom { background: linear-gradient(to bottom, transparent 60%, rgb(9,9,11) 100%); }
-            .hero-grid {
-                background-image: linear-gradient(rgba(6,182,212,0.04) 1px, transparent 1px),
-                                  linear-gradient(90deg, rgba(6,182,212,0.04) 1px, transparent 1px);
-                background-size: 60px 60px;
-            }
-        </style>
-    @endpush
-
-    {{-- HERO --}}
-    <section class="relative min-h-screen flex items-center hero-grid overflow-hidden pt-16">
-        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div class="w-96 h-96 rounded-full bg-cyan-500/5 blur-3xl"></div>
-        </div>
-        <div class="absolute bottom-0 left-0 right-0 h-48 gradient-fade-bottom pointer-events-none"></div>
-
-        <div class="relative max-w-7xl mx-auto px-6 lg:px-8 py-24 lg:py-32">
-            <div class="max-w-4xl">
-                <div class="inline-flex items-center gap-2 bg-zinc-900 border border-cyan-500/30 rounded-full px-4 py-1.5 mb-8">
-                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-                    <span class="text-xs text-cyan-400 font-medium tracking-wider uppercase">Laser Machines & Parts</span>
+                    <span class="text-xs font-medium uppercase tracking-wider text-cyan-400">
+                        Machines &middot; Tubes &middot; Parts
+                    </span>
                 </div>
 
-                <h1 class="text-5xl sm:text-6xl lg:text-7xl font-black leading-tight tracking-tight mb-6">
-                    Precision Laser<br>
-                    <span class="text-cyan-400 glow-cyan">Machines & Parts.</span>
+                <h1 class="font-dmserif text-6xl leading-tight text-white max-md:text-4xl max-sm:text-3xl">
+                    Ghost Laser sells the machines,
+                    <span class="glow-cyan text-cyan-400">tubes and parts</span>
+                    your shop runs on.
                 </h1>
 
-                <p class="text-lg sm:text-xl text-zinc-400 max-w-2xl mb-10 leading-relaxed">
-                    Cutters, engravers, tubes, lenses, and accessories — built for shops that run hot. Fast shipping, real specs, no guesswork.
+                <p class="mt-6 max-w-2xl text-lg leading-relaxed text-zinc-400 max-md:mt-4 max-md:text-base max-sm:text-sm">
+                    We build and sell Ghost Laser cutting machines, and we distribute Yongli laser tubes,
+                    Reci laser tubes and CloudRay laser parts — plus a full catalog of laser lenses,
+                    laser mirrors, fume extractors, air pumps and everything else on the bench.
+                    Service and repair stays with our sister company, so we can keep our focus on stock,
+                    specs and shipping.
                 </p>
 
-                <div class="flex flex-col sm:flex-row gap-4">
-                    <a href="/search" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-base px-7 py-3.5 rounded-md transition-all btn-glow">
-                        Shop the Catalog
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
-                        </svg>
+                <div class="mt-10 flex flex-wrap gap-4 max-md:mt-6">
+                    <a
+                        href="{{ route('shop.search.index') }}"
+                        class="primary-button btn-glow rounded-2xl px-11 py-3 text-base max-md:rounded-lg max-md:px-8 max-md:py-2.5"
+                    >
+                        Shop the catalog
                     </a>
-                    <a href="#categories" class="inline-flex items-center justify-center gap-2 bg-transparent border border-zinc-700 hover:border-zinc-500 text-white font-semibold text-base px-7 py-3.5 rounded-md transition-all hover:bg-zinc-900">
-                        Browse Categories
-                    </a>
-                </div>
 
-                <div class="mt-16 pt-10 border-t border-zinc-800/60 grid grid-cols-2 sm:grid-cols-3 gap-8">
-                    <div>
-                        <div class="text-3xl font-black text-white">500+</div>
-                        <div class="text-sm text-zinc-500 mt-1">Parts in stock</div>
-                    </div>
-                    <div>
-                        <div class="text-3xl font-black text-white">24h</div>
-                        <div class="text-sm text-zinc-500 mt-1">Avg. ship time</div>
-                    </div>
-                    <div>
-                        <div class="text-3xl font-black text-white">100%</div>
-                        <div class="text-sm text-zinc-500 mt-1">Tested before ship</div>
-                    </div>
+                    <a
+                        href="{{ route('shop.home.index') }}#ghost-laser-brands"
+                        class="secondary-button rounded-2xl px-11 py-3 text-base max-md:rounded-lg max-md:px-8 max-md:py-2.5"
+                    >
+                        Brands we distribute
+                    </a>
                 </div>
             </div>
         </div>
     </section>
 
-    {{-- CATEGORIES --}}
-    <section id="categories" class="py-24 bg-zinc-950">
-        <div class="max-w-7xl mx-auto px-6 lg:px-8">
-            <div class="text-center mb-14">
-                <div class="inline-flex items-center gap-2 bg-zinc-900 border border-cyan-500/30 rounded-full px-4 py-1.5 mb-6">
-                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                    <span class="text-xs text-cyan-400 font-medium tracking-wider uppercase">Shop by Category</span>
-                </div>
-                <h2 class="text-4xl sm:text-5xl font-black tracking-tight">
-                    Everything for the <span class="text-cyan-400 glow-cyan">Laser Shop</span>
-                </h2>
-            </div>
+    <!-- Loop over the storefront sections -->
+    @foreach ($sections as $section)
+        @php ($data = $section->options) @endphp
 
-            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                @foreach ($categories ?? [] as $category)
-                    <a href="/{{ $category->slug }}" class="glow-box group rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 transition-all hover:-translate-y-1">
-                        <div class="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mb-5">
-                            <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                            </svg>
-                        </div>
-                        <h3 class="text-xl font-bold text-white mb-2 group-hover:text-cyan-400 transition-colors">{{ $category->name }}</h3>
-                        <p class="text-sm text-zinc-500">{{ $category->products_count ?? 0 }} products</p>
-                    </a>
-                @endforeach
+        {{-- The layout marks the types it draws on every page, so this page marks the rest. --}}
+        @php ($marks = ($preview ?? false) && ! $section->getTypeInstance()?->rendersInLayout())
 
-                @if (empty($categories))
-                    <div class="col-span-full text-center py-12 text-zinc-500">
-                        Categories will appear here once you add them in the admin.
-                    </div>
+        @if ($marks)
+            <div
+                data-section-id="{{ $section->id }}"
+                data-section-name="{{ $section->name }}"
+            >
+        @endif
+
+        <!-- Static Content -->
+        @switch ($section->type)
+            @case (\Webkul\Theme\Enums\SectionTypeEnum::IMAGE_CAROUSEL->value)
+                <!-- Image Carousel -->
+                <x-shop::carousel
+                    :options="$section->getTypeInstance()?->sanitize((array) $data) ?? $data"
+                    aria-label="{{ trans('shop::app.home.index.image-carousel') }}"
+                />
+
+                @break
+            @case (\Webkul\Theme\Enums\SectionTypeEnum::STATIC_CONTENT->value)
+                <!-- Push Style -->
+                @if (! empty($data['css']))
+                    @push ('styles')
+                        <style>
+                            {!! $data['css'] !!}
+                        </style>
+                    @endpush
                 @endif
-            </div>
-        </div>
-    </section>
 
-
-    {{-- FEATURED PRODUCTS --}}
-    <section class="py-24 bg-zinc-900/30">
-        <div class="max-w-7xl mx-auto px-6 lg:px-8">
-            <div class="flex items-end justify-between mb-12">
-                <div>
-                    <h2 class="text-4xl font-black tracking-tight">
-                        Featured <span class="text-cyan-400 glow-cyan">Machines</span>
-                    </h2>
-                    <p class="text-zinc-500 mt-2">Top sellers, freshly stocked.</p>
-                </div>
-                <a href="/search" class="hidden sm:inline-flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
-                    View all
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
-                </a>
-            </div>
-
-            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                @foreach ($featured_products ?? [] as $product)
-                    <x-shop::products.card :product="$product" />
-                @endforeach
-
-                @if (empty($featured_products))
-                    <div class="col-span-full text-center py-12 text-zinc-500">
-                        Add products in the admin and they'll show up here.
-                    </div>
+                <!-- Render HTML -->
+                @if (! empty($data['html']))
+                    {!! $data['html'] !!}
                 @endif
+
+                @break
+            @case (\Webkul\Theme\Enums\SectionTypeEnum::CATEGORY_CAROUSEL->value)
+                <!-- Categories carousel -->
+                <x-shop::categories.carousel
+                    :title="$data['title'] ?? ''"
+                    :src="route('shop.api.categories.index', $data['filters'] ?? [])"
+                    :navigation-link="route('shop.home.index')"
+                    aria-label="{{ trans('shop::app.home.index.categories-carousel') }}"
+                />
+
+                @break
+            @case (\Webkul\Theme\Enums\SectionTypeEnum::PRODUCT_CAROUSEL->value)
+                <!-- Product Carousel -->
+                <x-shop::products.carousel
+                    :title="$data['title'] ?? ''"
+                    :src="route('shop.api.products.index', $data['filters'] ?? [])"
+                    :navigation-link="route('shop.search.index', $data['filters'] ?? [])"
+                    aria-label="{{ trans('shop::app.home.index.product-carousel') }}"
+                />
+
+                @break
+        @endswitch
+
+        @if ($marks)
+            </div>
+        @endif
+    @endforeach
+
+    {{--
+        Ghost Laser's own carousels. They stand in until the merchant adds product
+        carousel sections of their own in the Appearance editor, so the homepage is
+        never empty and the editor's sections always win.
+    --}}
+    @unless ($hasProductCarousel)
+        <!-- Featured Ghost Laser Machines -->
+        <x-shop::products.carousel
+            title="Featured Ghost Laser Machines"
+            :src="route('shop.api.products.index', ['featured' => 1, 'limit' => 10])"
+            :navigation-link="route('shop.search.index', ['featured' => 1])"
+            aria-label="{{ trans('shop::app.home.index.product-carousel') }}"
+        />
+
+        <!-- Laser Tubes -->
+        <x-shop::products.carousel
+            title="Yongli & Reci Laser Tubes"
+            :src="route('shop.api.products.index', ['query' => 'laser tube', 'limit' => 10])"
+            :navigation-link="route('shop.search.index', ['query' => 'laser tube'])"
+            aria-label="{{ trans('shop::app.home.index.product-carousel') }}"
+        />
+
+        <!-- Laser Parts -->
+        <x-shop::products.carousel
+            title="Laser Parts & Accessories"
+            :src="route('shop.api.products.index', ['new' => 1, 'limit' => 10])"
+            :navigation-link="route('shop.search.index', ['new' => 1])"
+            aria-label="{{ trans('shop::app.home.index.product-carousel') }}"
+        />
+    @endunless
+
+    <!-- Brands we distribute -->
+    <section
+        id="ghost-laser-brands"
+        class="container mt-20 max-lg:px-8 max-md:mt-10 max-sm:!px-4"
+    >
+        <h2 class="font-dmserif text-3xl text-white max-md:text-2xl max-sm:text-xl">
+            Brands we distribute
+        </h2>
+
+        <div class="mt-10 grid grid-cols-3 gap-8 max-md:mt-5 max-md:grid-cols-1 max-md:gap-5">
+            <div class="glow-box rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 max-md:p-5">
+                <h3 class="text-xl font-medium text-cyan-400 max-sm:text-base">Yongli laser tubes</h3>
+
+                <p class="mt-2.5 text-sm text-zinc-400">
+                    Authorized distributor for the full Yongli range, from entry-level glass tubes to
+                    long-life high-power tubes for production cutting.
+                </p>
+            </div>
+
+            <div class="glow-box rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 max-md:p-5">
+                <h3 class="text-xl font-medium text-cyan-400 max-sm:text-base">Reci laser tubes</h3>
+
+                <p class="mt-2.5 text-sm text-zinc-400">
+                    Genuine Reci W-series and S-series tubes, matched to the right power supply and
+                    shipped with the wattage and lifetime specs stated up front.
+                </p>
+            </div>
+
+            <div class="glow-box rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 max-md:p-5">
+                <h3 class="text-xl font-medium text-cyan-400 max-sm:text-base">CloudRay laser parts</h3>
+
+                <p class="mt-2.5 text-sm text-zinc-400">
+                    CloudRay motion, control and optics components stocked alongside our own catalog so
+                    a whole machine build ships from one order.
+                </p>
             </div>
         </div>
     </section>
+
+    <!-- What we stock -->
+    <section class="container mt-20 max-lg:px-8 max-md:mt-10 max-sm:!px-4">
+        <h2 class="font-dmserif text-3xl text-white max-md:text-2xl max-sm:text-xl">
+            What we stock
+        </h2>
+
+        <p class="mt-2.5 text-sm text-zinc-400">
+            Laser lenses, laser mirrors, fume extractors, air pumps and many more parts for every
+            machine on your floor.
+        </p>
+
+        <div class="mt-10 grid grid-cols-4 gap-8 max-md:mt-5 max-md:grid-cols-2 max-md:gap-5">
+            <div class="glow-box rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 max-md:p-4">
+                <p class="text-base font-medium text-white">Laser lenses</p>
+                <p class="mt-2.5 text-sm text-zinc-400">Focus lenses in every common diameter and focal length.</p>
+            </div>
+
+            <div class="glow-box rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 max-md:p-4">
+                <p class="text-base font-medium text-white">Laser mirrors</p>
+                <p class="mt-2.5 text-sm text-zinc-400">Molybdenum and silicon mirrors, plus complete mirror mounts.</p>
+            </div>
+
+            <div class="glow-box rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 max-md:p-4">
+                <p class="text-base font-medium text-white">Fume extractors</p>
+                <p class="mt-2.5 text-sm text-zinc-400">Extraction units and filters sized to your cutting area.</p>
+            </div>
+
+            <div class="glow-box rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 max-md:p-4">
+                <p class="text-base font-medium text-white">Air pumps</p>
+                <p class="mt-2.5 text-sm text-zinc-400">Air assist pumps, regulators, fittings and hose kits.</p>
+            </div>
+        </div>
+    </section>
+
+    @if ($preview ?? false)
+        @include('shop::home.preview-bridge')
+    @endif
 </x-shop::layouts>

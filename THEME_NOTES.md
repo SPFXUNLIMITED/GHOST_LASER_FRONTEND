@@ -35,6 +35,26 @@ Added tokens:
 
 Applied via `bg-zinc-950 bg-grid-pattern text-zinc-100 font-sans` on the shop layout root.
 
+## ghost-laser theme (Bagisto storefront)
+
+Blade sources: `shop/resources/themes/ghost-laser/views`, registered as `ghost-laser`
+in `shop/config/themes.php` with the same Appearance section types as the default
+theme (image carousel, product carousel, category carousel, footer links, static
+content, services content).
+
+| File | What it does |
+| --- | --- |
+| `home/index.blade.php` | Same structure as the default theme homepage (the `$sections` loop is copied verbatim), with a Ghost Laser hero, brand/catalog blocks, and fallback product carousels for featured machines, Yongli & Reci laser tubes, and laser parts that render only while no product carousel section is configured |
+| `components/layouts/index.blade.php` | Default layout with the cyberpunk shell: Inter font, `bg-grid-pattern bg-zinc-950 font-sans text-zinc-100` on `<main>`, and the glow helpers plus dark header/footer surfaces |
+| `components/layouts/services.blade.php` | Default services-content section restyled onto zinc/cyan |
+
+Copy is sales-and-distribution: Ghost Laser sells its own machines, distributes
+Yongli and Reci laser tubes and CloudRay parts, and stocks lenses, mirrors, fume
+extractors and air pumps. Repair is the sister company's business.
+
+Every other view falls back to `packages/Webkul/Shop/src/Resources/views`, so only
+these files need to stay in sync with Bagisto's default theme.
+
 ## Source CSS
 
 File: `packages/Webkul/Shop/src/Resources/assets/css/app.css`
