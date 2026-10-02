@@ -8,8 +8,8 @@ $contactStatus = isset($_GET['status']) ? $_GET['status'] : '';
 $contactMessage = isset($_GET['contact_message']) ? trim((string) $_GET['contact_message']) : '';
 $bookTechnicianUrl = 'book_a_technician.php?step=2';
 
-$pageTitle       = 'Ghost Laser | Expert Laser Machine Repair';
-$pageDescription = 'Ghost Laser — precision laser cutting machine repair, calibration, and maintenance. Fast turnaround, trusted by professionals.';
+$pageTitle       = 'Ghost Laser | Precision Laser Machine Services';
+$pageDescription = 'Ghost Laser — precision laser cutting machine services, calibration, and maintenance. Fast turnaround, trusted by professionals.';
 $logoHref        = '#';
 $extraHead       = <<<'HTML'
     <style>
@@ -33,7 +33,7 @@ $headerRight     = <<<HTML
                 </nav>
                 <div class="hidden md:flex items-center gap-3">
                     <a href="{$bookTechnicianUrl}" class="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors btn-glow">
-                        Book a Repair
+                        Book a Service
                     </a>
                     <a
                         href="admin-login.php"
@@ -59,7 +59,7 @@ $headerMobileMenu = <<<HTML
                 <a href="#process" class="text-sm text-zinc-400 hover:text-white transition-colors">Process</a>
                 <a href="#contact" class="text-sm text-zinc-400 hover:text-white transition-colors">Contact</a>
                 <a href="{$bookTechnicianUrl}" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-semibold text-sm px-4 py-2 rounded-md transition-colors w-full">
-                    Book a Repair
+                    Book a Service
                 </a>
                 <a
                     href="admin-login.php"
@@ -86,21 +86,21 @@ require_once __DIR__ . '/templates/header.php';
                 <!-- Badge -->
                 <div class="inline-flex items-center gap-2 bg-zinc-900 border border-cyan-500/30 rounded-full px-4 py-1.5 mb-8">
                     <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-                    <span class="text-xs text-cyan-400 font-medium tracking-wider uppercase">Precision Repair Specialists</span>
+                    <span class="text-xs text-cyan-400 font-medium tracking-wider uppercase">Precision Service Specialists</span>
                 </div>
 
                 <h1 class="text-5xl sm:text-6xl lg:text-7xl font-black leading-tight tracking-tight mb-6">
                     Your Laser Is<br>
-                    <span class="text-cyan-400 glow-cyan">Down. We Fix It.</span>
+                    <span class="text-cyan-400 glow-cyan">Down. We Restore It.</span>
                 </h1>
 
                 <p class="text-lg sm:text-xl text-zinc-400 max-w-2xl mb-10 leading-relaxed">
-                    Expert repair, calibration, and maintenance for all major laser cutting and engraving machines. Fast diagnosis. No guesswork. Back to full power.
+                    Expert calibration, alignment, and maintenance for all major laser cutting and engraving machines. Fast diagnosis. No guesswork. Back to full power.
                 </p>
 
                 <div class="flex flex-col sm:flex-row gap-4">
                     <a href="<?= htmlspecialchars($bookTechnicianUrl, ENT_QUOTES, 'UTF-8') ?>" class="inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-base px-7 py-3.5 rounded-md transition-all btn-glow">
-                        Book a Repair
+                        Book a Service
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
                         </svg>
@@ -114,7 +114,7 @@ require_once __DIR__ . '/templates/header.php';
                 <div class="mt-16 pt-10 border-t border-zinc-800/60 grid grid-cols-2 sm:grid-cols-3 gap-8 max-w-xl">
                     <div>
                         <p class="text-3xl font-black text-white">500<span class="text-cyan-400">+</span></p>
-                        <p class="text-sm text-zinc-500 mt-1">Machines Repaired</p>
+                        <p class="text-sm text-zinc-500 mt-1">Machines Serviced</p>
                     </div>
                     <div>
                         <p class="text-3xl font-black text-white">48<span class="text-cyan-400">hr</span></p>
@@ -144,22 +144,22 @@ require_once __DIR__ . '/templates/header.php';
                     [
                         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/>',
                         'title' => 'Laser Tube Replacement',
-                        'desc'  => 'CO₂ and fiber tube diagnosis, sourcing, and precision swap with full alignment and power output verification.',
+                        'desc'  => 'CO₂ and fiber laser tube replacement, followed by precise beam alignment and power output calibration.',
                     ],
                     [
                         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>',
                         'title' => 'Beam Alignment & Calibration',
-                        'desc'  => 'Mirror and lens alignment, beam path optimization, and focal length calibration for peak cutting accuracy.',
+                        'desc'  => 'Precision mirror and lens alignment with beam path optimization and focal length calibration for accurate cutting.',
                     ],
                     [
                         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v10m0 0h10M9 13H5m0 0v6a2 2 0 002 2h10a2 2 0 002-2v-6m-14 0h14"/>',
                         'title' => 'Controller & Electronics',
-                        'desc'  => 'Ruida, Trocen, GRBL, and Lightburn controller repairs, PSU diagnostics, and motion system fault resolution.',
+                        'desc'  => 'Controller setup and calibration for Ruida, Trocen, GRBL, and Lightburn systems, plus power supply and motion system maintenance.',
                     ],
                     [
                         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>',
                         'title' => 'Cooling System Overhaul',
-                        'desc'  => 'Water chiller servicing, CW-3000/5000 repairs, hose and pump replacement to prevent thermal damage.',
+                        'desc'  => 'Water chiller maintenance, CW-3000/5000 servicing, and hose or pump replacement to keep temperatures within spec.',
                     ],
                     [
                         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>',
@@ -168,8 +168,8 @@ require_once __DIR__ . '/templates/header.php';
                     ],
                     [
                         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"/>',
-                        'title' => 'Emergency On-Site Repair',
-                        'desc'  => 'When you can\'t move the machine, we come to you. Fast mobilization for production-critical breakdowns.',
+                        'title' => 'Emergency On-Site Service',
+                        'desc'  => 'When you can\'t move the machine, we come to you for on-site calibration, alignment, and maintenance with fast mobilization.',
                     ],
                 ];
                 foreach ($services as $s): ?>
@@ -195,7 +195,7 @@ require_once __DIR__ . '/templates/header.php';
                     <p class="text-xs text-cyan-400 font-semibold tracking-widest uppercase mb-3">Why Ghost Laser</p>
                     <h2 class="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight mb-6">We Speak<br>Laser Fluently.</h2>
                     <p class="text-zinc-400 mb-8 leading-relaxed">
-                        Other shops see a broken machine. We see a power supply operating at 87% capacity, a mirror with 0.3° drift, and a chiller running 4°C above spec. The difference is everything.
+                        We measure power output, check mirror alignment, and verify chiller temperatures against spec. Precise calibration and maintenance make the difference.
                     </p>
                     <a href="#contact" class="inline-flex items-center gap-2 text-cyan-400 font-semibold text-sm hover:text-cyan-300 transition-colors group">
                         Talk to a technician
@@ -209,8 +209,8 @@ require_once __DIR__ . '/templates/header.php';
                     $reasons = [
                         ['num' => '01', 'title' => 'Specialists, Not Generalists', 'desc' => 'We only work on laser systems. No side projects. No guesswork.'],
                         ['num' => '02', 'title' => 'Transparent Pricing', 'desc' => 'Fixed-rate diagnostics. Written quotes before any work begins.'],
-                        ['num' => '03', 'title' => 'OEM & Aftermarket Parts', 'desc' => 'We stock genuine and high-quality compatible components for fast repairs.'],
-                        ['num' => '04', 'title' => '90-Day Repair Warranty', 'desc' => 'Every repair is backed by our warranty. We stand by our work, period.'],
+                        ['num' => '03', 'title' => 'OEM & Aftermarket Parts', 'desc' => 'We stock genuine and high-quality compatible components for dependable service.'],
+                        ['num' => '04', 'title' => '90-Day Service Warranty', 'desc' => 'Every service is backed by our warranty. We stand by our work, period.'],
                     ];
                     foreach ($reasons as $r): ?>
                     <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 glow-box transition-all duration-300">
@@ -229,7 +229,7 @@ require_once __DIR__ . '/templates/header.php';
         <div class="max-w-7xl mx-auto px-6 lg:px-8">
             <div class="text-center mb-14">
                 <p class="text-xs text-cyan-400 font-semibold tracking-widest uppercase mb-3">How It Works</p>
-                <h2 class="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight">From Broken to<br>Back Online</h2>
+                <h2 class="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight">From Downtime to Back Online</h2>
             </div>
             <div class="relative grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <!-- Connector line (desktop only) -->
@@ -237,10 +237,10 @@ require_once __DIR__ . '/templates/header.php';
 
                 <?php
                 $steps = [
-                    ['step' => '1', 'title' => 'Contact Us',       'desc' => 'Describe your issue or book a collection. We respond within 2 hours.'],
-                    ['step' => '2', 'title' => 'Diagnosis',         'desc' => 'Full electrical and optical inspection. Written report within 24 hours.'],
-                    ['step' => '3', 'title' => 'Quote & Approve',   'desc' => 'No hidden costs. You approve the fix before we touch anything.'],
-                    ['step' => '4', 'title' => 'Repair & Return',   'desc' => 'Precision repair, full test-fire, and same-day dispatch or on-site sign-off.'],
+                    ['step' => '1', 'title' => 'Contact Us',       'desc' => 'Tell us about your machine and book a service. We respond within 2 hours.'],
+                    ['step' => '2', 'title' => 'Service Assessment', 'desc' => 'We assess machine condition, optics, and calibration, then share a written service plan.'],
+                    ['step' => '3', 'title' => 'Quote & Approve',   'desc' => 'No hidden costs. You approve the work before we touch anything.'],
+                    ['step' => '4', 'title' => 'Service & Return',   'desc' => 'Precision service, full test-fire, and same-day dispatch or on-site sign-off.'],
                 ];
                 foreach ($steps as $i => $st): ?>
                 <div class="relative text-center">
@@ -263,10 +263,10 @@ require_once __DIR__ . '/templates/header.php';
                 <span class="text-xs text-cyan-400 font-medium tracking-wider uppercase">Available Now</span>
             </div>
             <h2 class="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight mb-5">
-                Ready to Get Your<br>Machine <span class="text-cyan-400">Running Again?</span>
+                Ready to Get Your<br>Machine <span class="text-cyan-400">Back to Full Power?</span>
             </h2>
             <p class="text-zinc-400 mb-10 leading-relaxed max-w-xl mx-auto">
-                Send us the details. We'll get back to you with a diagnosis plan and quote — fast, transparent, no pressure.
+                Tell us about your machine and service needs. We'll get back to you with a clear plan and quote — fast, transparent, no pressure.
             </p>
 
             <?php if ($contactStatus === 'success'): ?>
@@ -309,8 +309,8 @@ require_once __DIR__ . '/templates/header.php';
                         class="w-full bg-zinc-800/60 border border-zinc-700 text-white placeholder-zinc-600 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50 transition-colors">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="issue">Describe the Issue</label>
-                    <textarea id="issue" name="issue" rows="4" placeholder="Describe what the machine is doing (or not doing)..." required
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide" for="issue">Describe Your Service Needs</label>
+                    <textarea id="issue" name="issue" rows="4" placeholder="Tell us about the machine's calibration, alignment, or maintenance needs..." required
                         class="w-full bg-zinc-800/60 border border-zinc-700 text-white placeholder-zinc-600 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50 transition-colors resize-none"></textarea>
                 </div>
                 <button type="submit" class="w-full bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-sm py-3.5 rounded-lg transition-all btn-glow">
